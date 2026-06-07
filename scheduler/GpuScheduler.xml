@@ -9,6 +9,7 @@
   <env name="HOST_NAME" value="wfh"/>
   <env name="OLLAMA_URL" value="http://127.0.0.1:11434"/>
   <env name="GAMES_FILE" value="C:\ProgramData\GpuScheduler\games.txt"/>
+  <env name="POLL_SECONDS" value="15"/>
   <env name="PYTHONUNBUFFERED" value="1"/>
   <log mode="roll-by-size">
     <sizeThreshold>2048</sizeThreshold>

@@ -310,14 +310,18 @@ def runner_loop() -> None:
 
         def watch_for_user_cancel() -> None:
             # Poll status; if server flipped us to 'cancelling' (Q11), trip cancel.
-            while not cancel.is_set():
-                time.sleep(3)
+            # Check first then wait, so we don't waste up to 1.5s if cancel was
+            # already pending when this thread started. cancel.wait() exits
+            # early if the sibling watcher (gaming) trips first.
+            while True:
                 status, body = http('GET', f'/api/jobs/{job_id}')
                 if status == 200 and body:
                     st = (body.get('job') or {}).get('status')
                     if st == 'cancelling':
                         cancel_reason.setdefault('why', 'user')
                         cancel.set(); return
+                if cancel.wait(timeout=1.5):
+                    return
 
         watcher_g = threading.Thread(target=watch_for_gaming, daemon=True)
         watcher_u = threading.Thread(target=watch_for_user_cancel, daemon=True)

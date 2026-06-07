@@ -7,7 +7,7 @@
   <env name="INGEST_URL" value="http://192.168.1.75:64421/api/ingest"/>
   <env name="INGEST_TOKEN" value="REPLACE_AT_INSTALL"/>
   <env name="HOST_NAME" value="wfh"/>
-  <env name="METRIC_INTERVAL" value="30"/>
+  <env name="METRIC_INTERVAL" value="60"/>
   <env name="GPU_PS1_PATH" value="C:\ProgramData\WfhWatcher\sample-gpu.ps1"/>
   <env name="OLLAMA_URL" value="http://localhost:11434"/>
   <env name="PYTHONUNBUFFERED" value="1"/>
