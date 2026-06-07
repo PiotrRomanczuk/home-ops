@@ -37,6 +37,14 @@ WATCH_CONTAINERS = [c.strip() for c in os.environ.get(
 BATCH_SECONDS = float(os.environ.get('BATCH_SECONDS', '2'))
 BATCH_MAX = int(os.environ.get('BATCH_MAX', '100'))
 
+# Metric sampling (host_metrics — third pillar; see docs/CONTEXT.md).
+# Disabled at the source if psutil isn't installed; falling back to log-only is fine.
+METRICS_ENABLED = os.environ.get('METRICS_ENABLED', '1') not in ('0', 'false', 'no', '')
+METRIC_INTERVAL = float(os.environ.get('METRIC_INTERVAL', '30'))
+METRIC_URL = os.environ.get('METRIC_URL') or INGEST_URL.replace('/api/ingest', '/api/metrics')
+METRIC_DISK_PATH = os.environ.get('METRIC_DISK_PATH', '/')
+METRIC_TOP_N = int(os.environ.get('METRIC_TOP_N', '10'))
+
 
 if not INGEST_URL or not INGEST_TOKEN:
     print('INGEST_URL and INGEST_TOKEN required', file=sys.stderr)
@@ -170,6 +178,105 @@ def send(events: list[dict[str, Any]]) -> None:
     print(f'dropped {len(events)} events after 3 retries', file=sys.stderr)
 
 
+# ── metric sampler ────────────────────────────────────────────────────
+#
+# Periodically samples host CPU/mem/disk/net + per-process attribution via
+# psutil, POSTs to /api/metrics. See docs/adr/2026-06-07-no-grafana.md
+# for the design rationale.
+#
+# Requires `psutil` on the host. Install via `apt install python3-psutil`
+# (Ubuntu / Debian) or `pip install psutil`. If unavailable, this loop
+# logs an error once and exits — log shipping continues unaffected.
+
+def send_metric(metric: dict[str, Any]) -> None:
+    body = json.dumps(metric).encode()
+    req = urllib.request.Request(
+        METRIC_URL,
+        data=body,
+        method='POST',
+        headers={'Content-Type': 'application/json', 'X-Ingest-Token': INGEST_TOKEN},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=5) as r:
+            if 200 <= r.status < 300:
+                return
+            print(f'metrics non-2xx: {r.status}', file=sys.stderr)
+    except urllib.error.URLError as e:
+        print(f'metrics POST failed: {e}', file=sys.stderr)
+
+
+def metric_sampler_loop() -> None:
+    try:
+        import psutil  # type: ignore
+    except ImportError:
+        print('psutil not installed; metric sampling disabled. apt install python3-psutil', file=sys.stderr)
+        return
+
+    # Prime cpu_percent so the first non-blocking call has a baseline.
+    psutil.cpu_percent(interval=None)
+    last_net = psutil.net_io_counters()
+    last_net_ts = time.monotonic()
+
+    while True:
+        time.sleep(METRIC_INTERVAL)
+        try:
+            now = time.monotonic()
+            cpu_pct = psutil.cpu_percent(interval=None)
+            try:
+                load_1, _, _ = psutil.getloadavg()
+            except (AttributeError, OSError):
+                load_1 = 0.0
+            mem = psutil.virtual_memory()
+            swap = psutil.swap_memory()
+            disk = psutil.disk_usage(METRIC_DISK_PATH)
+
+            net = psutil.net_io_counters()
+            elapsed = max(now - last_net_ts, 0.001)
+            net_rx_kbps = (net.bytes_recv - last_net.bytes_recv) / elapsed / 1024
+            net_tx_kbps = (net.bytes_sent - last_net.bytes_sent) / elapsed / 1024
+            last_net, last_net_ts = net, now
+
+            # Per-process attribution. Top N by CPU% and top N by RSS.
+            procs_cpu: list[dict[str, Any]] = []
+            procs_mem: list[dict[str, Any]] = []
+            for p in psutil.process_iter(['name', 'pid', 'cpu_percent', 'memory_info']):
+                try:
+                    info = p.info
+                    name = info.get('name') or '?'
+                    pid = info.get('pid')
+                    cpu = info.get('cpu_percent') or 0.0
+                    rss = info.get('memory_info').rss if info.get('memory_info') else 0
+                    if cpu > 0:
+                        procs_cpu.append({'name': name, 'pid': pid, 'pct': round(cpu, 1)})
+                    if rss > 0:
+                        procs_mem.append({'name': name, 'pid': pid, 'rss_mb': rss // (1024 * 1024)})
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+            top_cpu = sorted(procs_cpu, key=lambda x: x['pct'], reverse=True)[:METRIC_TOP_N]
+            top_mem = sorted(procs_mem, key=lambda x: x['rss_mb'], reverse=True)[:METRIC_TOP_N]
+
+            metric = {
+                'host': HOST_NAME,
+                'ts': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+                'cpu_pct': round(cpu_pct, 1),
+                'cpu_load_1': round(load_1, 2),
+                'mem_pct': round(mem.percent, 1),
+                'mem_used_mb': mem.used // (1024 * 1024),
+                'mem_total_mb': mem.total // (1024 * 1024),
+                'swap_pct': round(swap.percent, 1),
+                'disk_pct': round(disk.percent, 1),
+                'net_rx_kbps': round(net_rx_kbps, 1),
+                'net_tx_kbps': round(net_tx_kbps, 1),
+                'data': {
+                    'top_cpu': top_cpu,
+                    'top_mem': top_mem,
+                },
+            }
+            send_metric(metric)
+        except Exception as e:  # noqa: BLE001  — narrow in session 4 refactor
+            print(f'metric sample failed: {e}', file=sys.stderr)
+
+
 def main() -> None:
     q: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=10_000)
     threads: list[threading.Thread] = []
@@ -179,7 +286,14 @@ def main() -> None:
     for name in WATCH_CONTAINERS:
         t = threading.Thread(target=follow_docker_container, args=(name, q), daemon=True, name=f'docker:{name}')
         t.start(); threads.append(t)
-    print(f'uwh-watcher up: {len(WATCH_UNITS)} units, {len(WATCH_CONTAINERS)} containers', flush=True)
+    if METRICS_ENABLED:
+        t = threading.Thread(target=metric_sampler_loop, daemon=True, name='metrics')
+        t.start(); threads.append(t)
+    print(
+        f'uwh-watcher up: {len(WATCH_UNITS)} units, {len(WATCH_CONTAINERS)} containers, '
+        f'metrics={"on" if METRICS_ENABLED else "off"}',
+        flush=True,
+    )
     shipper(q)
 
 

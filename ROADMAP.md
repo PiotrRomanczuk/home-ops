@@ -9,7 +9,9 @@ updated: 2026-06-07
 
 Working list. WIP-marking pattern: change `- [ ]` to `- [ ] WIP (@agent-name)` before starting, back to `- [x]` when done. See `~/Desktop/MainCV/CLAUDE.md` ("Working on TODO Tasks") for the full protocol.
 
-Architectural reference: `~/Desktop/MainCV/infrastructure/home-ops-logger-plan.md` — will be archived once Phase F is green.
+Foundational reference: `docs/CONTEXT.md` — read this first when starting any work on home-ops.
+Architectural decisions: `docs/adr/` — e.g. `2026-06-07-no-grafana.md`.
+Original architecture plan: `~/Desktop/MainCV/infrastructure/home-ops-logger-plan.md` — will be archived once Phase F is green.
 Improvement plan: `~/.claude/plans/analyze-this-folder-and-curious-shamir.md` (decisions log).
 
 ## Active
@@ -76,8 +78,24 @@ Either bundle into session 4 or split.
 - [ ] Move living parts to README.md; archive home-ops-logger-plan.md as 2026-XX-XX-home-ops-rollout.md (item 3.5)
 
 ### Session 10 — Phase C (~4 hours)
-- [ ] Standalone Next.js viewer at home-ops/viewer/
+- [ ] Standalone Next.js viewer at home-ops/viewer/ following `docs/DESIGN_BRIEF.md`
 - [ ] Move tailscale serve from :64421 to :64420
+
+### Session 11 — Phase G (host metrics + attribution) — server + agent ✅ landed 2026-06-07
+
+Already partially shipped this session:
+- [x] `postgres/migrations/003_host_metrics.sql` — schema + `prune_host_metrics` + pg_cron schedule at `30 * * * *`
+- [x] `ingest/src/server.ts` — `POST /api/metrics` (token-gated) + `GET /api/metrics` (viewer-or-token); validators, batch insert (max 500)
+- [x] `agents/uwh/uwh-watcher.py` — `metric_sampler_loop` thread (30s interval, top-10 CPU + RSS attribution); psutil-dependent, gracefully disables if missing
+- [x] `docs/adr/2026-06-07-no-grafana.md` — formal ADR documenting why metrics live in home-ops Postgres rather than Grafana/Prometheus
+
+Still to do:
+- [ ] **wfh metric sampling** — port the same `metric_sampler_loop` pattern into `scheduler/gpu-scheduler.py` (or `agents/wfh/ollama-watcher.py`); add AMD GPU sampling via `radeontop`/`amdgpu_top` or rocm-smi; Ollama models-loaded via `GET /api/ps`
+- [ ] **rpi metric sampling** — once `agents/rpi/rpi-watcher.py` exists (Phase E), add the same loop. Pi temperature via `/sys/class/thermal/thermal_zone0/temp`
+- [ ] **uwh deploy** — install `python3-psutil` on uwh: `sudo apt install -y python3-psutil`; restart `uwh-watcher.service`
+- [ ] **Viewer Hosts tab** — Phase C deliverable (per DESIGN_BRIEF.md); sparklines via uPlot, per-host drill page with top-process tables and recent-warn-events sidebar for correlation
+- [ ] **Status footer in viewer** — per-host last-event lag + last-metric lag, color-coded by staleness
+- [ ] **Saved analytical queries** (stretch) — `docs/saved-queries.json` + a "Queries" tab that runs them and renders as table-or-chart based on shape
 
 ## Deferred / open questions
 
@@ -132,6 +150,8 @@ start: "(1) which projects start dual-writing domain events first?
 - [x] 2026-06-07 Session 2 — docs hygiene: HOSTS.md uwh ports added, viewer Quick Link added, Cloudflare TBD resolved (remotely-managed via Zero Trust), uph/upo SSH aliases retired, stale-entries sections removed.
 - [x] 2026-06-07 Session 3 — ops hardening: ingest healthcheck (wget against /api/health), postgres image switched to debian + pg_cron, 002_pg_cron.sql with 30d host_logs prune + 30d done gpu_jobs prune (failed kept forever), ops/uwh/pg-backup.{sh,service,timer} + NAS-mount docs, Kuma probe recipe in README.
 - [x] 2026-06-07 Functional grilling (round 2): 23 functional decisions captured in `~/.claude/plans/analyze-this-folder-and-curious-shamir.md` "Functional decisions log". Sessions 4 and 4b updated to absorb the actionable ones. Future-direction note added below.
+- [x] 2026-06-07 Doc split: `docs/CONTEXT.md` becomes the foundational project doc (read-first); `docs/DESIGN_BRIEF.md` slimmed to UI-only and references CONTEXT.md; `docs/adr/` introduced with `2026-06-07-no-grafana.md` as the first formal decision record.
+- [x] 2026-06-07 Phase G partial: `host_metrics` schema (003 migration), `/api/metrics` POST+GET routes, `uwh-watcher` metric_sampler_loop with per-process attribution. Awaits uwh deploy (`apt install python3-psutil`) + viewer Hosts tab (Phase C).
 
 **Carryover** (UI / shell actions on the actual hosts — not file edits):
 - [ ] Tailscale admin console: delete `desktop-t0jdc7e`, `iphone182`, `piotrs-macbook-air`, `piotr-ubuntu` at https://login.tailscale.com/admin/machines (from session 2)

@@ -9,6 +9,12 @@ dist/
 .next/
 *.tsbuildinfo
 
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+
 # Agent runtime — local SQLite spools (when running agents on Mac for dev)
 spool.db
 spool.db-*
