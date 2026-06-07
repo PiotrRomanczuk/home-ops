@@ -432,9 +432,20 @@ app.post('/api/jobs', async (c) => {
 });
 
 app.post('/api/jobs/:id/cancel', async (c) => {
+  // queued/paused → 'cancelled' immediately (no work to drain).
+  // running     → 'cancelling' (no finished_at; scheduler polls per
+  //               iteration, drains, then transitions to 'cancelled').
+  // Anything else (done/failed/cancelled/cancelling) → 409.
   const id = Number(c.req.param('id'));
   const r = await pool.query(
-    `UPDATE public.gpu_jobs SET status='cancelled', finished_at=now() WHERE id=$1 AND status IN ('queued','paused') RETURNING *`,
+    `UPDATE public.gpu_jobs
+        SET status = CASE WHEN status IN ('queued','paused') THEN 'cancelled'::job_status
+                          WHEN status = 'running' THEN 'cancelling'::job_status
+                          ELSE status END,
+            finished_at = CASE WHEN status IN ('queued','paused') THEN now()
+                               ELSE finished_at END
+      WHERE id=$1 AND status IN ('queued','paused','running')
+      RETURNING *`,
     [id],
   );
   if (r.rowCount === 0) return c.json({ error: 'not cancellable' }, 409);
