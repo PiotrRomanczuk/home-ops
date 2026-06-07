@@ -21,9 +21,10 @@ html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg); fon
 body { display: flex; flex-direction: column; height: 100vh; }
 button { background: var(--bg-2); color: var(--fg); border: 1px solid var(--border); padding: 4px 8px; cursor: pointer; border-radius: 3px; font: inherit; }
 button:hover { background: var(--bg-1); border-color: var(--accent); }
-select, input { background: var(--bg-2); color: var(--fg); border: 1px solid var(--border); padding: 4px 6px; border-radius: 3px; font: inherit; }
+select, input { background: var(--bg-2); color: var(--fg); border: 1px solid var(--border); padding: 4px 8px; border-radius: 3px; font: inherit; }
 input[type=search] { width: 220px; }
-select[multiple] { min-width: 100px; max-width: 200px; height: 26px; padding: 2px; }
+select { min-width: 90px; max-width: 240px; cursor: pointer; }
+select.active { border-color: var(--accent); color: var(--accent); }
 
 .bar { display: flex; gap: 12px; align-items: center; padding: 8px 12px; background: var(--bg-1); border-bottom: 1px solid var(--border); flex-wrap: wrap; }
 .bar strong { color: var(--accent); font-weight: 700; letter-spacing: 0.5px; }
@@ -67,10 +68,14 @@ tr.detail pre { margin: 0; color: var(--fg-1); font: inherit; }
 .login-card button { padding: 8px; font-size: 13px; }
 .err { color: var(--error); margin: 4px 0 0; min-height: 14px; text-align: center; }
 
+tr.row td[data-filter] { cursor: cell; }
+tr.row td[data-filter]:hover { background: var(--bg-2); text-decoration: underline; }
+
 @media (max-width: 800px) {
   .filters { gap: 4px; }
-  select[multiple] { display: none; }
-  .c-source { width: 100px; }
-  .c-host { width: 50px; }
-  input[type=search] { width: 140px; }
+  select { max-width: 140px; }
+  input[type=search] { width: 100%; flex: 1 1 140px; min-width: 100px; }
+  .c-source { width: 110px; }
+  .c-host { width: 56px; }
+  .c-ts { width: 70px; }
 }

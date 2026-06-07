@@ -10,8 +10,8 @@
   <header class="bar">
     <strong>home-ops</strong>
     <div class="filters">
-      <select id="host" multiple title="host"></select>
-      <select id="source" multiple title="source"></select>
+      <select id="host" title="host"><option value="">all hosts</option></select>
+      <select id="source" title="source"><option value="">all sources</option></select>
       <select id="level_min" title="min level">
         <option value="debug">debug+</option>
         <option value="info" selected>info+</option>
@@ -28,7 +28,7 @@
       </select>
       <input id="grep" type="search" placeholder="grep…" autocomplete="off">
       <label class="tail"><input id="tail" type="checkbox" checked> tail</label>
-      <button id="refresh">↻</button>
+      <button id="refresh" title="refresh">↻</button>
       <span id="status" class="status"></span>
       <button id="logout" title="log out">×</button>
     </div>
