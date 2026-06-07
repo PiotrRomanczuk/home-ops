@@ -90,9 +90,9 @@ Already partially shipped this session:
 - [x] `docs/adr/2026-06-07-no-grafana.md` — formal ADR documenting why metrics live in home-ops Postgres rather than Grafana/Prometheus
 
 Still to do:
-- [ ] **wfh metric sampling** — port the same `metric_sampler_loop` pattern into `scheduler/gpu-scheduler.py` (or `agents/wfh/ollama-watcher.py`); add AMD GPU sampling via `radeontop`/`amdgpu_top` or rocm-smi; Ollama models-loaded via `GET /api/ps`
-- [ ] **rpi metric sampling** — once `agents/rpi/rpi-watcher.py` exists (Phase E), add the same loop. Pi temperature via `/sys/class/thermal/thermal_zone0/temp`
-- [ ] **uwh deploy** — install `python3-psutil` on uwh: `sudo apt install -y python3-psutil`; restart `uwh-watcher.service`
+- [x] 2026-06-07 **uwh deploy** — psutil 7.0.0 already present (no apt needed); `~/bin/uwh-watcher.py` updated from repo + `systemctl --user restart`. `metrics=on`, samples landing every 30s.
+- [x] 2026-06-07 **wfh metric sampling** — written as `agents/wfh/wfh-watcher.py` (new sibling of ollama-watcher.py, not bolted into gpu-scheduler.py to preserve scope). GPU sampling via `agents/wfh/sample-gpu.ps1` using Windows built-in Get-Counter (no AMD CLI install — investigation showed Adrenalin/ADLX don't write log files; ADLX SDK + Python bindings is the future temp path). Ollama models-loaded via `GET /api/ps`. Deployed to `C:\ProgramData\WfhWatcher\` as `WfhWatcher` WinSW service. 30s sampling verified. **Temperature not captured** — `gpu_temp_c` stays NULL on wfh until amdgpu_top.exe or AMDuProfCLI install.
+- [x] 2026-06-07 **rpi metric sampling** — wrote `agents/rpi/{rpi-watcher.py, rpi-watcher.service}` ahead of formal Phase E. Deployed via scp to `~/bin/` + `~/.config/systemd/user/` on rpi, linger enabled. CPU/SoC temp lands in `data.cpu_temp_c` (jsonb), NOT in the `gpu_temp_c` column — the column is semantically GPU-specific. First row verified: cpu 29.7%, load 1.33, mem 10.8%, disk 45.6%, temp 71.6°C. Phase G is now **live across all 3 hosts** (uwh + wfh + rpi all stream every 30s).
 - [ ] **Viewer Hosts tab** — Phase C deliverable (per DESIGN_BRIEF.md); sparklines via uPlot, per-host drill page with top-process tables and recent-warn-events sidebar for correlation
 - [ ] **Status footer in viewer** — per-host last-event lag + last-metric lag, color-coded by staleness
 - [ ] **Saved analytical queries** (stretch) — `docs/saved-queries.json` + a "Queries" tab that runs them and renders as table-or-chart based on shape
@@ -155,11 +155,13 @@ start: "(1) which projects start dual-writing domain events first?
 
 **Carryover** (UI / shell actions on the actual hosts — not file edits):
 - [ ] Tailscale admin console: delete `desktop-t0jdc7e`, `iphone182`, `piotrs-macbook-air`, `piotr-ubuntu` at https://login.tailscale.com/admin/machines (from session 2)
-- [ ] uwh: deploy session 3 changes — `cd ~/logs-stack && git pull && docker compose down && docker compose up -d --build`. This pgdata-recreates is NOT needed (alpine→debian postgres:17 share data format), but `docker compose down/up` is required because the postgres image changed and command: was added.
-- [ ] uwh: post-deploy apply 002_pg_cron.sql against the existing DB:
-      `docker exec home-ops-postgres-1 psql -U postgres -d home_ops -f /docker-entrypoint-initdb.d/002_pg_cron.sql`
+- [x] 2026-06-07 uwh: deployed session 3 changes — `cd ~/logs-stack && git pull && docker compose down && docker compose up -d --build`. Postgres switched alpine→debian 17.10 with pg_cron, pgdata preserved, ingest rebuilt with /api/metrics.
+- [x] 2026-06-07 uwh: applied 002_pg_cron.sql + 003_host_metrics.sql against the running DB. 3 cron jobs scheduled (host_logs daily 04:00, gpu_jobs daily 04:15, host_metrics hourly :30).
+- [x] 2026-06-07 uwh: Phase G deployed — psutil 7.0.0 already present (apt install unnecessary), `~/bin/uwh-watcher.py` overwritten from `~/logs-stack/agents/uwh/uwh-watcher.py`, `systemctl --user restart uwh-watcher.service`, journal confirms `metrics=on`, first samples landed in `host_metrics` with cpu/mem/disk/net + top_cpu/top_mem attribution.
 - [ ] uwh: mount the NAS share + install the pg-backup timer per `ops/uwh/README.md`.
 - [ ] Pi (Kuma): add the HTTP monitor per README → "Monitoring" section.
+
+**Deploy mechanism note (uwh-watcher)**: there is no deploy script. The watcher runs from `~/bin/uwh-watcher.py` (NOT from the cloned repo) as a user-scope systemd service (`~/.config/systemd/user/uwh-watcher.service`, enabled). Pulling the repo does not update the running code — you must `cp ~/logs-stack/agents/uwh/uwh-watcher.py ~/bin/uwh-watcher.py && systemctl --user restart uwh-watcher.service`. Same pattern will apply to wfh (via WinSW) and rpi when those agents land — consider writing a small `scripts/deploy-agent.sh` to formalize this.
 
 **Minor follow-up** (low-priority):
 - [ ] `.github/workflows/check.yml`: bump `actions/checkout` and `actions/setup-node` to v5 when stable, to avoid Node 20 deprecation warning (deadline Sep 2026).

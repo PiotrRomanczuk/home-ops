@@ -1,0 +1,15 @@
+[Unit]
+Description=home-ops rpi watcher
+After=network.target
+
+[Service]
+Type=simple
+EnvironmentFile=%h/.config/rpi-watcher.env
+ExecStart=/usr/bin/python3 %h/bin/rpi-watcher.py
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target
