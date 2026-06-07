@@ -4,17 +4,16 @@
 # Add the actual .exe names you launch — easiest way to find them is to run
 # the game once and the scheduler logs `foreground_exe=<name>` events you
 # can grep in the viewer.
-steam.exe
+#
+# Do NOT add tray-resident launchers (steam.exe, battle.net.exe,
+# agent.exe) — those run all the time without using the GPU, and
+# putting them here makes the scheduler refuse all work indefinitely.
+# Only list the actual game .exe that loads the GPU.
+
 csgo.exe
 cs2.exe
 gta5.exe
 eldenring.exe
-
-# Battle.net / Diablo IV — names vary by install language; psutil returns
-# the process name lowercased, with spaces preserved.
 diablo iv.exe
 diablo4.exe
 diablo.exe
-battle.net.exe
-battle.net launcher.exe
-agent.exe
