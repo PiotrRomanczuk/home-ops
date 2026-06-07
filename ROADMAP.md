@@ -3,6 +3,8 @@ created: 2026-06-07
 updated: 2026-06-07
 ---
 
+> Tip: search for "Session N" to jump between sessions. "Done" is at the bottom.
+
 # home-ops ROADMAP
 
 Working list. WIP-marking pattern: change `- [ ]` to `- [ ] WIP (@agent-name)` before starting, back to `- [x]` when done. See `~/Desktop/MainCV/CLAUDE.md` ("Working on TODO Tasks") for the full protocol.
@@ -12,11 +14,8 @@ Improvement plan: `~/.claude/plans/analyze-this-folder-and-curious-shamir.md` (d
 
 ## Active
 
-### Session 2 — Docs hygiene (~30 min)
-- [ ] HOSTS.md: add 64421/64422/8444 to uwh services table (item 3.1)
-- [ ] infrastructure/README.md: add viewer Quick Link row (item 3.2)
-- [ ] HOSTS.md: resolve Cloudflare tunnel "TBD" (item 3.3)
-- [ ] Prune stale Tailnet entries + retire uph/upo aliases (item 3.4)
+### Session 2 — Docs hygiene
+Moved to Done.
 
 ### Session 3 — Ops hardening (~1.5 hours)
 - [ ] docker-compose.yml: ingest healthcheck via /api/health (item 2.1)
@@ -62,3 +61,7 @@ Improvement plan: `~/.claude/plans/analyze-this-folder-and-curious-shamir.md` (d
 ## Done
 
 - [x] 2026-06-07 Foundation: git init, .gitignore, generate-env.sh, biome+tsconfig, GHA, README pointer fix, ROADMAP
+- [x] 2026-06-07 Session 2 — docs hygiene: HOSTS.md uwh ports added, viewer Quick Link added, Cloudflare TBD resolved (remotely-managed via Zero Trust), uph/upo SSH aliases retired, stale-entries sections removed.
+
+**Carryover from session 2** (not file-edits, needs UI action by you):
+- [ ] Tailscale admin console: delete `desktop-t0jdc7e`, `iphone182`, `piotrs-macbook-air`, `piotr-ubuntu` at https://login.tailscale.com/admin/machines
