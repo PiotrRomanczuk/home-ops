@@ -1,0 +1,16 @@
+[Unit]
+Description=home-ops Postgres logical backup (pg_dump -Fc) to NAS
+After=docker.service network-online.target remote-fs.target
+Wants=remote-fs.target
+
+[Service]
+Type=oneshot
+# Run from the repo clone; the script does its own cd-less work via $BACKUP_DIR.
+WorkingDirectory=%h/logs-stack
+ExecStart=%h/logs-stack/ops/uwh/pg-backup.sh
+# Stream stdout/stderr to journald — gets picked up by uwh-watcher and lands in host_logs.
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

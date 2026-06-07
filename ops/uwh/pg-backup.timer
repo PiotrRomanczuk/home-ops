@@ -1,0 +1,10 @@
+[Unit]
+Description=Nightly home-ops Postgres backup at 04:30 (Kuma backup is at 04:00)
+
+[Timer]
+OnCalendar=*-*-* 04:30:00
+Persistent=true
+Unit=pg-backup.service
+
+[Install]
+WantedBy=timers.target

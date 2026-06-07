@@ -2,8 +2,15 @@ name: home-ops
 
 services:
   postgres:
-    image: postgres:17-alpine
+    build: ./postgres
     restart: unless-stopped
+    # pg_cron requires shared_preload_libraries + a designated database for the cron schema.
+    command:
+      - postgres
+      - -c
+      - shared_preload_libraries=pg_cron
+      - -c
+      - cron.database_name=home_ops
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required (run scripts/generate-env.sh)}
@@ -32,6 +39,15 @@ services:
       PORT: "8080"
     ports:
       - "0.0.0.0:64421:8080"
+    healthcheck:
+      # /api/health is public (no auth) and runs SELECT 1 against the pool —
+      # proves both the HTTP server and Postgres reachability in one probe.
+      # node:24-alpine ships busybox wget; no extra deps.
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/api/health | grep -q '\"ok\":true' || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
 
   # Viewer is served by the same Hono process as ingest. No second container.
 

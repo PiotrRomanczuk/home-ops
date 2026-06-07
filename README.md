@@ -40,14 +40,30 @@ docker compose up -d
 ssh uwh "cd ~/logs-stack && git pull && docker compose up -d --build"
 ```
 
+### Applying new migrations on an existing deploy
+
+The `postgres/migrations/` directory mounts read-only into the container at
+`/docker-entrypoint-initdb.d/`, but those scripts only auto-run on a fresh
+initdb (empty `pgdata`). On an existing deploy, run new migrations by hand:
+
+```bash
+# Replace 002_pg_cron.sql with whichever new migration you're applying.
+ssh uwh "docker exec home-ops-postgres-1 psql -U postgres -d home_ops \
+  -f /docker-entrypoint-initdb.d/002_pg_cron.sql"
+```
+
+All shipped migrations are idempotent (`CREATE … IF NOT EXISTS`,
+`CREATE OR REPLACE FUNCTION`, `cron.schedule(jobname, …)`), so re-running is
+safe.
+
 ## Verify
 
 ```bash
 # ingest is up
 curl -s http://localhost:64421/ | jq .
 
-# health (auth required)
-curl -s http://localhost:64421/api/health -H "X-Ingest-Token: $INGEST_TOKEN" | jq .
+# health (public, no auth) — also wired into the docker healthcheck
+curl -s http://localhost:64421/api/health | jq .
 
 # manual event
 curl -s -X POST http://localhost:64421/api/ingest \
@@ -57,15 +73,56 @@ curl -s -X POST http://localhost:64421/api/ingest \
 # read it back
 docker exec home-ops-postgres-1 psql -U postgres -d home_ops \
   -c "select id, ts, host, source, message from host_logs order by id desc limit 5;"
+
+# both containers healthy?
+docker compose ps    # ingest + postgres should both show (healthy)
 ```
 
 ## Schema
 
-See `postgres/migrations/001_init.sql`. `host_logs` is indexed by `ts`, `host`, `source`, alarm-level. `gpu_jobs` is indexed by `(priority DESC, created_at ASC) WHERE status='queued'` so `claim_job` is O(1).
+See `postgres/migrations/001_init.sql` for the tables (`host_logs`, `gpu_jobs`)
+and `002_pg_cron.sql` for the scheduled prunes. `host_logs` is indexed by
+`ts`, `host`, `source`, alarm-level. `gpu_jobs` is indexed by
+`(priority DESC, created_at ASC) WHERE status='queued'` so `claim_job` is O(1).
 
 ## Retention
 
-`SELECT prune_host_logs(30)` removes `host_logs` rows older than 30 days. Run via cron on uwh nightly.
+pg_cron runs nightly inside the postgres container (no host-level cron):
+
+- `prune_host_logs(30)` — drops `host_logs` rows older than 30 days. Daily at 04:00 UTC.
+- `prune_done_gpu_jobs(30)` — drops `gpu_jobs` rows with `status='done'` older than 30 days. Daily at 04:15 UTC. Failed/cancelled jobs are kept forever for postmortem.
+
+```bash
+# Inspect the schedule
+docker exec home-ops-postgres-1 psql -U postgres -d home_ops -c \
+  'SELECT jobid, schedule, jobname, command FROM cron.job;'
+```
+
+## Backups
+
+`pg_dump -Fc` runs nightly at 04:30 (uwh local time) via a systemd `--user`
+timer, writing to the NAS `monitoring-backup` SMB share with 14-day retention.
+See `ops/uwh/README.md` for installation and the NAS mount prerequisite.
+
+```bash
+# On uwh, after installing the timer
+systemctl --user list-timers --all | grep pg-backup
+ls -lh /mnt/nas/monitoring-backup/home-ops/
+```
+
+## Monitoring
+
+Kuma on the Pi probes `http://piotr-hp-elitedesk.tail266853.ts.net:64421/api/health`
+every 60 s; alerts on 2 consecutive failures. To configure:
+
+1. Open Kuma → **Add New Monitor**.
+2. Type: HTTP(s). Friendly name: `home-ops ingest`.
+3. URL: `http://piotr-hp-elitedesk.tail266853.ts.net:64421/api/health`.
+4. Heartbeat interval: `60`. Retries: `2`. Heartbeat retry interval: `30`.
+5. Method: GET. Body / headers: blank.
+6. Accepted status codes: `200-299`.
+7. Keyword search (under HTTP Options): `"ok":true`.
+8. Notifications: attach the existing channel (same as other monitors).
 
 ## Related
 
