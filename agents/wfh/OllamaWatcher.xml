@@ -1,0 +1,18 @@
+<service>
+  <id>OllamaWatcher</id>
+  <name>Ollama Watcher</name>
+  <description>Tails Ollama log files and ships structured events to the home-ops ingest API.</description>
+  <executable>C:\Program Files (x86)\Microsoft Visual Studio\Shared\Python39_64\python.exe</executable>
+  <arguments>"C:\ProgramData\OllamaWatcher\ollama-watcher.py"</arguments>
+  <env name="INGEST_URL" value="http://192.168.1.75:64421/api/ingest"/>
+  <env name="INGEST_TOKEN" value="REPLACE_AT_INSTALL"/>
+  <env name="HOST_NAME" value="wfh"/>
+  <env name="OLLAMA_LOG" value="C:\ProgramData\Ollama-Service\Ollama.err.log"/>
+  <env name="PYTHONUNBUFFERED" value="1"/>
+  <log mode="roll-by-size">
+    <sizeThreshold>2048</sizeThreshold>
+    <keepFiles>3</keepFiles>
+  </log>
+  <onfailure action="restart" delay="5 sec"/>
+  <startmode>Automatic</startmode>
+</service>

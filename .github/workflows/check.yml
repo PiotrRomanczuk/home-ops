@@ -1,0 +1,41 @@
+name: check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  ingest:
+    name: ingest (typecheck + lint)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: ingest/package-lock.json
+
+      - name: install
+        working-directory: ingest
+        run: npm ci
+
+      - name: typecheck + lint
+        working-directory: ingest
+        run: npm run check
+
+  compose:
+    name: docker compose build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: build
+        env:
+          POSTGRES_PASSWORD: ci-placeholder-not-deployed
+          INGEST_TOKEN: ci-placeholder-not-deployed
+          LOGS_PASSWORD: ci-placeholder-not-deployed
+        run: docker compose build

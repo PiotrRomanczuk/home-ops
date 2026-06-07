@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>home-ops · login</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="login">
+  <form id="f" class="login-card">
+    <h1>home-ops</h1>
+    <input id="pw" type="password" autocomplete="current-password" placeholder="password" autofocus>
+    <button type="submit">enter</button>
+    <p id="err" class="err"></p>
+  </form>
+<script>
+document.getElementById('f').addEventListener('submit', async e => {
+  e.preventDefault();
+  const pw = document.getElementById('pw').value;
+  const err = document.getElementById('err');
+  err.textContent = '';
+  const r = await fetch('/api/auth/login', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ password: pw }),
+  });
+  if (r.ok) { location.href = '/'; return; }
+  err.textContent = 'wrong password';
+});
+</script>
+</body>
+</html>

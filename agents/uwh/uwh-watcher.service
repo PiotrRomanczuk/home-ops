@@ -1,0 +1,15 @@
+[Unit]
+Description=home-ops uwh watcher
+After=network.target docker.service
+
+[Service]
+Type=simple
+EnvironmentFile=%h/.config/uwh-watcher.env
+ExecStart=/usr/bin/python3 %h/bin/uwh-watcher.py
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

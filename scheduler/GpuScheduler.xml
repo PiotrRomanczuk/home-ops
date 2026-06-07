@@ -1,0 +1,19 @@
+<service>
+  <id>GpuScheduler</id>
+  <name>home-ops GPU Scheduler</name>
+  <description>Idle-GPU job runner for Ollama. Pauses when gaming is detected.</description>
+  <executable>C:\Program Files (x86)\Microsoft Visual Studio\Shared\Python39_64\python.exe</executable>
+  <arguments>"C:\ProgramData\GpuScheduler\gpu-scheduler.py"</arguments>
+  <env name="INGEST_URL" value="http://192.168.1.75:64421"/>
+  <env name="INGEST_TOKEN" value="REPLACE_AT_INSTALL"/>
+  <env name="HOST_NAME" value="wfh"/>
+  <env name="OLLAMA_URL" value="http://127.0.0.1:11434"/>
+  <env name="GAMES_FILE" value="C:\ProgramData\GpuScheduler\games.txt"/>
+  <env name="PYTHONUNBUFFERED" value="1"/>
+  <log mode="roll-by-size">
+    <sizeThreshold>2048</sizeThreshold>
+    <keepFiles>3</keepFiles>
+  </log>
+  <onfailure action="restart" delay="10 sec"/>
+  <startmode>Automatic</startmode>
+</service>

@@ -1,0 +1,39 @@
+name: home-ops
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required (run scripts/generate-env.sh)}
+      POSTGRES_DB: home_ops
+    ports:
+      - "127.0.0.1:64422:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d home_ops"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  ingest:
+    build: ./ingest
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required}@postgres:5432/home_ops
+      INGEST_TOKEN: ${INGEST_TOKEN:?INGEST_TOKEN required (run scripts/generate-env.sh)}
+      LOGS_PASSWORD: ${LOGS_PASSWORD:?LOGS_PASSWORD required (run scripts/generate-env.sh)}
+      PORT: "8080"
+    ports:
+      - "0.0.0.0:64421:8080"
+
+  # Viewer is served by the same Hono process as ingest. No second container.
+
+volumes:
+  pgdata:
