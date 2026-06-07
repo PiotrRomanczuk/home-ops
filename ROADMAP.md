@@ -17,11 +17,8 @@ Improvement plan: `~/.claude/plans/analyze-this-folder-and-curious-shamir.md` (d
 ### Session 2 — Docs hygiene
 Moved to Done.
 
-### Session 3 — Ops hardening (~1.5 hours)
-- [ ] docker-compose.yml: ingest healthcheck via /api/health (item 2.1)
-- [ ] Switch postgres image to debian; add 002_pg_cron.sql with 30d host_logs + 30d done gpu_jobs prunes (items 2.2, 13a, 13b)
-- [ ] ops/uwh/pg-backup.{sh,service,timer} → NAS nightly (item 2.3)
-- [ ] Kuma HTTP probe on /api/health (item 2.5)
+### Session 3 — Ops hardening
+Moved to Done.
 
 ### Session 4 — uwh-watcher refactor (the pattern, ~1 hour)
 - [ ] Two-layer payload validation: TS at /api/jobs + Python at job-claim (item 1.4)
@@ -62,6 +59,15 @@ Moved to Done.
 
 - [x] 2026-06-07 Foundation: git init, .gitignore, generate-env.sh, biome+tsconfig, GHA, README pointer fix, ROADMAP
 - [x] 2026-06-07 Session 2 — docs hygiene: HOSTS.md uwh ports added, viewer Quick Link added, Cloudflare TBD resolved (remotely-managed via Zero Trust), uph/upo SSH aliases retired, stale-entries sections removed.
+- [x] 2026-06-07 Session 3 — ops hardening: ingest healthcheck (wget against /api/health), postgres image switched to debian + pg_cron, 002_pg_cron.sql with 30d host_logs prune + 30d done gpu_jobs prune (failed kept forever), ops/uwh/pg-backup.{sh,service,timer} + NAS-mount docs, Kuma probe recipe in README.
 
-**Carryover from session 2** (not file-edits, needs UI action by you):
-- [ ] Tailscale admin console: delete `desktop-t0jdc7e`, `iphone182`, `piotrs-macbook-air`, `piotr-ubuntu` at https://login.tailscale.com/admin/machines
+**Carryover** (UI / shell actions on the actual hosts — not file edits):
+- [ ] Tailscale admin console: delete `desktop-t0jdc7e`, `iphone182`, `piotrs-macbook-air`, `piotr-ubuntu` at https://login.tailscale.com/admin/machines (from session 2)
+- [ ] uwh: deploy session 3 changes — `cd ~/logs-stack && git pull && docker compose down && docker compose up -d --build`. This pgdata-recreates is NOT needed (alpine→debian postgres:17 share data format), but `docker compose down/up` is required because the postgres image changed and command: was added.
+- [ ] uwh: post-deploy apply 002_pg_cron.sql against the existing DB:
+      `docker exec home-ops-postgres-1 psql -U postgres -d home_ops -f /docker-entrypoint-initdb.d/002_pg_cron.sql`
+- [ ] uwh: mount the NAS share + install the pg-backup timer per `ops/uwh/README.md`.
+- [ ] Pi (Kuma): add the HTTP monitor per README → "Monitoring" section.
+
+**Minor follow-up** (low-priority):
+- [ ] `.github/workflows/check.yml`: bump `actions/checkout` and `actions/setup-node` to v5 when stable, to avoid Node 20 deprecation warning (deadline Sep 2026).
