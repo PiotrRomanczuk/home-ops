@@ -296,20 +296,43 @@ def runner_loop() -> None:
             continue
 
         cancel = threading.Event()
+        # Mutable container so watchers can record which one tripped first.
+        # 'gaming' → /pause (requeue when GPU frees). 'user' → /complete
+        # (server transitions cancelling → cancelled, keeps any partial result).
+        cancel_reason: dict[str, str] = {}
 
         def watch_for_gaming() -> None:
             while not cancel.is_set():
                 if state.is_gaming:
+                    cancel_reason.setdefault('why', 'gaming')
                     cancel.set(); return
                 time.sleep(0.5)
 
-        watcher = threading.Thread(target=watch_for_gaming, daemon=True)
-        watcher.start()
+        def watch_for_user_cancel() -> None:
+            # Poll status; if server flipped us to 'cancelling' (Q11), trip cancel.
+            while not cancel.is_set():
+                time.sleep(3)
+                status, body = http('GET', f'/api/jobs/{job_id}')
+                if status == 200 and body:
+                    st = (body.get('job') or {}).get('status')
+                    if st == 'cancelling':
+                        cancel_reason.setdefault('why', 'user')
+                        cancel.set(); return
+
+        watcher_g = threading.Thread(target=watch_for_gaming, daemon=True)
+        watcher_u = threading.Thread(target=watch_for_user_cancel, daemon=True)
+        watcher_g.start()
+        watcher_u.start()
         try:
             result = handler(job, cancel)
             if cancel.is_set():
-                pause(job_id)
-                post_log('warn', f'job {job_id} paused (gaming detected)', {'job_id': job_id})
+                why = cancel_reason.get('why', 'gaming')
+                if why == 'user':
+                    complete(job_id, result)
+                    post_log('info', f'job {job_id} cancelled (user)', {'job_id': job_id})
+                else:
+                    pause(job_id)
+                    post_log('warn', f'job {job_id} paused (gaming detected)', {'job_id': job_id})
             else:
                 complete(job_id, result)
                 post_log('info', f'job {job_id} done', {'job_id': job_id})

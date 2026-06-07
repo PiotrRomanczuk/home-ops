@@ -489,10 +489,19 @@ app.post('/api/jobs/claim', async (c) => {
 });
 
 app.post('/api/jobs/:id/complete', async (c) => {
+  // From 'running' → 'done' (normal completion).
+  // From 'cancelling' → 'cancelled' (user cancelled mid-flight; the handler
+  // finished its current iteration, returned a result, we honour the cancel).
   const id = Number(c.req.param('id'));
   const body = (await c.req.json().catch(() => ({}))) as { result?: unknown };
   const r = await pool.query(
-    `UPDATE public.gpu_jobs SET status='done', finished_at=now(), result=$2::jsonb WHERE id=$1 AND status='running' RETURNING *`,
+    `UPDATE public.gpu_jobs
+        SET status = CASE WHEN status='cancelling' THEN 'cancelled'::job_status
+                          ELSE 'done'::job_status END,
+            finished_at = now(),
+            result = $2::jsonb
+      WHERE id=$1 AND status IN ('running','cancelling')
+      RETURNING *`,
     [id, JSON.stringify(body.result ?? null)],
   );
   if (r.rowCount === 0) return c.json({ error: 'not running' }, 409);
@@ -500,21 +509,43 @@ app.post('/api/jobs/:id/complete', async (c) => {
 });
 
 app.post('/api/jobs/:id/fail', async (c) => {
+  // From 'cancelling' → 'cancelled' too — if cancellation arrived while the
+  // handler was failing anyway, the user-intent is cancel, not failure.
   const id = Number(c.req.param('id'));
   const body = (await c.req.json().catch(() => ({}))) as { error?: string };
   const r = await pool.query(
-    `UPDATE public.gpu_jobs SET status='failed', finished_at=now(), last_error=$2 WHERE id=$1 AND status='running' RETURNING *`,
+    `UPDATE public.gpu_jobs
+        SET status = CASE WHEN status='cancelling' THEN 'cancelled'::job_status
+                          ELSE 'failed'::job_status END,
+            finished_at = now(),
+            last_error = $2
+      WHERE id=$1 AND status IN ('running','cancelling')
+      RETURNING *`,
     [id, (body.error ?? '').slice(0, 4000)],
   );
   if (r.rowCount === 0) return c.json({ error: 'not running' }, 409);
   return c.json({ job: r.rows[0] });
 });
 
+app.get('/api/jobs/:id', async (c) => {
+  const id = Number(c.req.param('id'));
+  const r = await pool.query(`SELECT * FROM public.gpu_jobs WHERE id=$1`, [id]);
+  if (r.rowCount === 0) return c.json({ error: 'not found' }, 404);
+  return c.json({ job: r.rows[0] });
+});
+
 app.post('/api/jobs/:id/pause', async (c) => {
   const id = Number(c.req.param('id'));
-  // Pause = put back on the queue so any worker can pick it up when GPU frees.
+  // From 'running' → 'queued' (requeue; e.g. gaming preempted us).
+  // From 'cancelling' → 'cancelled' (don't requeue; user wanted it gone).
   const r = await pool.query(
-    `UPDATE public.gpu_jobs SET status='queued', started_at=NULL, worker_host=NULL WHERE id=$1 AND status='running' RETURNING *`,
+    `UPDATE public.gpu_jobs
+        SET status = CASE WHEN status='cancelling' THEN 'cancelled'::job_status
+                          ELSE 'queued'::job_status END,
+            started_at = CASE WHEN status='cancelling' THEN started_at ELSE NULL END,
+            worker_host = CASE WHEN status='cancelling' THEN worker_host ELSE NULL END,
+            finished_at = CASE WHEN status='cancelling' THEN now() ELSE finished_at END
+      WHERE id=$1 AND status IN ('running','cancelling') RETURNING *`,
     [id],
   );
   if (r.rowCount === 0) return c.json({ error: 'not running' }, 409);
