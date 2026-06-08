@@ -28,7 +28,7 @@ from typing import Any
 _here = Path(__file__).resolve().parent
 sys.path.insert(0, str(_here))
 sys.path.insert(0, str(_here.parent))
-from _common import IngestClient  # noqa: E402
+from _common import IngestClient, Shutdown  # noqa: E402
 
 HOST_NAME = os.environ.get('HOST_NAME', 'rpi')
 METRIC_INTERVAL = float(os.environ.get('METRIC_INTERVAL', '30'))
@@ -37,6 +37,7 @@ METRIC_TOP_N = int(os.environ.get('METRIC_TOP_N', '10'))
 TEMP_PATH = Path(os.environ.get('TEMP_PATH', '/sys/class/thermal/thermal_zone0/temp'))
 
 ic = IngestClient.from_env(host=HOST_NAME)
+shutdown = Shutdown()
 
 
 def post_log(level: str, message: str, data: dict[str, Any] | None = None) -> None:
@@ -66,8 +67,7 @@ def metric_sampler_loop() -> None:
     last_net = psutil.net_io_counters()
     last_net_ts = time.monotonic()
 
-    while True:
-        time.sleep(METRIC_INTERVAL)
+    while not shutdown.wait(METRIC_INTERVAL):
         try:
             now = time.monotonic()
             cpu_pct = psutil.cpu_percent(interval=None)
@@ -123,11 +123,10 @@ def metric_sampler_loop() -> None:
 
 
 def main() -> None:
+    shutdown.install()
     post_log('info', f'rpi-watcher up: interval={METRIC_INTERVAL}s temp_path={TEMP_PATH}')
-    try:
-        metric_sampler_loop()
-    except KeyboardInterrupt:
-        post_log('info', 'rpi-watcher shutting down (SIGINT)')
+    metric_sampler_loop()
+    post_log('info', 'rpi-watcher down (signal)')
 
 
 if __name__ == '__main__':

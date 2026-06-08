@@ -30,7 +30,7 @@ from typing import Any
 _here = Path(__file__).resolve().parent
 sys.path.insert(0, str(_here))
 sys.path.insert(0, str(_here.parent))
-from _common import IngestClient  # noqa: E402
+from _common import IngestClient, Shutdown  # noqa: E402
 
 HOST_NAME = os.environ.get('HOST_NAME', 'win10')
 METRIC_INTERVAL = float(os.environ.get('METRIC_INTERVAL', '30'))
@@ -40,6 +40,7 @@ GPU_PS1_PATH = Path(os.environ.get('GPU_PS1_PATH') or Path(__file__).resolve().p
 OLLAMA_URL = os.environ.get('OLLAMA_URL', 'http://localhost:11434').rstrip('/')
 
 ic = IngestClient.from_env(host=HOST_NAME)
+shutdown = Shutdown()
 
 
 def post_log(level: str, message: str, data: dict[str, Any] | None = None) -> None:
@@ -91,8 +92,7 @@ def metric_sampler_loop() -> None:
     last_net = psutil.net_io_counters()
     last_net_ts = time.monotonic()
 
-    while True:
-        time.sleep(METRIC_INTERVAL)
+    while not shutdown.wait(METRIC_INTERVAL):
         try:
             now = time.monotonic()
             mem = psutil.virtual_memory()
@@ -143,11 +143,10 @@ def metric_sampler_loop() -> None:
 
 
 def main() -> None:
+    shutdown.install()
     post_log('info', f'win10-watcher up: interval={METRIC_INTERVAL}s gpu_ps1={GPU_PS1_PATH.name} ollama={OLLAMA_URL}')
-    try:
-        metric_sampler_loop()
-    except KeyboardInterrupt:
-        post_log('info', 'win10-watcher shutting down (SIGINT)')
+    metric_sampler_loop()
+    post_log('info', 'win10-watcher down (signal)')
 
 
 if __name__ == '__main__':

@@ -18,11 +18,58 @@ from __future__ import annotations
 
 import json
 import os
+import signal
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
-from typing import Any, Sequence
+from typing import Any, Callable, Sequence
+
+
+# ── shutdown coordination ─────────────────────────────────────────────
+
+
+class Shutdown:
+    """Cross-thread shutdown signal. Install once at process start.
+
+    Usage in a loop body:
+        while not shutdown.wait(POLL_INTERVAL):
+            do_one_tick()
+
+    install() registers SIGTERM and SIGINT handlers that set the event.
+    On Windows under WinSW, KeyboardInterrupt from the wrapper still
+    reaches Python's signal layer for SIGINT; SIGTERM is unavailable on
+    Windows so install() just registers SIGINT there.
+    """
+
+    def __init__(self) -> None:
+        self._event = threading.Event()
+
+    def install(self, on_signal: Callable[[int], None] | None = None) -> None:
+        def handle(signum: int, _frame: Any) -> None:
+            self._event.set()
+            if on_signal is not None:
+                try:
+                    on_signal(signum)
+                except Exception as e:  # noqa: BLE001  best-effort callback
+                    print(f'shutdown callback raised: {e}', file=sys.stderr)
+
+        signal.signal(signal.SIGINT, handle)
+        if hasattr(signal, 'SIGTERM'):
+            try:
+                signal.signal(signal.SIGTERM, handle)
+            except (ValueError, OSError):
+                pass  # Windows: SIGTERM may be unavailable
+
+    def is_set(self) -> bool:
+        return self._event.is_set()
+
+    def wait(self, timeout: float) -> bool:
+        return self._event.wait(timeout)
+
+    def set(self) -> None:
+        self._event.set()
 
 
 class IngestClient:

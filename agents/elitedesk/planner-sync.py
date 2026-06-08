@@ -34,7 +34,7 @@ from typing import Any
 _here = Path(__file__).resolve().parent
 sys.path.insert(0, str(_here))
 sys.path.insert(0, str(_here.parent))
-from _common import IngestClient  # noqa: E402
+from _common import IngestClient, Shutdown  # noqa: E402
 
 HOST_NAME = os.environ.get('HOST_NAME', 'elitedesk')
 PLANNER_REMOTE = os.environ.get('PLANNER_REMOTE', '')
@@ -43,6 +43,7 @@ SYNC_INTERVAL = float(os.environ.get('SYNC_INTERVAL', '60'))
 TOGGLE_INTERVAL = float(os.environ.get('TOGGLE_INTERVAL', '2'))
 
 ic = IngestClient.from_env(host=HOST_NAME, source='agent:planner-sync', timeout=10)
+shutdown = Shutdown()
 
 INGEST_BASE = ic.events_url.replace('/api/ingest', '').rstrip('/')
 SYNC_URL = INGEST_BASE + '/api/projects/sync'
@@ -307,12 +308,11 @@ def _drain_toggles_once() -> None:
 
 
 def toggles_loop() -> None:
-    while True:
+    while not shutdown.wait(TOGGLE_INTERVAL):
         try:
             _drain_toggles_once()
         except (OSError, ValueError, subprocess.SubprocessError) as e:
             post_log('error', f'toggles tick raised: {type(e).__name__}', {'err': str(e)[:500]})
-        time.sleep(TOGGLE_INTERVAL)
 
 
 # ── main loop ─────────────────────────────────────────────────────────
@@ -352,21 +352,20 @@ def sync_once() -> None:
 
 
 def main() -> None:
+    shutdown.install()
     post_log('info', f'planner-sync up: sync={SYNC_INTERVAL}s toggle={TOGGLE_INTERVAL}s dir={PLANNER_DIR}')
     # Task toggles drain in their own thread at TOGGLE_INTERVAL so UI feedback
     # is sub-5s instead of waiting on the 60s vault-sync tick.
     threading.Thread(target=toggles_loop, daemon=True, name='toggles').start()
-    try:
-        while True:
-            try:
-                sync_once()
-            except KeyboardInterrupt:
-                raise
-            except (OSError, ValueError, subprocess.SubprocessError) as e:
-                post_log('error', f'sync tick raised: {type(e).__name__}', {'err': str(e)[:500]})
-            time.sleep(SYNC_INTERVAL)
-    except KeyboardInterrupt:
-        post_log('info', 'planner-sync shutting down (SIGINT)')
+    # Main vault-sync loop. wait() returns True on shutdown, breaking cleanly.
+    while True:
+        try:
+            sync_once()
+        except (OSError, ValueError, subprocess.SubprocessError) as e:
+            post_log('error', f'sync tick raised: {type(e).__name__}', {'err': str(e)[:500]})
+        if shutdown.wait(SYNC_INTERVAL):
+            break
+    post_log('info', 'planner-sync down (signal)')
 
 
 if __name__ == '__main__':
