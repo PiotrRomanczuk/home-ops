@@ -36,8 +36,15 @@ function elapsedSec(job) {
 function jobToTurns(job) {
   const p = job.payload || {};
   const r = job.result || {};
+  // generate returns {response, thinking}; summarise returns {summary, sections}.
+  const text = r.response || r.summary || '';
+  const sections = Array.isArray(r.sections) ? r.sections : null;
+  const totalChunks = Array.isArray(p.chunks) ? p.chunks.length : null;
+  const sectionsHint = sections && totalChunks ? `${sections.length}/${totalChunks} sections` : null;
+  // Cron-queued summarise jobs have no human prompt — fall back to title.
+  const userText = p.prompt || p.title || (totalChunks ? `summarise ${totalChunks} chunks` : '');
   return [
-    { role: 'user', text: p.prompt || '' },
+    { role: 'user', text: userText },
     {
       role: 'assistant',
       status: job.status,
@@ -46,7 +53,8 @@ function jobToTurns(job) {
       elapsed: elapsedSec(job),
       started: job.started_at,
       thinking: r.thinking || null,
-      text: r.response || '',
+      text,
+      sections_hint: sectionsHint,
       fail_reason: job.last_error || null,
       paused_reason: job.status === 'paused' ? 'gaming on win10 — will resume when GPU idle' : null,
       _job_id: job.id,
@@ -150,6 +158,11 @@ const Chat = {
         else if (r.summary != null) t.text = r.summary;
         if (r.thinking != null) t.thinking = r.thinking;
         if (r.eval_count != null) t.tokens = r.eval_count;
+        if (Array.isArray(r.sections)) {
+          const p = job.payload || {};
+          const total = Array.isArray(p.chunks) ? p.chunks.length : null;
+          t.sections_hint = total ? `${r.sections.length}/${total} sections` : `${r.sections.length} sections`;
+        }
         t.elapsed = elapsedSec(job);
         if (job.last_error) t.fail_reason = job.last_error;
         t.paused_reason = job.status === 'paused' ? 'gaming on win10 — will resume when GPU idle' : null;
