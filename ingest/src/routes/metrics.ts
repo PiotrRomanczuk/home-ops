@@ -35,15 +35,23 @@ const METRIC_NUM_KEYS: readonly (keyof Metric)[] = [
   'gpu_temp_c',
 ] as const;
 
-function validateMetric(m: unknown): m is Metric {
-  if (!m || typeof m !== 'object') return false;
+interface Rejected {
+  index: number;
+  reason: string;
+}
+
+// Returns null on success, otherwise a short reason that goes back to the
+// client in the rejected[] array. Keep reasons short and stable — agents log
+// them verbatim.
+function validateMetric(m: unknown): string | null {
+  if (!m || typeof m !== 'object') return 'not an object';
   const x = m as Partial<Metric>;
-  if (typeof x.host !== 'string' || x.host.length === 0 || x.host.length >= 64) return false;
+  if (typeof x.host !== 'string' || x.host.length === 0 || x.host.length >= 64) return 'invalid host';
   for (const k of METRIC_NUM_KEYS) {
     const v = x[k];
-    if (v !== undefined && v !== null && typeof v !== 'number') return false;
+    if (v !== undefined && v !== null && typeof v !== 'number') return `${k} not a number`;
   }
-  return true;
+  return null;
 }
 
 async function insertMetricsBatch(metrics: Metric[]): Promise<number> {
@@ -100,24 +108,31 @@ export function registerMetricsRoutes(app: Hono): void {
     } catch {
       return c.json({ error: 'invalid json' }, 400);
     }
-    let metrics: Metric[];
+    let metrics: unknown[];
     if (
       body &&
       typeof body === 'object' &&
       'metrics' in body &&
       Array.isArray((body as { metrics: unknown }).metrics)
     ) {
-      metrics = (body as { metrics: unknown[] }).metrics as Metric[];
+      metrics = (body as { metrics: unknown[] }).metrics;
     } else {
-      metrics = [body as Metric];
+      metrics = [body];
     }
-    if (metrics.length === 0) return c.json({ inserted: 0 });
+    if (metrics.length === 0) return c.json({ inserted: 0, rejected: [] });
     if (metrics.length > 500) return c.json({ error: 'batch too large (max 500)' }, 413);
-    const bad = metrics.findIndex((m) => !validateMetric(m));
-    if (bad >= 0) return c.json({ error: 'invalid metric', index: bad }, 400);
+
+    const good: Metric[] = [];
+    const rejected: Rejected[] = [];
+    metrics.forEach((m, i) => {
+      const reason = validateMetric(m);
+      if (reason) rejected.push({ index: i, reason });
+      else good.push(m as Metric);
+    });
+
     try {
-      const inserted = await insertMetricsBatch(metrics);
-      return c.json({ inserted });
+      const inserted = await insertMetricsBatch(good);
+      return c.json({ inserted, rejected });
     } catch (err) {
       console.error('metrics insert failed:', err);
       return c.json({ error: 'db write failed' }, 503);
