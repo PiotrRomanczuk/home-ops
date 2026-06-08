@@ -1,0 +1,16 @@
+[Unit]
+Description=home-ops planner-sync (Obsidian vault → projects table)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/env python3 %h/bin/planner-sync.py
+Restart=on-failure
+RestartSec=5
+EnvironmentFile=%h/.config/home-ops/planner-sync.env
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target
