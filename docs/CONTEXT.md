@@ -26,8 +26,12 @@ Postgres on `uwh`:
 2. **GPU job queue** (`gpu_jobs`) — Postgres-backed work queue for
    GPU-bound tasks. A scheduler on the Windows host claims jobs,
    pauses automatically when gaming is detected, resumes when idle
-   returns. First production workload: embedding Polish-language
-   Pracuj job offers with `bge-m3` for semantic search.
+   returns. First production workload: embedding **Stano**
+   content (Twitter / YouTube / weszlo) with `bge-m3` for the
+   Stano RAG retrieval pipeline. Stano currently embeds in-process
+   on its own backend; migrating to this queue is the planned next
+   step so embedding runs gaming-aware and decoupled from Stano's
+   request path. See `~/Obsidian/MainCV-Planner/projects/stano.md`.
 3. **Host metrics + attribution** (`host_metrics`) — periodic samples
    of CPU/mem/disk/network/GPU per host, with process-level
    attribution in `data` jsonb. The "what's eating my resources, and
@@ -45,7 +49,7 @@ to exist.
 | **uwh** (`piotr-hp-elitedesk`) | The server. Ingest API + Postgres + log-shipping agent + (eventually) pg-backup timer | HP EliteDesk, i7-6700K, 31 GB RAM, no dGPU | Yes |
 | **wfh** (`windows-pc`) | The GPU box. Ollama backend + Ollama-log watcher + GPU job scheduler | i7-6700K, 67 GB RAM, AMD Radeon RX 7700 XT (12 GB VRAM) | Yes |
 | **rpi** (`pi`) | Monitoring + low-power services. Kuma + Beszel today; (planned) log-shipping agent, Telegram notification bot | Pi 5, 8 GB RAM, 29 GB SD | Yes, lowest power |
-| **mac** | Workstation, dev environment, launchd-scheduled producers (e.g. Pracuj embedding queue producer) | M-series, varies | No (sleeps overnight) |
+| **mac** | Workstation, dev environment, launchd-scheduled producers (planned: scheduled queries / digest generators against home-ops Postgres) | M-series, varies | No (sleeps overnight) |
 
 Network: `192.168.1.0/24`, Tailscale tailnet
 `p.romanczuk@gmail.com` (`*.tail266853.ts.net`). Pi advertises NAS
@@ -238,11 +242,11 @@ scope, but the design must not foreclose them:
   `kind` + handler file; inherits gaming-pause, retries, priority.
 - **Recurring scheduled work via pg_cron**: not just retention. Friday
   morning generates a weekly review from the week's `host_logs`;
-  Sunday queues "pick top 5 unapplied Pracuj offers" generate jobs;
+  Sunday queues a batch summarise of new Stano content;
   Monday auto-cleans branches per `~/.claude/rules/branch-hygiene.md`.
-- **Personal embeddings**: `pracuj_offer_embeddings`-pattern but for
-  notes, ideas, lesson plans. Semantic search across "everything I've
-  thought about" becomes a SQL query.
+- **Personal embeddings**: same `stano_embeddings`-pattern (planned)
+  but for notes, ideas, lesson plans. Semantic search across
+  "everything I've thought about" becomes a SQL query.
 - **Infrastructure optimization analytics**: `host_metrics` + `host_logs`
   joins answer "is uwh underutilized? could it host more workloads?"
   or "what's the actual cost of running Ollama always-loaded?".

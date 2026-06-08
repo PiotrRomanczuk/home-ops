@@ -118,26 +118,32 @@ Concrete shape (all deferred — none are session work yet):
   `deploy_succeeded`, `application_submitted`, `lesson_recorded`) with
   source prefix `app:*`. The viewer becomes a single grep across "what was
   I doing on day X."
-- **Pracuj embeddings (first real workload for the queue)** — `bge-m3`
-  embeddings of offer text into `pracuj_offer_embeddings`, similarity
-  search via pgvector. Powers `/cover-letter batch N matching` quality.
-  See improvement plan's "Functional decisions" Q12-r2 through Q18-r2.
+- **Stano embeddings (first real workload for the queue)** — `bge-m3`
+  embeddings of Twitter/YouTube/weszlo content into a Stano-owned
+  embeddings table, similarity search via pgvector. Powers Stano's
+  hybrid retrieval RAG. Currently runs in-process inside Stano's own
+  backend; migration to home-ops `gpu_jobs` is the planned next step
+  so embedding work gets gaming-aware pausing and decouples from
+  Stano's request path. See `~/Obsidian/MainCV-Planner/projects/stano.md`
+  and improvement plan's "Functional decisions" Q12-r2 through Q18-r2
+  (note: the plan-file question labels say "Pracuj" — that was a
+  transcription error on my part; the actual workload is Stano).
 - **AI-assisted background tasks**: queue kinds like `summarise_emails`,
   `transcribe_voicenote`, `score_offer_against_cv`. Each is a new
   `kind` + handler file; inherits gaming-pause, retries, priority.
 - **Recurring obligations via pg_cron**: not just retention. Friday
   morning generates a weekly review from the week's `host_logs` events;
-  Sunday queues "pick top 5 unapplied Pracuj offers" generate jobs;
+  Sunday queues a batch summarise of new Stano content;
   Monday auto-cleans expired branches per `~/.claude/rules/branch-hygiene.md`.
-- **Personal embeddings**: same `pracuj_offer_embeddings`-style pattern
-  but for notes, ideas, lesson plans. Semantic search across "everything
-  I've thought about" becomes a SQL query.
+- **Personal embeddings**: same `stano_embeddings`-style pattern
+  (planned) but for notes, ideas, lesson plans. Semantic search across
+  "everything I've thought about" becomes a SQL query.
 
 Design implication for sessions 4-8: **don't paint into a corner that
 forecloses any of the above.** Specifically: keep the `data` jsonb
 schema-less (Q21 well-known keys, not column splits), keep embeddings
 in `home_ops` Postgres (Q13-r2 A, not a separate DB), keep `gpu_jobs`
-generic (any `kind` + payload, not Pracuj-specific). Those are already
+generic (any `kind` + payload, not workload-specific). Those are already
 the chosen paths — just don't drift.
 
 When implementation queue runs dry, the next sub-roadmap to draft would

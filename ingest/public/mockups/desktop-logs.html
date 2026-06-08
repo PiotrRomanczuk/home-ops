@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>home-ops | Logs</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+    :root {
+      --bg: #0e1116;
+      --bg-elevated: #161b22;
+      --bg-selected: #1f2937;
+      --bg-input: #010409;
+      --border: #30363d;
+      --border-focus: #58a6ff;
+      --fg: #d0d7de;
+      --fg-muted: #8b949e;
+      --accent: #58a6ff;
+      
+      --lvl-debug: #8b949e;
+      --lvl-info: #58a6ff;
+      --lvl-warn: #d29922;
+      --lvl-error: #f85149;
+      --lvl-fatal: #ff7b72;
+
+      --status-good: #3fb950;
+      --status-warn: #d29922;
+      --status-stale: #f85149;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: var(--bg);
+      color: var(--fg);
+      font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+      font-size: 13px;
+      line-height: 1.4;
+      font-variant-numeric: tabular-nums;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Top Navigation / Filter Bar */
+    .top-bar {
+      display: flex;
+      align-items: center;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border);
+      background-color: var(--bg);
+      gap: 16px;
+      flex-shrink: 0;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 12px;
+    }
+
+    .nav-links a {
+      color: var(--fg-muted);
+      text-decoration: none;
+      font-weight: 500;
+    }
+
+    .nav-links a.active {
+      color: var(--fg);
+      text-decoration: underline;
+      text-decoration-color: var(--accent);
+      text-underline-offset: 4px;
+    }
+
+    .filter-input-wrapper {
+      flex: 1;
+      position: relative;
+    }
+
+    .filter-input {
+      width: 100%;
+      background-color: var(--bg-input);
+      border: 1px solid var(--border);
+      color: var(--fg);
+      padding: 4px 8px;
+      font-family: inherit;
+      font-size: 13px;
+      outline: none;
+    }
+
+    .filter-input:focus {
+      border-color: var(--border-focus);
+    }
+
+    .filter-kbd {
+      position: absolute;
+      right: 6px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--fg-muted);
+      font-size: 10px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      padding: 0 4px;
+    }
+
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .toggle {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--fg-muted);
+      cursor: pointer;
+    }
+
+    .toggle.active {
+      color: var(--accent);
+    }
+
+    .toggle-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background-color: var(--accent);
+      box-shadow: 0 0 5px var(--accent);
+    }
+
+    /* Main Table Area */
+    .table-container {
+      flex: 1;
+      overflow-y: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+
+    th {
+      position: sticky;
+      top: 0;
+      background-color: var(--bg);
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+      padding: 4px 8px;
+      font-variant: small-caps;
+      letter-spacing: 0.05em;
+      font-size: 11px;
+      color: var(--fg-muted);
+      z-index: 10;
+    }
+
+    /* Column widths */
+    th.col-ts, td.col-ts { width: 90px; color: var(--fg-muted); }
+    th.col-host, td.col-host { width: 50px; }
+    th.col-source, td.col-source { width: 180px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--fg-muted); }
+    th.col-level, td.col-level { width: 60px; font-weight: 700; }
+    th.col-msg, td.col-msg { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    td {
+      padding: 2px 8px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+      cursor: pointer;
+    }
+
+    tr:hover td {
+      background-color: var(--bg-elevated);
+    }
+
+    /* Level Colors */
+    .lvl-debug { color: var(--lvl-debug); }
+    .lvl-info { color: var(--lvl-info); }
+    .lvl-warn { color: var(--lvl-warn); }
+    .lvl-error { color: var(--lvl-error); }
+    .lvl-fatal { color: var(--lvl-fatal); text-shadow: 0 0 4px rgba(255,123,114,0.4); }
+
+    tr.row-warn td:first-child { box-shadow: inset 3px 0 0 var(--lvl-warn); }
+    tr.row-error td:first-child { box-shadow: inset 3px 0 0 var(--lvl-error); }
+    tr.row-fatal td:first-child { box-shadow: inset 3px 0 0 var(--lvl-fatal); }
+
+    /* Expanded Detail View */
+    tr.expanded td {
+      background-color: var(--bg-selected);
+      border-bottom: none;
+    }
+    
+    tr.detail-row td {
+      background-color: var(--bg-selected);
+      padding: 0 8px 12px 8px;
+      border-bottom: 1px solid var(--border);
+      cursor: default;
+    }
+
+    .detail-container {
+      display: flex;
+      gap: 24px;
+      padding-left: 90px; /* Aligns with host column roughly */
+    }
+
+    .json-block {
+      margin: 0;
+      color: var(--fg-muted);
+    }
+    .json-key { color: var(--accent); }
+    .json-string { color: #a5d6ff; }
+    .json-number { color: #79c0ff; }
+
+    .correlation-chips {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      align-items: flex-start;
+      border-left: 1px solid var(--border);
+      padding-left: 16px;
+    }
+
+    .chip-label {
+      font-size: 11px;
+      color: var(--fg-muted);
+      font-variant: small-caps;
+      margin-bottom: -2px;
+    }
+
+    .chip {
+      background-color: var(--bg);
+      border: 1px solid var(--border);
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: var(--accent);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .chip:hover {
+      border-color: var(--accent);
+      background-color: rgba(88, 166, 255, 0.1);
+    }
+
+    /* Status Footer */
+    .status-footer {
+      display: flex;
+      align-items: center;
+      padding: 4px 12px;
+      background-color: var(--bg);
+      border-top: 1px solid var(--border);
+      font-size: 11px;
+      color: var(--fg-muted);
+      gap: 16px;
+      flex-shrink: 0;
+    }
+
+    .status-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .status-dot { width: 6px; height: 6px; border-radius: 50%; }
+    .dot-good { background-color: var(--status-good); }
+    .dot-warn { background-color: var(--status-warn); }
+    .dot-stale { background-color: var(--status-stale); }
+
+  </style>
+</head>
+<body>
+
+  <!-- Top Bar -->
+  <div class="top-bar">
+    <div class="nav-links">
+      <a href="#" class="active">Logs</a>
+      <a href="desktop-jobs.html">Jobs</a>
+    </div>
+    
+    <div class="filter-input-wrapper">
+      <input type="text" class="filter-input" value="level>=info -source:uptime-kuma" placeholder="e.g. host=uwh level>=warn pid=31254...">
+      <span class="filter-kbd">/</span>
+    </div>
+
+    <div class="controls">
+      <div class="toggle active">
+        <div class="toggle-dot"></div>
+        <span>Live Tail</span>
+        <span class="filter-kbd">p</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Table -->
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th class="col-ts">Time</th>
+          <th class="col-host">Host</th>
+          <th class="col-source">Source</th>
+          <th class="col-level">Level</th>
+          <th class="col-msg">Message</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="col-ts">21:08:41</td>
+          <td class="col-host">uwh</td>
+          <td class="col-source">docker:home-ops-ingest-1</td>
+          <td class="col-level lvl-info">INFO</td>
+          <td class="col-msg">--> GET /api/logs?level_min=info&since_min=60</td>
+        </tr>
+        <tr>
+          <td class="col-ts">21:08:39</td>
+          <td class="col-host">wfh</td>
+          <td class="col-source">agent:gpu-scheduler</td>
+          <td class="col-level lvl-info">INFO</td>
+          <td class="col-msg">gaming detected → workload paused</td>
+        </tr>
+        
+        <!-- Expanded Row -->
+        <tr class="expanded row-error">
+          <td class="col-ts">21:07:12</td>
+          <td class="col-host">uwh</td>
+          <td class="col-source">journald:cloudflared</td>
+          <td class="col-level lvl-error">ERROR</td>
+          <td class="col-msg">Connection terminated error="accept stream listener"</td>
+        </tr>
+        <tr class="detail-row row-error">
+          <td colspan="5">
+            <div class="detail-container">
+              <pre class="json-block">{
+  <span class="json-key">"pid"</span>: <span class="json-number">31254</span>,
+  <span class="json-key">"connection"</span>: <span class="json-string">"222a5e24-4f8a-49c9-9e8c-1a2b3c4d5e6f"</span>,
+  <span class="json-key">"duration_ms"</span>: <span class="json-number">45</span>
+}</pre>
+              <div class="correlation-chips">
+                <span class="chip-label">Correlate</span>
+                <div class="chip" title="Filter by this PID">
+                  <span>pid: 31254</span>
+                </div>
+                <div class="chip" title="Filter by this connection ID">
+                  <span>connection: 222a5e24...</span>
+                </div>
+              </div>
+            </div>
+          </td>
+        </tr>
+
+        <tr class="row-warn">
+          <td class="col-ts">21:05:33</td>
+          <td class="col-host">wfh</td>
+          <td class="col-source">app:ollama-server</td>
+          <td class="col-level lvl-warn">WARN</td>
+          <td class="col-msg">model load failed, retrying</td>
+        </tr>
+        <tr>
+          <td class="col-ts">21:04:11</td>
+          <td class="col-host">rpi</td>
+          <td class="col-source">docker:uptime-kuma</td>
+          <td class="col-level lvl-info">INFO</td>
+          <td class="col-msg">Heartbeat ping ok</td>
+        </tr>
+        <tr>
+          <td class="col-ts">21:03:55</td>
+          <td class="col-host">wfh</td>
+          <td class="col-source">agent:gpu-scheduler</td>
+          <td class="col-level lvl-info">INFO</td>
+          <td class="col-msg">job 47 done</td>
+        </tr>
+        
+        <!-- Filler rows to demonstrate density -->
+        <script>
+          // Generate 35 filler rows
+          for(let i=0; i<35; i++) {
+            let s = 54 - i;
+            let sec = s < 10 ? '0'+s : s;
+            document.write(`
+            <tr>
+              <td class="col-ts">21:02:${sec}</td>
+              <td class="col-host">uwh</td>
+              <td class="col-source">agent:system-metrics</td>
+              <td class="col-level lvl-debug">DEBUG</td>
+              <td class="col-msg">collected metrics from 12 subsystems</td>
+            </tr>
+            `);
+          }
+        </script>
+
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Status Footer -->
+  <div class="status-footer">
+    <div class="status-item"><div class="status-dot dot-good"></div> Ingest API OK</div>
+    <div>|</div>
+    <div class="status-item"><div class="status-dot dot-good"></div> uwh: 1s</div>
+    <div class="status-item"><div class="status-dot dot-good"></div> wfh: 3s</div>
+    <div class="status-item"><div class="status-dot dot-warn"></div> rpi: 45s</div>
+    <div style="flex:1"></div>
+    <div>pgdata: 42%</div>
+  </div>
+
+</body>
+</html>

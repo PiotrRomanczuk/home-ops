@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>home-ops | Logs Mobile</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+    :root {
+      --bg: #0e1116;
+      --bg-elevated: #161b22;
+      --bg-selected: #1f2937;
+      --bg-input: #010409;
+      --border: #30363d;
+      --border-focus: #58a6ff;
+      --fg: #d0d7de;
+      --fg-muted: #8b949e;
+      --accent: #58a6ff;
+      
+      --lvl-debug: #8b949e;
+      --lvl-info: #58a6ff;
+      --lvl-warn: #d29922;
+      --lvl-error: #f85149;
+      --lvl-fatal: #ff7b72;
+
+      --status-good: #3fb950;
+      --status-warn: #d29922;
+      --status-stale: #f85149;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: var(--bg);
+      color: var(--fg);
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 11px; /* Smaller for mobile density */
+      line-height: 1.4;
+      font-variant-numeric: tabular-nums;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      width: 390px; /* Force phone width for the mockup if opened on desktop */
+      border: 1px solid var(--border);
+      margin: 0 auto; /* Center on desktop for preview */
+    }
+
+    @media (max-width: 390px) {
+      body { width: 100%; border: none; margin: 0; }
+    }
+
+    /* Top Navigation / Filter Bar - Mobile Stacked */
+    .top-bar {
+      display: flex;
+      flex-direction: column;
+      padding: 8px;
+      border-bottom: 1px solid var(--border);
+      background-color: var(--bg);
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .nav-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 12px;
+    }
+
+    .nav-links a {
+      color: var(--fg-muted);
+      text-decoration: none;
+      font-weight: 500;
+      font-size: 13px;
+    }
+
+    .nav-links a.active {
+      color: var(--fg);
+      text-decoration: underline;
+      text-decoration-color: var(--accent);
+      text-underline-offset: 4px;
+    }
+
+    .toggle {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--accent);
+      cursor: pointer;
+    }
+
+    .toggle-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background-color: var(--accent);
+      box-shadow: 0 0 5px var(--accent);
+    }
+
+    .filter-input-wrapper {
+      width: 100%;
+    }
+
+    .filter-input {
+      width: 100%;
+      background-color: var(--bg-input);
+      border: 1px solid var(--border);
+      color: var(--fg);
+      padding: 6px 8px;
+      font-family: inherit;
+      font-size: 12px;
+      outline: none;
+      border-radius: 3px;
+    }
+
+    /* Main Table Area - Horizontal Scroll */
+    .table-container {
+      flex: 1;
+      overflow-x: auto;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    table {
+      width: max-content;
+      min-width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+
+    th {
+      position: sticky;
+      top: 0;
+      background-color: var(--bg);
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+      padding: 4px 8px;
+      font-variant: small-caps;
+      letter-spacing: 0.05em;
+      color: var(--fg-muted);
+      z-index: 10;
+    }
+
+    /* Time column is sticky to the left */
+    th.col-ts, td.col-ts {
+      width: 60px; /* e.g. "3m ago" */
+      color: var(--fg-muted);
+      position: sticky;
+      left: 0;
+      background-color: var(--bg);
+      z-index: 11;
+      border-right: 1px solid var(--border);
+    }
+    th.col-level, td.col-level { width: 50px; font-weight: 700; }
+    th.col-host, td.col-host { width: 40px; }
+    th.col-source, td.col-source { width: 140px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--fg-muted); }
+    th.col-msg, td.col-msg { width: 300px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    td {
+      padding: 4px 8px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+
+    tr:hover td {
+      background-color: var(--bg-elevated);
+    }
+    /* Sync background for sticky column on hover */
+    tr:hover td.col-ts { background-color: var(--bg-elevated); }
+
+    /* Level Colors */
+    .lvl-debug { color: var(--lvl-debug); }
+    .lvl-info { color: var(--lvl-info); }
+    .lvl-warn { color: var(--lvl-warn); }
+    .lvl-error { color: var(--lvl-error); }
+    .lvl-fatal { color: var(--lvl-fatal); }
+
+    /* Detail View Mobile */
+    tr.expanded td {
+      background-color: var(--bg-selected);
+      border-bottom: none;
+    }
+    tr.expanded td.col-ts { background-color: var(--bg-selected); }
+
+    tr.detail-row td {
+      background-color: var(--bg-selected);
+      padding: 0 8px 12px 8px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    /* Wrap pre tags on mobile to avoid double horizontal scrolling */
+    .json-block {
+      margin: 0;
+      color: var(--fg-muted);
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .json-key { color: var(--accent); }
+    .json-string { color: #a5d6ff; }
+
+    /* Status Footer Mobile */
+    .status-footer {
+      display: flex;
+      flex-wrap: wrap;
+      padding: 4px 8px;
+      background-color: var(--bg);
+      border-top: 1px solid var(--border);
+      color: var(--fg-muted);
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .status-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .status-dot { width: 6px; height: 6px; border-radius: 50%; }
+    .dot-good { background-color: var(--status-good); }
+    .dot-warn { background-color: var(--status-warn); }
+
+  </style>
+</head>
+<body>
+
+  <!-- Top Bar -->
+  <div class="top-bar">
+    <div class="nav-header">
+      <div class="nav-links">
+        <a href="#" class="active">Logs</a>
+        <a href="mobile-jobs.html">Jobs</a>
+      </div>
+      <div class="toggle">
+        <div class="toggle-dot"></div>
+        <span>Live Tail</span>
+      </div>
+    </div>
+    
+    <div class="filter-input-wrapper">
+      <input type="text" class="filter-input" value="level>=info -source:uptime-kuma" placeholder="e.g. host=uwh level>=warn">
+    </div>
+  </div>
+
+  <!-- Table -->
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th class="col-ts">Time</th>
+          <th class="col-level">Level</th>
+          <th class="col-host">Host</th>
+          <th class="col-source">Source</th>
+          <th class="col-msg">Message</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="col-ts">just now</td>
+          <td class="col-level lvl-info">INFO</td>
+          <td class="col-host">uwh</td>
+          <td class="col-source">docker:home-ops-ingest-1</td>
+          <td class="col-msg">--> GET /api/logs?level_min=info&since_min=60</td>
+        </tr>
+        <tr>
+          <td class="col-ts">2s ago</td>
+          <td class="col-level lvl-info">INFO</td>
+          <td class="col-host">wfh</td>
+          <td class="col-source">agent:gpu-scheduler</td>
+          <td class="col-msg">gaming detected → workload paused</td>
+        </tr>
+        
+        <!-- Expanded Row -->
+        <tr class="expanded">
+          <td class="col-ts">1m ago</td>
+          <td class="col-level lvl-error">ERROR</td>
+          <td class="col-host">uwh</td>
+          <td class="col-source">journald:cloudflared</td>
+          <td class="col-msg">Connection terminated error="accept stream listener"</td>
+        </tr>
+        <tr class="detail-row">
+          <td colspan="5">
+            <pre class="json-block">{
+  <span class="json-key">"pid"</span>: <span class="json-number">31254</span>,
+  <span class="json-key">"connection"</span>: <span class="json-string">"222a5e24-4f8a-49c9..."</span>
+}</pre>
+          </td>
+        </tr>
+
+        <tr>
+          <td class="col-ts">2m ago</td>
+          <td class="col-level lvl-warn">WARN</td>
+          <td class="col-host">wfh</td>
+          <td class="col-source">app:ollama-server</td>
+          <td class="col-msg">model load failed, retrying</td>
+        </tr>
+        <tr>
+          <td class="col-ts">3m ago</td>
+          <td class="col-level lvl-info">INFO</td>
+          <td class="col-host">rpi</td>
+          <td class="col-source">docker:uptime-kuma</td>
+          <td class="col-msg">Heartbeat ping ok</td>
+        </tr>
+
+        <!-- Filler rows -->
+        <script>
+          for(let i=4; i<30; i++) {
+            document.write(`
+            <tr>
+              <td class="col-ts">${i}m ago</td>
+              <td class="col-level lvl-debug">DEBUG</td>
+              <td class="col-host">uwh</td>
+              <td class="col-source">agent:system-metrics</td>
+              <td class="col-msg">collected metrics from 12 subsystems</td>
+            </tr>
+            `);
+          }
+        </script>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Status Footer -->
+  <div class="status-footer">
+    <div class="status-item"><div class="status-dot dot-good"></div> API OK</div>
+    <div class="status-item"><div class="status-dot dot-good"></div> uwh:1s</div>
+    <div class="status-item"><div class="status-dot dot-good"></div> wfh:3s</div>
+    <div class="status-item"><div class="status-dot dot-warn"></div> rpi:45s</div>
+  </div>
+
+</body>
+</html>

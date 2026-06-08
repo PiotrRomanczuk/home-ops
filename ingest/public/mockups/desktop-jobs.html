@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>home-ops | Jobs</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+    :root {
+      --bg: #0e1116;
+      --bg-elevated: #161b22;
+      --bg-selected: #1f2937;
+      --border: #30363d;
+      --fg: #d0d7de;
+      --fg-muted: #8b949e;
+      --accent: #58a6ff;
+      
+      --status-done: #3fb950;
+      --status-failed: #f85149;
+      --status-running: #58a6ff;
+      --status-queued: #8b949e;
+      --status-paused: #d29922;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: var(--bg);
+      color: var(--fg);
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 13px;
+      line-height: 1.4;
+      font-variant-numeric: tabular-nums;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Top Navigation */
+    .top-bar {
+      display: flex;
+      align-items: center;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border);
+      gap: 16px;
+      flex-shrink: 0;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 12px;
+    }
+
+    .nav-links a {
+      color: var(--fg-muted);
+      text-decoration: none;
+      font-weight: 500;
+    }
+
+    .nav-links a.active {
+      color: var(--fg);
+      text-decoration: underline;
+      text-decoration-color: var(--accent);
+      text-underline-offset: 4px;
+    }
+
+    .toolbar {
+      flex: 1;
+      display: flex;
+      gap: 12px;
+    }
+    
+    .stat-badge {
+      font-size: 11px;
+      color: var(--fg-muted);
+      background-color: var(--bg-elevated);
+      padding: 2px 8px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+    }
+    .stat-badge strong { color: var(--fg); font-weight: normal; }
+
+    /* Main Table Area */
+    .table-container {
+      flex: 1;
+      overflow-y: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+
+    th {
+      position: sticky;
+      top: 0;
+      background-color: var(--bg);
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+      padding: 4px 8px;
+      font-variant: small-caps;
+      letter-spacing: 0.05em;
+      font-size: 11px;
+      color: var(--fg-muted);
+      z-index: 10;
+    }
+
+    th.col-id, td.col-id { width: 50px; color: var(--fg-muted); }
+    th.col-kind, td.col-kind { width: 120px; }
+    th.col-status, td.col-status { width: 100px; font-weight: 700; }
+    th.col-pri, td.col-pri { width: 60px; text-align: right; }
+    th.col-worker, td.col-worker { width: 80px; }
+    th.col-created, td.col-created { width: 140px; color: var(--fg-muted); }
+    th.col-action, td.col-action { width: 80px; text-align: right; }
+
+    td {
+      padding: 4px 8px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+      cursor: pointer;
+    }
+
+    tr:hover td { background-color: var(--bg-elevated); }
+
+    .st-done { color: var(--status-done); }
+    .st-failed { color: var(--status-failed); }
+    .st-running { color: var(--status-running); }
+    .st-queued { color: var(--status-queued); }
+    .st-paused { color: var(--status-paused); }
+
+    .action-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--fg-muted);
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 11px;
+      border-radius: 3px;
+      padding: 2px 6px;
+    }
+    .action-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    /* Expanded Detail View */
+    tr.expanded td {
+      background-color: var(--bg-selected);
+      border-bottom: none;
+    }
+    tr.detail-row td {
+      background-color: var(--bg-selected);
+      padding: 0 8px 12px 8px;
+      border-bottom: 1px solid var(--border);
+      cursor: default;
+    }
+
+    .detail-container {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding-left: 50px;
+    }
+    
+    .detail-section-title {
+      font-variant: small-caps;
+      font-size: 11px;
+      color: var(--fg-muted);
+      margin-bottom: -8px;
+    }
+
+    .error-block {
+      background-color: rgba(248, 81, 73, 0.1);
+      border-left: 3px solid var(--status-failed);
+      padding: 8px;
+      margin: 0;
+      color: #ff7b72;
+    }
+
+    .json-block {
+      margin: 0;
+      color: var(--fg-muted);
+      background-color: var(--bg);
+      padding: 8px;
+      border: 1px solid var(--border);
+    }
+    .json-key { color: var(--accent); }
+    .json-string { color: #a5d6ff; }
+  </style>
+</head>
+<body>
+
+  <div class="top-bar">
+    <div class="nav-links">
+      <a href="desktop-logs.html">Logs</a>
+      <a href="#" class="active">Jobs</a>
+    </div>
+    
+    <div class="toolbar">
+      <div class="stat-badge">Queued: <strong>2</strong></div>
+      <div class="stat-badge">Running: <strong>1</strong></div>
+      <div class="stat-badge">Paused: <strong>1</strong></div>
+      <div class="stat-badge">Failed (24h): <strong style="color:var(--status-failed)">1</strong></div>
+    </div>
+  </div>
+
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th class="col-id">ID</th>
+          <th class="col-kind">Kind</th>
+          <th class="col-status">Status</th>
+          <th class="col-pri">Pri</th>
+          <th class="col-worker">Worker</th>
+          <th class="col-created">Created At</th>
+          <th class="col-action"></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="col-id">49</td>
+          <td class="col-kind">embed</td>
+          <td class="col-status st-queued">queued</td>
+          <td class="col-pri">0</td>
+          <td class="col-worker">-</td>
+          <td class="col-created">2026-06-07 21:09:12</td>
+          <td class="col-action"><button class="action-btn">Cancel</button></td>
+        </tr>
+        <tr>
+          <td class="col-id">48</td>
+          <td class="col-kind">embed</td>
+          <td class="col-status st-running">running</td>
+          <td class="col-pri">0</td>
+          <td class="col-worker">wfh</td>
+          <td class="col-created">2026-06-07 21:08:41</td>
+          <td class="col-action"><button class="action-btn">Cancel</button></td>
+        </tr>
+        <tr>
+          <td class="col-id">47</td>
+          <td class="col-kind">summarise</td>
+          <td class="col-status st-paused">paused</td>
+          <td class="col-pri">5</td>
+          <td class="col-worker">wfh</td>
+          <td class="col-created">2026-06-07 20:30:00</td>
+          <td class="col-action"><button class="action-btn">Cancel</button></td>
+        </tr>
+
+        <!-- Expanded Failed Job -->
+        <tr class="expanded">
+          <td class="col-id">46</td>
+          <td class="col-kind">generate</td>
+          <td class="col-status st-failed">failed</td>
+          <td class="col-pri">10</td>
+          <td class="col-worker">wfh</td>
+          <td class="col-created">2026-06-07 19:12:05</td>
+          <td class="col-action"><button class="action-btn">Requeue</button></td>
+        </tr>
+        <tr class="detail-row">
+          <td colspan="7">
+            <div class="detail-container">
+              <div class="detail-section-title">Last Error</div>
+              <pre class="error-block">OllamaError: model "llama3:70b" not found, attempt failed after 3000ms.</pre>
+              
+              <div class="detail-section-title">Payload</div>
+              <pre class="json-block">{
+  <span class="json-key">"prompt"</span>: <span class="json-string">"Summarize the latest trends in observability."</span>,
+  <span class="json-key">"model"</span>: <span class="json-string">"llama3:70b"</span>,
+  <span class="json-key">"stream"</span>: <span class="json-string">"false"</span>
+}</pre>
+            </div>
+          </td>
+        </tr>
+
+        <tr>
+          <td class="col-id">45</td>
+          <td class="col-kind">embed</td>
+          <td class="col-status st-done">done</td>
+          <td class="col-pri">0</td>
+          <td class="col-worker">wfh</td>
+          <td class="col-created">2026-06-07 18:00:00</td>
+          <td class="col-action"></td>
+        </tr>
+        <tr>
+          <td class="col-id">44</td>
+          <td class="col-kind">embed</td>
+          <td class="col-status st-done">done</td>
+          <td class="col-pri">0</td>
+          <td class="col-worker">wfh</td>
+          <td class="col-created">2026-06-07 17:55:12</td>
+          <td class="col-action"></td>
+        </tr>
+
+      </tbody>
+    </table>
+  </div>
+</body>
+</html>

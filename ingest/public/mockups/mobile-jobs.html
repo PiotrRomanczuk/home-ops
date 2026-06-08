@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>home-ops | Jobs Mobile</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+    :root {
+      --bg: #0e1116;
+      --bg-elevated: #161b22;
+      --bg-selected: #1f2937;
+      --border: #30363d;
+      --fg: #d0d7de;
+      --fg-muted: #8b949e;
+      --accent: #58a6ff;
+      
+      --status-done: #3fb950;
+      --status-failed: #f85149;
+      --status-running: #58a6ff;
+      --status-queued: #8b949e;
+      --status-paused: #d29922;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: var(--bg);
+      color: var(--fg);
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 11px;
+      line-height: 1.4;
+      font-variant-numeric: tabular-nums;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      width: 390px;
+      border: 1px solid var(--border);
+      margin: 0 auto;
+    }
+
+    @media (max-width: 390px) {
+      body { width: 100%; border: none; margin: 0; }
+    }
+
+    /* Top Navigation */
+    .top-bar {
+      display: flex;
+      flex-direction: column;
+      padding: 8px;
+      border-bottom: 1px solid var(--border);
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .nav-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 12px;
+    }
+
+    .nav-links a {
+      color: var(--fg-muted);
+      text-decoration: none;
+      font-weight: 500;
+      font-size: 13px;
+    }
+
+    .nav-links a.active {
+      color: var(--fg);
+      text-decoration: underline;
+      text-decoration-color: var(--accent);
+      text-underline-offset: 4px;
+    }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    
+    .stat-badge {
+      font-size: 10px;
+      color: var(--fg-muted);
+      background-color: var(--bg-elevated);
+      padding: 2px 6px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+    }
+    .stat-badge strong { color: var(--fg); font-weight: normal; }
+
+    /* Main Table Area */
+    .table-container {
+      flex: 1;
+      overflow-x: auto;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    table {
+      width: max-content;
+      min-width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+
+    th {
+      position: sticky;
+      top: 0;
+      background-color: var(--bg);
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+      padding: 4px 8px;
+      font-variant: small-caps;
+      letter-spacing: 0.05em;
+      color: var(--fg-muted);
+      z-index: 10;
+    }
+
+    th.col-id, td.col-id { width: 30px; color: var(--fg-muted); position: sticky; left: 0; background-color: var(--bg); z-index: 11; border-right: 1px solid var(--border); }
+    th.col-status, td.col-status { width: 70px; font-weight: 700; }
+    th.col-kind, td.col-kind { width: 90px; }
+    th.col-created, td.col-created { width: 100px; color: var(--fg-muted); }
+    th.col-action, td.col-action { width: 60px; text-align: right; }
+
+    td {
+      padding: 4px 8px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+
+    tr:hover td { background-color: var(--bg-elevated); }
+    tr:hover td.col-id { background-color: var(--bg-elevated); }
+
+    .st-done { color: var(--status-done); }
+    .st-failed { color: var(--status-failed); }
+    .st-running { color: var(--status-running); }
+    .st-queued { color: var(--status-queued); }
+    .st-paused { color: var(--status-paused); }
+
+    .action-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--fg-muted);
+      font-family: inherit;
+      font-size: 10px;
+      border-radius: 3px;
+      padding: 2px 4px;
+    }
+
+    /* Expanded Detail View */
+    tr.expanded td { background-color: var(--bg-selected); border-bottom: none; }
+    tr.expanded td.col-id { background-color: var(--bg-selected); }
+    tr.detail-row td {
+      background-color: var(--bg-selected);
+      padding: 0 8px 12px 8px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .detail-section-title {
+      font-variant: small-caps;
+      font-size: 10px;
+      color: var(--fg-muted);
+      margin: 8px 0 2px 0;
+    }
+
+    .error-block {
+      background-color: rgba(248, 81, 73, 0.1);
+      border-left: 3px solid var(--status-failed);
+      padding: 6px;
+      margin: 0;
+      color: #ff7b72;
+      white-space: pre-wrap;
+    }
+
+    .json-block {
+      margin: 0;
+      color: var(--fg-muted);
+      background-color: var(--bg);
+      padding: 6px;
+      border: 1px solid var(--border);
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="top-bar">
+    <div class="nav-header">
+      <div class="nav-links">
+        <a href="mobile-logs.html">Logs</a>
+        <a href="#" class="active">Jobs</a>
+      </div>
+    </div>
+    
+    <div class="toolbar">
+      <div class="stat-badge">Q: <strong>2</strong></div>
+      <div class="stat-badge">R: <strong>1</strong></div>
+      <div class="stat-badge">P: <strong>1</strong></div>
+      <div class="stat-badge">Fail: <strong style="color:var(--status-failed)">1</strong></div>
+    </div>
+  </div>
+
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th class="col-id">ID</th>
+          <th class="col-status">Status</th>
+          <th class="col-kind">Kind</th>
+          <th class="col-created">Created</th>
+          <th class="col-action"></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="col-id">49</td>
+          <td class="col-status st-queued">queued</td>
+          <td class="col-kind">embed</td>
+          <td class="col-created">21:09:12</td>
+          <td class="col-action"><button class="action-btn">Cncl</button></td>
+        </tr>
+        <tr>
+          <td class="col-id">48</td>
+          <td class="col-status st-running">running</td>
+          <td class="col-kind">embed</td>
+          <td class="col-created">21:08:41</td>
+          <td class="col-action"><button class="action-btn">Cncl</button></td>
+        </tr>
+
+        <!-- Expanded Failed Job -->
+        <tr class="expanded">
+          <td class="col-id">46</td>
+          <td class="col-status st-failed">failed</td>
+          <td class="col-kind">generate</td>
+          <td class="col-created">19:12:05</td>
+          <td class="col-action"><button class="action-btn">Retry</button></td>
+        </tr>
+        <tr class="detail-row">
+          <td colspan="5">
+            <div class="detail-section-title">Error</div>
+            <pre class="error-block">OllamaError: model "llama3:70b" not found</pre>
+            
+            <div class="detail-section-title">Payload</div>
+            <pre class="json-block">{
+  "prompt": "Summarize trends...",
+  "model": "llama3:70b"
+}</pre>
+          </td>
+        </tr>
+
+        <tr>
+          <td class="col-id">45</td>
+          <td class="col-status st-done">done</td>
+          <td class="col-kind">embed</td>
+          <td class="col-created">18:00:00</td>
+          <td class="col-action"></td>
+        </tr>
+
+      </tbody>
+    </table>
+  </div>
+</body>
+</html>
