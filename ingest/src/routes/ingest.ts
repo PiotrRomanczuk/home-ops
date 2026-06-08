@@ -12,21 +12,22 @@ interface Event {
   ts?: string;
 }
 
-function validate(e: unknown): e is Event {
-  if (!e || typeof e !== 'object') return false;
+interface Rejected {
+  index: number;
+  reason: string;
+}
+
+// Returns null on success, otherwise a short reason that goes back to the
+// client in the rejected[] array. Keep reasons short and stable — agents log
+// them verbatim.
+function validate(e: unknown): string | null {
+  if (!e || typeof e !== 'object') return 'not an object';
   const x = e as Partial<Event>;
-  return (
-    typeof x.host === 'string' &&
-    x.host.length > 0 &&
-    x.host.length < 64 &&
-    typeof x.source === 'string' &&
-    x.source.length > 0 &&
-    x.source.length < 128 &&
-    typeof x.level === 'string' &&
-    (LEVELS as string[]).includes(x.level) &&
-    typeof x.message === 'string' &&
-    x.message.length > 0
-  );
+  if (typeof x.host !== 'string' || x.host.length === 0 || x.host.length >= 64) return 'invalid host';
+  if (typeof x.source !== 'string' || x.source.length === 0 || x.source.length >= 128) return 'invalid source';
+  if (typeof x.level !== 'string' || !(LEVELS as string[]).includes(x.level)) return 'invalid level';
+  if (typeof x.message !== 'string' || x.message.length === 0) return 'invalid message';
+  return null;
 }
 
 async function insertBatch(events: Event[]): Promise<number> {
@@ -56,19 +57,26 @@ export function registerIngestRoutes(app: Hono): void {
     } catch {
       return c.json({ error: 'invalid json' }, 400);
     }
-    let events: Event[];
+    let events: unknown[];
     if (body && typeof body === 'object' && 'events' in body && Array.isArray((body as { events: unknown }).events)) {
-      events = (body as { events: unknown[] }).events as Event[];
+      events = (body as { events: unknown[] }).events;
     } else {
-      events = [body as Event];
+      events = [body];
     }
-    if (events.length === 0) return c.json({ inserted: 0 });
+    if (events.length === 0) return c.json({ inserted: 0, rejected: [] });
     if (events.length > 500) return c.json({ error: 'batch too large (max 500)' }, 413);
-    const bad = events.findIndex((e) => !validate(e));
-    if (bad >= 0) return c.json({ error: 'invalid event', index: bad }, 400);
+
+    const good: Event[] = [];
+    const rejected: Rejected[] = [];
+    events.forEach((e, i) => {
+      const reason = validate(e);
+      if (reason) rejected.push({ index: i, reason });
+      else good.push(e as Event);
+    });
+
     try {
-      const inserted = await insertBatch(events);
-      return c.json({ inserted });
+      const inserted = await insertBatch(good);
+      return c.json({ inserted, rejected });
     } catch (err) {
       console.error('insert failed:', err);
       return c.json({ error: 'db write failed' }, 503);
