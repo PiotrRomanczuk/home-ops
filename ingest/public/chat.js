@@ -164,11 +164,18 @@ function composer(c) {
   return h('div', { class: 'composer' }, box);
 }
 
+function liveModelsLoaded() {
+  const live = window.Hosts?.modelsLoadedOnGpu?.() || [];
+  return live.length ? live : DB.MODELS_LOADED;
+}
+
 function pickerModel() {
-  const cur = DB.MODELS_LOADED.find(m => m.name === DRAFT.model) || { name: DRAFT.model, vram: 0 };
+  const loaded = liveModelsLoaded();
+  const cur = loaded.find(m => m.name === DRAFT.model) || { name: DRAFT.model, vram: 0 };
   const pct = Math.min(100, (cur.vram / 8) * 100);
+  const isResident = loaded.some(m => m.name === DRAFT.model);
   const btn = h('button', { class: 'picker-btn' },
-    h('span', { class: 'resident', style: { width: '6px', height: '6px', borderRadius: '50%', background: DB.MODELS_LOADED.some(m => m.name === DRAFT.model) ? 'var(--good)' : 'var(--fg-faint)' } }),
+    h('span', { class: 'resident', style: { width: '6px', height: '6px', borderRadius: '50%', background: isResident ? 'var(--good)' : 'var(--fg-faint)' } }),
     DRAFT.model,
     h('span', { class: 'vbar' }, h('i', { style: { width: pct + '%' } })),
     h('span', { class: 'caret' }, '▲'),
@@ -176,12 +183,16 @@ function pickerModel() {
   const wrap = h('div', { class: 'picker' }, btn);
   btn.onclick = () => {
     if ($('.menu', wrap)) { $('.menu', wrap).remove(); return; }
+    // Kick a hosts refresh so the menu reflects what's *currently* in VRAM,
+    // not a stale 30s-old snapshot. The poller updates on its own cadence.
+    if (window.Hosts && !Hosts.loading) Hosts.loadAll();
+    const totalVram = loaded.reduce((a, x) => a + x.vram, 0).toFixed(1);
     const m = h('div', { class: 'menu' },
-      h('div', { class: 'menu-sec' }, 'resident in vram', h('span', {}, DB.MODELS_LOADED.reduce((a, x) => a + x.vram, 0).toFixed(1) + 'GB')),
-      ...DB.MODELS_LOADED.map(mm => h('button', { class: 'menu-item' + (mm.name === DRAFT.model ? ' on' : ''), onclick: () => { DRAFT.model = mm.name; render(); } },
+      h('div', { class: 'menu-sec' }, 'resident in vram', h('span', {}, totalVram + 'GB')),
+      ...loaded.map(mm => h('button', { class: 'menu-item' + (mm.name === DRAFT.model ? ' on' : ''), onclick: () => { DRAFT.model = mm.name; render(); } },
         h('span', { class: 'resident' }), mm.name, h('span', { class: 'ld' }, h('span', { class: 'vbar' }, h('i', { style: { width: (mm.vram / 8 * 100) + '%' } })), mm.vram + 'GB'))),
       h('div', { class: 'menu-sec' }, 'load other…'),
-      ...DB.MODEL_LIBRARY.filter(n => !DB.MODELS_LOADED.some(r => r.name === n)).map(n =>
+      ...DB.MODEL_LIBRARY.filter(n => !loaded.some(r => r.name === n)).map(n =>
         h('button', { class: 'menu-item', onclick: () => { DRAFT.model = n; render(); } }, h('span', { class: 'ghost' }), n, h('span', { class: 'ld' }, 'load'))),
     );
     wrap.append(m);
