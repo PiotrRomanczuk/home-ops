@@ -1,0 +1,71 @@
+/* ============================================================
+   hosts.css — 3 host cards. "is anything on fire?"
+   ============================================================ */
+.hosts-view { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.hosts-scroll { flex: 1; overflow-y: auto; min-height: 0; padding: 12px 16px 24px; }
+.host-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+
+.hcard { border: 1px solid var(--border); border-radius: var(--r); background: var(--bg-elevated); overflow: hidden; display: flex; flex-direction: column; }
+.hcard.focus { border-color: var(--accent-line); box-shadow: 0 0 0 1px var(--accent-line); }
+.hcard-hd { display: flex; align-items: center; gap: 9px; padding: 10px 12px; border-bottom: 1px solid var(--border-soft); }
+.hcard-hd .hn { color: var(--fg-bright); font-weight: 700; font-size: 14px; }
+.hcard-hd .role { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; padding: 1px 7px; border-radius: 9px; border: 1px solid var(--border); color: var(--fg-muted); }
+.hcard-hd .role.gpu { color: var(--s-paused); border-color: rgba(163,113,247,0.4); }
+.hcard-hd .role.server { color: var(--accent); border-color: var(--accent-line); }
+.hcard-hd .role.monitoring { color: var(--good); border-color: rgba(63,185,80,0.4); }
+.hcard-hd .grow { flex: 1; }
+.hcard-hd .lagchip { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--fg-muted); white-space: nowrap; }
+.hcard-hd .lagchip .hd { width: 7px; height: 7px; border-radius: 50%; }
+.hcard-up { padding: 6px 12px; font-size: 11px; color: var(--fg-muted); border-bottom: 1px solid var(--border-soft); display: flex; gap: 14px; }
+.hcard-up b { color: var(--fg); font-weight: 600; }
+
+/* metric sparklines */
+.metrics { display: grid; grid-template-columns: 1fr; }
+.metric { display: grid; grid-template-columns: 44px 1fr 52px; align-items: center; gap: 10px; padding: 7px 12px; border-bottom: 1px solid var(--border-soft); }
+.metric .ml { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--fg-faint); }
+.metric .mv { text-align: right; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.metric .mv .u { font-size: 10px; color: var(--fg-faint); font-weight: 400; }
+.metric.null { opacity: 0.4; }
+.metric.null .mv { color: var(--fg-faint); }
+.metric.hot .mv { color: var(--lv-warn); }
+.spark { display: block; width: 100%; height: 26px; }
+.metric .sparkwrap { height: 26px; }
+
+/* gpu chips */
+.gpu-strip { padding: 9px 12px; border-bottom: 1px solid var(--border-soft); }
+.gpu-strip .lbl { margin-bottom: 6px; display: block; }
+.gpu-chips { display: flex; flex-direction: column; gap: 5px; }
+.gpu-chip { display: flex; align-items: center; gap: 8px; font-size: 11.5px; }
+.gpu-chip .gn { color: var(--accent); min-width: 104px; flex: none; white-space: nowrap; }
+.gpu-chip .vbar { flex: 1; height: 5px; border-radius: 3px; background: var(--bg-inset); overflow: hidden; }
+.gpu-chip .vbar i { display: block; height: 100%; background: var(--s-paused); }
+.gpu-chip .gv { color: var(--fg-muted); font-variant-numeric: tabular-nums; min-width: 42px; text-align: right; }
+
+/* top processes */
+.procs { padding: 9px 12px; border-bottom: 1px solid var(--border-soft); }
+.procs .lbl { margin-bottom: 6px; display: flex; justify-content: space-between; }
+.proc { display: grid; grid-template-columns: 1fr 54px 56px; align-items: center; gap: 8px; padding: 3px 0; font-size: 11.5px; border-bottom: 1px solid var(--border-soft); }
+.proc:last-child { border-bottom: none; }
+.proc .pn { color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.proc .pcpu { text-align: right; font-variant-numeric: tabular-nums; }
+.proc .pcpu.high { color: var(--lv-warn); font-weight: 600; }
+.proc .ppid { text-align: right; color: var(--accent); cursor: pointer; font-variant-numeric: tabular-nums; }
+.proc .ppid:hover { text-decoration: underline; }
+
+/* recent warn+ for host */
+.hwarn { padding: 9px 12px; }
+.hwarn .lbl { margin-bottom: 6px; display: block; }
+.hwarn-row { display: grid; grid-template-columns: 40px 46px 1fr; gap: 8px; padding: 2px 0; font-size: 11px; align-items: baseline; }
+.hwarn-row .t { color: var(--fg-faint); font-variant-numeric: tabular-nums; }
+.hwarn-row .m { color: var(--fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hwarn-empty { font-size: 11px; color: var(--good); }
+
+/* range toggle */
+.range-toggle { display: inline-flex; border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; }
+.range-toggle button { padding: 3px 9px; font-size: 11px; color: var(--fg-muted); border-right: 1px solid var(--border); }
+.range-toggle button:last-child { border-right: none; }
+.range-toggle button.on { background: var(--accent-dim); color: var(--accent); }
+
+@media (max-width: 720px) {
+  .host-grid { grid-template-columns: 1fr; }
+}
