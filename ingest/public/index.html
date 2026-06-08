@@ -3,52 +3,21 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>home-ops · logs</title>
-<link rel="stylesheet" href="/static/style.css">
+<title>home-ops — console</title>
+<link rel="stylesheet" href="/static/styles.css">
+<link rel="stylesheet" href="/static/chat.css">
+<link rel="stylesheet" href="/static/projects.css">
+<link rel="stylesheet" href="/static/logs.css">
+<link rel="stylesheet" href="/static/hosts.css">
 </head>
 <body>
-  <header class="bar">
-    <strong>home-ops</strong>
-    <div class="filters">
-      <select id="host" title="host"><option value="">all hosts</option></select>
-      <select id="source" title="source"><option value="">all sources</option></select>
-      <select id="level_min" title="min level">
-        <option value="debug">debug+</option>
-        <option value="info" selected>info+</option>
-        <option value="warn">warn+</option>
-        <option value="error">error+</option>
-        <option value="fatal">fatal</option>
-      </select>
-      <select id="since_min" title="window">
-        <option value="5">5m</option>
-        <option value="15">15m</option>
-        <option value="60" selected>1h</option>
-        <option value="1440">24h</option>
-        <option value="10080">7d</option>
-      </select>
-      <input id="grep" type="search" placeholder="grep…" autocomplete="off">
-      <label class="tail"><input id="tail" type="checkbox" checked> tail</label>
-      <button id="refresh" title="refresh">↻</button>
-      <span id="status" class="status"></span>
-      <button id="logout" title="log out">×</button>
-    </div>
-  </header>
+<div id="app"></div>
 
-  <main>
-    <table id="t">
-      <thead>
-        <tr>
-          <th class="c-ts">ts</th>
-          <th class="c-host">host</th>
-          <th class="c-source">source</th>
-          <th class="c-level">lvl</th>
-          <th class="c-msg">message</th>
-        </tr>
-      </thead>
-      <tbody id="rows"></tbody>
-    </table>
-  </main>
-
+<script src="/static/data.js"></script>
 <script src="/static/app.js"></script>
+<script src="/static/chat.js"></script>
+<script src="/static/projects.js"></script>
+<script src="/static/logs.js"></script>
+<script src="/static/hosts.js"></script>
 </body>
 </html>
