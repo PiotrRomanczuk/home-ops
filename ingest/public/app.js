@@ -127,7 +127,7 @@ function icoHosts() { return icon('<rect x="2.5" y="3" width="11" height="3.2"/>
 function renderChrome() {
   const st = getState();
   const counts = {
-    chat: DB.CONVERSATIONS.filter(c => c.status === 'running' || c.status === 'queued' || c.status === 'paused').length,
+    chat: (window.Chat?.conversations || DB.CONVERSATIONS).filter(c => c.status === 'running' || c.status === 'queued' || c.status === 'paused').length,
     projects: DB.PROJECTS.filter(p => p.status === 'hot').length,
     logs: DB.LOGS.filter(l => LV_ORDER[l.level] >= 4).length,
     hosts: DB.HOSTS.filter(x => x.hd !== 'good').length,
