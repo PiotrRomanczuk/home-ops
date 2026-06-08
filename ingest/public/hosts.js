@@ -17,10 +17,19 @@ function metricRow(label, val, unit, series, color, hot) {
 }
 
 function hostCard(host, st) {
-  const m = DB.METRICS[host.id];
+  const m = (window.Hosts?.byHost(host.id)) || DB.METRICS[host.id];
   const range = st.range || '1h';
   const focused = st.focus === host.id;
-  const warns = DB.LOGS.filter(l => l.host === host.id && LV_ORDER[l.level] >= 3).slice(0, 6);
+  const warns = (window.Logs?.rows || DB.LOGS)
+    .filter(l => l.host === host.id && LV_ORDER[l.level] >= 3)
+    .slice(0, 6);
+  if (!m) {
+    return h('div', { class: 'hcard' },
+      h('div', { class: 'hcard-hd' },
+        h('span', { class: 'hn' }, host.id),
+        h('span', { class: 'role ' + host.role }, host.role)),
+      h('div', { class: 'empty', style: { padding: '24px' } }, 'no metrics yet — check that the watcher on ' + host.id + ' is up'));
+  }
 
   const card = h('div', { class: 'hcard' + (focused ? ' focus' : ''), id: 'host-' + host.id });
   card.append(h('div', { class: 'hcard-hd' },
@@ -76,16 +85,23 @@ function hostCard(host, st) {
 
 VIEWS.hosts = function (st, main) {
   const range = st.range || '1h';
+  const rangeMin = { '1h': 60, '6h': 360, '24h': 1440 }[range] || 60;
+  if (window.Hosts) {
+    if (!Hosts.loaded || Hosts.rangeMin !== rangeMin) Hosts.loadAll(rangeMin);
+    Hosts.startRefresh();
+  }
+  const hosts = (window.Hosts?.hostsList()?.length ? Hosts.hostsList() : DB.HOSTS);
   const wrap = h('div', { class: 'hosts-view' });
   wrap.append(h('div', { class: 'sec-bar' },
-    h('span', { class: 'lbl' }, 'hosts ', h('span', { class: 'faint num', style: { fontWeight: 400 } }, DB.HOSTS.length)),
-    h('span', { class: 'faint', style: { fontSize: '11px' } }, '· sampled every 30s'),
+    h('span', { class: 'lbl' }, 'hosts ', h('span', { class: 'faint num', style: { fontWeight: 400 } }, hosts.length)),
+    h('span', { class: 'faint', style: { fontSize: '11px' } },
+      Hosts?.loading ? '· loading…' : Hosts?.err ? '· ✕ ' + Hosts.err : '· sampled every 30s'),
     h('span', { class: 'grow' }),
     h('div', { class: 'range-toggle' },
       ...['1h', '6h', '24h'].map(r => h('button', { class: range === r ? 'on' : '', onclick: () => setState({ range: r === '1h' ? null : r }) }, r))),
   ));
   const scroll = h('div', { class: 'hosts-scroll' });
-  scroll.append(h('div', { class: 'host-grid' }, ...DB.HOSTS.map(host => hostCard(host, st))));
+  scroll.append(h('div', { class: 'host-grid' }, ...hosts.map(host => hostCard(host, st))));
   wrap.append(scroll);
   main.append(wrap);
 };
