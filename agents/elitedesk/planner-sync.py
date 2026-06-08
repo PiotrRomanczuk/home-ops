@@ -19,58 +19,32 @@ Env:
 """
 from __future__ import annotations
 
-import json
 import os
 import re
 import subprocess
 import sys
 import time
-import urllib.error
-import urllib.request
 from pathlib import Path
 from typing import Any
 
-INGEST_URL = (os.environ.get('INGEST_URL') or '').rstrip('/')
-INGEST_TOKEN = os.environ.get('INGEST_TOKEN', '')
+_here = Path(__file__).resolve().parent
+sys.path.insert(0, str(_here))
+sys.path.insert(0, str(_here.parent))
+from _common import IngestClient  # noqa: E402
+
 HOST_NAME = os.environ.get('HOST_NAME', 'elitedesk')
 PLANNER_REMOTE = os.environ.get('PLANNER_REMOTE', '')
 PLANNER_DIR = Path(os.environ.get('PLANNER_DIR') or (Path.home() / 'planner-mirror'))
 SYNC_INTERVAL = float(os.environ.get('SYNC_INTERVAL', '60'))
 
-if not INGEST_URL or not INGEST_TOKEN:
-    print('INGEST_URL and INGEST_TOKEN required', file=sys.stderr)
-    sys.exit(1)
+ic = IngestClient.from_env(host=HOST_NAME, source='agent:planner-sync', timeout=10)
 
-INGEST_BASE = INGEST_URL.replace('/api/ingest', '').rstrip('/')
+INGEST_BASE = ic.events_url.replace('/api/ingest', '').rstrip('/')
 SYNC_URL = INGEST_BASE + '/api/projects/sync'
-LOG_URL = INGEST_BASE + '/api/ingest'
-
-
-# ── HTTP ──────────────────────────────────────────────────────────────
-
-def _post(url: str, body: dict[str, Any], timeout: float = 10) -> tuple[int, dict[str, Any] | None]:
-    req = urllib.request.Request(
-        url, data=json.dumps(body).encode(), method='POST',
-        headers={'X-Ingest-Token': INGEST_TOKEN, 'Content-Type': 'application/json'},
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:
-            raw = r.read()
-            return r.status, json.loads(raw) if raw else None
-    except urllib.error.HTTPError as e:
-        try:
-            return e.code, json.loads(e.read())
-        except (json.JSONDecodeError, ValueError):
-            return e.code, None
-    except (urllib.error.URLError, TimeoutError):
-        return 0, None
 
 
 def post_log(level: str, message: str, data: dict[str, Any] | None = None) -> None:
-    body = {'host': HOST_NAME, 'source': 'agent:planner-sync', 'level': level, 'message': message}
-    if data:
-        body['data'] = data
-    _post(LOG_URL, body, timeout=5)
+    ic.post_log(level, message, data)
 
 
 # ── git ───────────────────────────────────────────────────────────────
@@ -224,7 +198,7 @@ def sync_once() -> None:
             continue
         records.append(rec)
 
-    status, body = _post(SYNC_URL, {'projects': records}, timeout=15)
+    status, body = ic.request(SYNC_URL, {'projects': records}, timeout=15)
     if status == 200 and body:
         post_log('info', 'sync ok', {
             'upserted': body.get('upserted'),

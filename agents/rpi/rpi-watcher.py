@@ -16,54 +16,35 @@ Env:
 """
 from __future__ import annotations
 
-import json
 import os
 import sys
 import time
-import urllib.error
-import urllib.request
 from pathlib import Path
 from typing import Any
 
-INGEST_URL = os.environ.get('INGEST_URL', '')
-INGEST_TOKEN = os.environ.get('INGEST_TOKEN', '')
+# _common.py lives next to this script in production (~/bin/_common.py) and
+# one level up in the repo (agents/_common.py). Try both so dev + deploy both
+# work without any package wiring.
+_here = Path(__file__).resolve().parent
+sys.path.insert(0, str(_here))
+sys.path.insert(0, str(_here.parent))
+from _common import IngestClient  # noqa: E402
+
 HOST_NAME = os.environ.get('HOST_NAME', 'rpi')
 METRIC_INTERVAL = float(os.environ.get('METRIC_INTERVAL', '30'))
-METRIC_URL = os.environ.get('METRIC_URL') or INGEST_URL.replace('/api/ingest', '/api/metrics')
 METRIC_DISK_PATH = os.environ.get('METRIC_DISK_PATH', '/')
 METRIC_TOP_N = int(os.environ.get('METRIC_TOP_N', '10'))
 TEMP_PATH = Path(os.environ.get('TEMP_PATH', '/sys/class/thermal/thermal_zone0/temp'))
 
-SELF_SOURCE = f'agent:{HOST_NAME}-watcher'
-
-if not INGEST_URL or not INGEST_TOKEN:
-    print('INGEST_URL and INGEST_TOKEN required', file=sys.stderr)
-    sys.exit(1)
-
-
-def _post(url: str, body: dict[str, Any]) -> bool:
-    req = urllib.request.Request(
-        url, data=json.dumps(body).encode(), method='POST',
-        headers={'Content-Type': 'application/json', 'X-Ingest-Token': INGEST_TOKEN},
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=5) as r:
-            return 200 <= r.status < 300
-    except (urllib.error.URLError, TimeoutError, OSError):
-        return False
+ic = IngestClient.from_env(host=HOST_NAME)
 
 
 def post_log(level: str, message: str, data: dict[str, Any] | None = None) -> None:
-    ev: dict[str, Any] = {'host': HOST_NAME, 'source': SELF_SOURCE, 'level': level, 'message': message[:8000]}
-    if data:
-        ev['data'] = data
-    if not _post(INGEST_URL, {'events': [ev]}):
-        print(f'self-log failed: {message}', file=sys.stderr)
+    ic.post_log(level, message, data)
 
 
 def send_metric(metric: dict[str, Any]) -> None:
-    if not _post(METRIC_URL, metric):
-        print('metric POST failed', file=sys.stderr)
+    ic.post_metrics(metric)
 
 
 def read_soc_temp_c() -> float | None:
