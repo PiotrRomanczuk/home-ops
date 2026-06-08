@@ -44,6 +44,10 @@ export function init(slug, { ingestUrl, ingestToken, host } = {}) {
 /**
  * Emit a single event. Returns the promise; awaiting is optional —
  * callers normally fire-and-forget.
+ *
+ * @param {string} message
+ * @param {{ level?: 'debug'|'info'|'warn'|'error'|'fatal', data?: Record<string, unknown> }} [opts]
+ * @returns {Promise<void>}
  */
 export async function event(message, { level = 'info', data } = {}) {
   if (!_slug || !_url || !_token) return;
@@ -72,6 +76,12 @@ export async function event(message, { level = 'info', data } = {}) {
 /**
  * Run `fn` between `<stage>_started` and `<stage>_succeeded`/`_failed` events.
  * Re-throws on rejection so the caller can still handle the error.
+ *
+ * @template T
+ * @param {string} stage
+ * @param {(life: { setData: (more: Record<string, unknown>) => void, durationMs: () => number }) => Promise<T>} fn
+ * @param {Record<string, unknown>} [startData]
+ * @returns {Promise<T>}
  */
 export async function lifecycle(stage, fn, startData) {
   const data = { ...(startData || {}) };
