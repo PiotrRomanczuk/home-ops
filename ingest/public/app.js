@@ -128,7 +128,7 @@ function renderChrome() {
   const st = getState();
   const counts = {
     chat: (window.Chat?.conversations || DB.CONVERSATIONS).filter(c => c.status === 'running' || c.status === 'queued' || c.status === 'paused').length,
-    projects: DB.PROJECTS.filter(p => p.status === 'hot').length,
+    projects: (window.Projects?.items || DB.PROJECTS).filter(p => p.status === 'hot').length,
     logs: (window.Logs?.rows || DB.LOGS).filter(l => LV_ORDER[l.level] >= 4).length,
     hosts: DB.HOSTS.filter(x => x.hd !== 'good').length,
   };

@@ -3,8 +3,8 @@
    Join key = slug. logs: source='app:<slug>'; jobs: payload.project.
    ============================================================ */
 
-function projLogs(slug) { return DB.LOGS.filter(l => l.source === 'app:' + slug); }
-function projJobs(slug) { return DB.CONVERSATIONS.filter(c => c.project === slug); }
+function projLogs(slug) { return (window.Logs?.rows || DB.LOGS).filter(l => l.source === 'app:' + slug); }
+function projJobs(slug) { return (window.Chat?.conversations || DB.CONVERSATIONS).filter(c => c.project === slug); }
 
 /* ---------- card (grid) ---------- */
 function projCard(p) {
@@ -143,28 +143,43 @@ function drillPage(p, main) {
 }
 
 /* ---------- view ---------- */
+function syncedLabel() {
+  if (!Projects.syncedAt) return Projects.loading ? '· loading…' : '· awaiting first sync';
+  return '· vault sync ' + relShort(Projects.syncedAt) + ' ago';
+}
+
 VIEWS.projects = function (st, main) {
+  if (!Projects.loaded && !Projects.loading) Projects.loadAll();
+
   if (st.slug) {
-    const p = DB.PROJECTS.find(x => x.slug === st.slug);
+    const p = Projects.bySlug(st.slug);
     if (p) return drillPage(p, main);
+    // Fall through to grid if the slug isn't loaded yet — once loadAll
+    // resolves, the hashchange re-render will find it.
   }
   const layout = st.players === 'list' ? 'list' : 'grid';
-  const order = [...DB.PROJECTS].sort((a, b) => {
+  const order = [...Projects.items].sort((a, b) => {
     const rank = { hot: 0, warm: 1, stalled: 2, dormant: 3 };
     return rank[a.status] - rank[b.status];
   });
 
   const wrap = h('div', { class: 'proj-view' });
   wrap.append(h('div', { class: 'sec-bar' },
-    h('span', { class: 'lbl' }, 'projects ', h('span', { class: 'faint num', style: { fontWeight: 400 } }, DB.PROJECTS.length)),
-    h('span', { class: 'faint', style: { fontSize: '11px' } }, '· vault sync 12s ago'),
+    h('span', { class: 'lbl' }, 'projects ', h('span', { class: 'faint num', style: { fontWeight: 400 } }, Projects.items.length)),
+    h('span', { class: 'faint', style: { fontSize: '11px' } }, syncedLabel()),
+    Projects.err ? h('span', { class: 'lv error', style: { fontSize: '11px' } }, '✕ ' + Projects.err) : null,
     h('span', { class: 'grow' }),
+    h('button', { class: 'toolbtn', onclick: () => Projects.loadAll(), title: 'refresh from server' }, '↻'),
     h('div', { class: 'seg-toggle' },
       h('button', { class: layout === 'grid' ? 'on' : '', onclick: () => setState({ players: null }) }, '▦ grid'),
       h('button', { class: layout === 'list' ? 'on' : '', onclick: () => setState({ players: 'list' }) }, '☰ list')),
   ));
   const scroll = h('div', { class: 'proj-scroll' });
-  if (layout === 'grid') {
+  if (!order.length) {
+    scroll.append(h('div', { class: 'empty', style: { padding: '60px 0' } },
+      h('div', { class: 'big' }, Projects.loading ? 'loading…' : 'no projects yet'),
+      Projects.loading ? '' : 'check that planner-sync is running on uwh'));
+  } else if (layout === 'grid') {
     scroll.append(h('div', { class: 'proj-grid' }, ...order.map(projCard)));
   } else {
     const list = h('div', { class: 'proj-list' },
