@@ -147,6 +147,7 @@ const Chat = {
         const r = job.result || {};
         t.status = job.status;
         if (r.response != null) t.text = r.response;
+        else if (r.summary != null) t.text = r.summary;
         if (r.thinking != null) t.thinking = r.thinking;
         if (r.eval_count != null) t.tokens = r.eval_count;
         t.elapsed = elapsedSec(job);

@@ -16,7 +16,7 @@ import json
 import os
 import threading
 import urllib.request
-from typing import Any
+from typing import Any, Callable
 
 OLLAMA_URL = (os.environ.get('OLLAMA_URL') or 'http://127.0.0.1:11434').rstrip('/')
 
@@ -59,7 +59,7 @@ def run(
     job: dict[str, Any],
     cancel: threading.Event,
     *,
-    partial: Any = None,  # noqa: ARG001  accepted for signature consistency; mid-flight emit is a v2
+    partial: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     p = job.get('payload') or {}
     model = p['model']
@@ -68,6 +68,22 @@ def run(
 
     partials: list[dict[str, Any]] = []
     mid_stream_cancel = False
+
+    def emit() -> None:
+        if partial is None:
+            return
+        # Build a running summary view: join section partials so the chat
+        # tab shows accumulated text even before the final pass.
+        running = '\n\n'.join(s['partial'] for s in partials)
+        try:
+            partial({
+                'summary': running,
+                'sections': partials,
+                'partial': True,
+            })
+        except Exception:
+            pass  # best-effort
+
     for i, chunk in enumerate(chunks):
         if cancel.is_set():
             return {'summary': None, 'sections': partials,
@@ -77,6 +93,7 @@ def run(
                   else f'Summarise the following in one paragraph ({lang}):\n\n{chunk}')
         out, mid = _ollama_generate_stream(model, prompt, cancel)
         partials.append({'chunk_idx': i, 'partial': out})
+        emit()  # per-section partial, lets UI fill in N/M chunks live
         if mid:
             mid_stream_cancel = True
             return {'summary': None, 'sections': partials,
