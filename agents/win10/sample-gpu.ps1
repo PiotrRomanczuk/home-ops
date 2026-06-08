@@ -1,8 +1,8 @@
 # sample-gpu.ps1 — emit one JSON line with current AMD GPU util/VRAM + top-N
-# Designed to be called every ~30s from wfh-watcher.py. Uses Windows built-in
+# Designed to be called every ~30s from win10-watcher.py. Uses Windows built-in
 # perf counters; no external tools. Temperature is not exposed by these
 # counters and is left absent — see docs/adr/2026-06-07-no-grafana.md and
-# wfh-watcher Phase G notes.
+# win10-watcher Phase G notes.
 #
 # Env vars (all optional):
 #   GPU_LUID           dedicated-GPU LUID fragment (default: luid_0x00000000_0x0000a4dd_phys_0 for RX 7700 XT)

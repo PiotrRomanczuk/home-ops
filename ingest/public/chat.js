@@ -228,7 +228,7 @@ const EX = [
 function emptyState() {
   const wrap = h('div', { class: 'chat-empty' },
     h('div', { class: 'ascii' }, '  ◆ ◆ ◆\n ──┼──┼──\n  qwen3 · local · gaming-aware'),
-    h('div', { class: 'heading' }, 'New conversation — runs on wfh, pauses when you game.'),
+    h('div', { class: 'heading' }, 'New conversation — runs on win10, pauses when you game.'),
     h('div', { class: 'examples' }, ...EX.map(([k, t]) =>
       h('button', { class: 'ex-chip', onclick: () => { const ta = $('.comp-ta'); if (ta) { ta.value = (k.startsWith('/') ? k + ' ' : '') + t; ta.dispatchEvent(new Event('input')); ta.focus(); } } },
         h('span', { class: 'k' }, k), t))),

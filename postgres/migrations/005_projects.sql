@@ -1,5 +1,5 @@
 -- 005_projects.sql
--- Vault-derived project state. A sync worker on uwh pulls the planner repo
+-- Vault-derived project state. A sync worker on elitedesk pulls the planner repo
 -- (~/Obsidian/MainCV-Planner) every 60s, parses projects/*.md frontmatter +
 -- body sections, and upserts into this table. The UI reads it via
 -- GET /api/projects and joins to host_logs via source='app:<slug>' and to

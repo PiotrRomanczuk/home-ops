@@ -5,15 +5,15 @@ updated: 2026-06-07
 
 # home-ops
 
-Centralised structured logs + GPU job queue for the home network. Runs on `uwh` as a docker-compose stack. Independent of any project.
+Centralised structured logs + GPU job queue for the home network. Runs on `elitedesk` as a docker-compose stack. Independent of any project.
 
 ## Stack
 
-| Service | Port (uwh) | What |
+| Service | Port (elitedesk) | What |
 | --- | --- | --- |
 | postgres | `127.0.0.1:64422` | DB `home_ops`. Tables: `host_logs`, `gpu_jobs`. |
 | ingest | `0.0.0.0:64421` | Hono HTTP API. `POST /api/ingest`, `GET/POST /api/jobs`. |
-| viewer | (served by ingest on :64421 until Phase C) | Standalone Next.js log viewer — Phase C will move it to its own service on :64420. |
+| viewer | (served by ingest on :64421) | Static Vite (React) log viewer SPA, served by the ingest API from `ingest/public/`. |
 
 Auth on ingest = `X-Ingest-Token` header. Auth on viewer = `LOGS_PASSWORD`. Tailnet-only reachability via `tailscale serve`.
 
@@ -21,23 +21,23 @@ Auth on ingest = `X-Ingest-Token` header. Auth on viewer = `LOGS_PASSWORD`. Tail
 
 | Host | Agent | Captures |
 | --- | --- | --- |
-| `wfh` | `agents/wfh/ollama-watcher.py` (WinSW service) | Ollama GIN + server logs from `C:\ProgramData\Ollama-Service\Ollama.err.log` |
-| `wfh` | `scheduler/gpu-scheduler.py` (WinSW service) | Gaming-detect state + GPU job consumer |
-| `uwh` | `agents/uwh/uwh-watcher.py` (systemd user) | journald (cloudflared, docker, ssh, kernel) + named docker container logs |
+| `win10` | `agents/win10/ollama-watcher.py` (WinSW service) | Ollama GIN + server logs from `C:\ProgramData\Ollama-Service\Ollama.err.log` |
+| `win10` | `scheduler/gpu-scheduler.py` (WinSW service) | Gaming-detect state + GPU job consumer |
+| `elitedesk` | `agents/elitedesk/elitedesk-watcher.py` (systemd user) | journald (cloudflared, docker, ssh, kernel) + named docker container logs |
 | `rpi` | `agents/rpi/rpi-watcher.py` (systemd user) | Kuma + Beszel container logs, syslog errors |
 
-## Deploy (uwh)
+## Deploy (elitedesk)
 
 ```bash
 # Initial setup (once)
-ssh uwh
+ssh elitedesk
 git clone git@github.com:PiotrRomanczuk/home-ops.git ~/logs-stack
 cd ~/logs-stack
 ./scripts/generate-env.sh        # generates ./.env with strong secrets, prompts for LOGS_PASSWORD
 docker compose up -d
 
 # Subsequent deploys (after `git push` from Mac)
-ssh uwh "cd ~/logs-stack && git pull && docker compose up -d --build"
+ssh elitedesk "cd ~/logs-stack && git pull && docker compose up -d --build"
 ```
 
 ### Applying new migrations on an existing deploy
@@ -48,7 +48,7 @@ initdb (empty `pgdata`). On an existing deploy, run new migrations by hand:
 
 ```bash
 # Replace 002_pg_cron.sql with whichever new migration you're applying.
-ssh uwh "docker exec home-ops-postgres-1 psql -U postgres -d home_ops \
+ssh elitedesk "docker exec home-ops-postgres-1 psql -U postgres -d home_ops \
   -f /docker-entrypoint-initdb.d/002_pg_cron.sql"
 ```
 
@@ -100,12 +100,12 @@ docker exec home-ops-postgres-1 psql -U postgres -d home_ops -c \
 
 ## Backups
 
-`pg_dump -Fc` runs nightly at 04:30 (uwh local time) via a systemd `--user`
+`pg_dump -Fc` runs nightly at 04:30 (elitedesk local time) via a systemd `--user`
 timer, writing to the NAS `monitoring-backup` SMB share with 14-day retention.
-See `ops/uwh/README.md` for installation and the NAS mount prerequisite.
+See `ops/elitedesk/README.md` for installation and the NAS mount prerequisite.
 
 ```bash
-# On uwh, after installing the timer
+# On elitedesk, after installing the timer
 systemctl --user list-timers --all | grep pg-backup
 ls -lh /mnt/nas/monitoring-backup/home-ops/
 ```

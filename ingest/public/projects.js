@@ -178,7 +178,7 @@ VIEWS.projects = function (st, main) {
   if (!order.length) {
     scroll.append(h('div', { class: 'empty', style: { padding: '60px 0' } },
       h('div', { class: 'big' }, Projects.loading ? 'loading…' : 'no projects yet'),
-      Projects.loading ? '' : 'check that planner-sync is running on uwh'));
+      Projects.loading ? '' : 'check that planner-sync is running on elitedesk'));
   } else if (layout === 'grid') {
     scroll.append(h('div', { class: 'proj-grid' }, ...order.map(projCard)));
   } else {

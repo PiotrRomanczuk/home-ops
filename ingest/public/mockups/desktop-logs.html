@@ -281,7 +281,7 @@
     </div>
     
     <div class="filter-input-wrapper">
-      <input type="text" class="filter-input" value="level>=info -source:uptime-kuma" placeholder="e.g. host=uwh level>=warn pid=31254...">
+      <input type="text" class="filter-input" value="level>=info -source:uptime-kuma" placeholder="e.g. host=elitedesk level>=warn pid=31254...">
       <span class="filter-kbd">/</span>
     </div>
 
@@ -309,14 +309,14 @@
       <tbody>
         <tr>
           <td class="col-ts">21:08:41</td>
-          <td class="col-host">uwh</td>
+          <td class="col-host">elitedesk</td>
           <td class="col-source">docker:home-ops-ingest-1</td>
           <td class="col-level lvl-info">INFO</td>
           <td class="col-msg">--> GET /api/logs?level_min=info&since_min=60</td>
         </tr>
         <tr>
           <td class="col-ts">21:08:39</td>
-          <td class="col-host">wfh</td>
+          <td class="col-host">win10</td>
           <td class="col-source">agent:gpu-scheduler</td>
           <td class="col-level lvl-info">INFO</td>
           <td class="col-msg">gaming detected → workload paused</td>
@@ -325,7 +325,7 @@
         <!-- Expanded Row -->
         <tr class="expanded row-error">
           <td class="col-ts">21:07:12</td>
-          <td class="col-host">uwh</td>
+          <td class="col-host">elitedesk</td>
           <td class="col-source">journald:cloudflared</td>
           <td class="col-level lvl-error">ERROR</td>
           <td class="col-msg">Connection terminated error="accept stream listener"</td>
@@ -353,7 +353,7 @@
 
         <tr class="row-warn">
           <td class="col-ts">21:05:33</td>
-          <td class="col-host">wfh</td>
+          <td class="col-host">win10</td>
           <td class="col-source">app:ollama-server</td>
           <td class="col-level lvl-warn">WARN</td>
           <td class="col-msg">model load failed, retrying</td>
@@ -367,7 +367,7 @@
         </tr>
         <tr>
           <td class="col-ts">21:03:55</td>
-          <td class="col-host">wfh</td>
+          <td class="col-host">win10</td>
           <td class="col-source">agent:gpu-scheduler</td>
           <td class="col-level lvl-info">INFO</td>
           <td class="col-msg">job 47 done</td>
@@ -382,7 +382,7 @@
             document.write(`
             <tr>
               <td class="col-ts">21:02:${sec}</td>
-              <td class="col-host">uwh</td>
+              <td class="col-host">elitedesk</td>
               <td class="col-source">agent:system-metrics</td>
               <td class="col-level lvl-debug">DEBUG</td>
               <td class="col-msg">collected metrics from 12 subsystems</td>
@@ -399,8 +399,8 @@
   <div class="status-footer">
     <div class="status-item"><div class="status-dot dot-good"></div> Ingest API OK</div>
     <div>|</div>
-    <div class="status-item"><div class="status-dot dot-good"></div> uwh: 1s</div>
-    <div class="status-item"><div class="status-dot dot-good"></div> wfh: 3s</div>
+    <div class="status-item"><div class="status-dot dot-good"></div> elitedesk: 1s</div>
+    <div class="status-item"><div class="status-dot dot-good"></div> win10: 3s</div>
     <div class="status-item"><div class="status-dot dot-warn"></div> rpi: 45s</div>
     <div style="flex:1"></div>
     <div>pgdata: 42%</div>

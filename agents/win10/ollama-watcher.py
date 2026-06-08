@@ -5,7 +5,7 @@ parsed structured events to the home-ops ingest API.
 Env:
   INGEST_URL       (required) e.g. http://192.168.1.75:64421/api/ingest
   INGEST_TOKEN     (required) shared secret
-  HOST_NAME        defaults to 'wfh'
+  HOST_NAME        defaults to 'win10'
   OLLAMA_LOG       path to Ollama.err.log (default: C:\\ProgramData\\Ollama-Service\\Ollama.err.log)
   BATCH_SECONDS    flush window; default 2
   BATCH_MAX        max events per POST; default 100
@@ -27,7 +27,7 @@ from typing import Any
 
 INGEST_URL = os.environ.get('INGEST_URL', '')
 INGEST_TOKEN = os.environ.get('INGEST_TOKEN', '')
-HOST_NAME = os.environ.get('HOST_NAME', 'wfh')
+HOST_NAME = os.environ.get('HOST_NAME', 'win10')
 LOG_PATH = Path(os.environ.get('OLLAMA_LOG', r'C:\ProgramData\Ollama-Service\Ollama.err.log'))
 BATCH_SECONDS = float(os.environ.get('BATCH_SECONDS', '2'))
 BATCH_MAX = int(os.environ.get('BATCH_MAX', '100'))

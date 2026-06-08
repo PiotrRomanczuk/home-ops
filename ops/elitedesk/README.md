@@ -3,9 +3,9 @@ created: 2026-06-07
 updated: 2026-06-07
 ---
 
-# ops/uwh — host-side unit files for the uwh deployment
+# ops/elitedesk — host-side unit files for the elitedesk deployment
 
-These are systemd `--user` units that run on `uwh` alongside the docker-compose
+These are systemd `--user` units that run on `elitedesk` alongside the docker-compose
 stack. They're version-controlled here; installed by symlinking into
 `~/.config/systemd/user/`.
 
@@ -21,7 +21,7 @@ stack. They're version-controlled here; installed by symlinking into
 must be mounted before the timer fires. If not yet set up:
 
 ```bash
-# As root on uwh, one-time setup
+# As root on elitedesk, one-time setup
 sudo mkdir -p /mnt/nas/monitoring-backup
 sudo apt install -y cifs-utils
 sudo install -m 600 -o root -g root /dev/null /etc/kuma-backup/credentials
@@ -46,11 +46,11 @@ Reuses the existing `monitoring-backup` SMB share documented in
 ```bash
 # After git clone has finished and the stack is running
 cd ~/logs-stack
-chmod +x ops/uwh/pg-backup.sh
+chmod +x ops/elitedesk/pg-backup.sh
 
 # Symlink (not copy) so future `git pull` updates the unit files in place.
-ln -sf ~/logs-stack/ops/uwh/pg-backup.service ~/.config/systemd/user/
-ln -sf ~/logs-stack/ops/uwh/pg-backup.timer   ~/.config/systemd/user/
+ln -sf ~/logs-stack/ops/elitedesk/pg-backup.service ~/.config/systemd/user/
+ln -sf ~/logs-stack/ops/elitedesk/pg-backup.timer   ~/.config/systemd/user/
 
 systemctl --user daemon-reload
 systemctl --user enable --now pg-backup.timer

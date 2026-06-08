@@ -22,17 +22,17 @@ Moved to Done.
 ### Session 3 — Ops hardening
 Moved to Done.
 
-### Session 4 — uwh-watcher refactor (the pattern, ~2 hours)
+### Session 4 — elitedesk-watcher refactor (the pattern, ~2 hours)
 
 Session 4 now absorbs everything decided in functional-grilling round 2 that
-touches the uwh-watcher codebase. See
+touches the elitedesk-watcher codebase. See
 `~/.claude/plans/analyze-this-folder-and-curious-shamir.md` "Functional
 decisions log" for the why on each.
 
 Agent code changes:
 - [ ] **Two-layer payload validation** — TS at /api/jobs + Python at job-claim (item 1.4)
 - [ ] **SIGTERM/SIGINT soft-drain** with 5s cap (item 1.5)
-- [ ] **SQLite spool** per agent at `/var/lib/uwh-watcher/spool.db` (item 2.4)
+- [ ] **SQLite spool** per agent at `/var/lib/elitedesk-watcher/spool.db` (item 2.4)
 - [ ] **Narrow `except Exception`** to specific types (URLError, OperationalError, OSError, sqlite3.OperationalError)
 - [ ] **Docker `-t` flag + parse source timestamp** so docker events get `ts` from source, not ingest-time (Q2)
 - [ ] **journald cursor-based backfill**, capped at 1h. Cursor stored in the same SQLite as the spool (Q4)
@@ -42,7 +42,7 @@ Agent code changes:
 - [ ] **Rename journald keys at extraction**: `_pid` → `pid`, `_exe` → `cmd`, `_cmdline` → `cmd_args`, etc., per the well-known keys convention (Q21)
 - [ ] **Smarter docker level parser**: `\b5\d\d\b` → error; `\b4\d\d\b` near method-verb → warn; `panic|FATAL` → fatal; current keyword fallback for everything else (Q12)
 - [ ] **Disk-monitor thread**: every 60s, query `pg_database_size('home_ops')` and `df` of pgdata volume; post warn at 75% disk used, error at 90% (Q23)
-- [ ] **Self-source rename**: any place that emits as bare name should emit as `agent:uwh-watcher` (Q10)
+- [ ] **Self-source rename**: any place that emits as bare name should emit as `agent:elitedesk-watcher` (Q10)
 
 Documentation:
 - [ ] **EVENT_SCHEMA.md** (or section in README) — well-known `data` keys table + level conventions rule + source naming convention
@@ -60,7 +60,7 @@ Either bundle into session 4 or split.
 - [ ] **Hourly prune schedule** — change `002_pg_cron.sql` `cron.schedule` calls from `'0 4 * * *'` to `'0 * * * *'` (Q23 carryover).
 
 ### Session 5 — Phase B (~2 hours)
-- [ ] Deploy wfh ollama-watcher.py + WinSW (already written, needs the session-4 patterns retrofitted before deploy)
+- [ ] Deploy win10 ollama-watcher.py + WinSW (already written, needs the session-4 patterns retrofitted before deploy)
 - [ ] Stano backend logger.ts dual-write into home-ops
 
 ### Session 6 — Phase D (~2 hours)
@@ -78,21 +78,21 @@ Either bundle into session 4 or split.
 - [ ] Move living parts to README.md; archive home-ops-logger-plan.md as 2026-XX-XX-home-ops-rollout.md (item 3.5)
 
 ### Session 10 — Phase C (~4 hours)
-- [ ] Standalone Next.js viewer at home-ops/viewer/ following `docs/DESIGN_BRIEF.md`
-- [ ] Move tailscale serve from :64421 to :64420
+- [ ] Static Vite (React) viewer at home-ops/viewer/ following `docs/DESIGN_BRIEF.md`
+- [ ] Configure ingest API to serve `viewer/dist/` statically at `/`
 
 ### Session 11 — Phase G (host metrics + attribution) — server + agent ✅ landed 2026-06-07
 
 Already partially shipped this session:
 - [x] `postgres/migrations/003_host_metrics.sql` — schema + `prune_host_metrics` + pg_cron schedule at `30 * * * *`
 - [x] `ingest/src/server.ts` — `POST /api/metrics` (token-gated) + `GET /api/metrics` (viewer-or-token); validators, batch insert (max 500)
-- [x] `agents/uwh/uwh-watcher.py` — `metric_sampler_loop` thread (30s interval, top-10 CPU + RSS attribution); psutil-dependent, gracefully disables if missing
+- [x] `agents/elitedesk/elitedesk-watcher.py` — `metric_sampler_loop` thread (30s interval, top-10 CPU + RSS attribution); psutil-dependent, gracefully disables if missing
 - [x] `docs/adr/2026-06-07-no-grafana.md` — formal ADR documenting why metrics live in home-ops Postgres rather than Grafana/Prometheus
 
 Still to do:
-- [x] 2026-06-07 **uwh deploy** — psutil 7.0.0 already present (no apt needed); `~/bin/uwh-watcher.py` updated from repo + `systemctl --user restart`. `metrics=on`, samples landing every 30s.
-- [x] 2026-06-07 **wfh metric sampling** — written as `agents/wfh/wfh-watcher.py` (new sibling of ollama-watcher.py, not bolted into gpu-scheduler.py to preserve scope). GPU sampling via `agents/wfh/sample-gpu.ps1` using Windows built-in Get-Counter (no AMD CLI install — investigation showed Adrenalin/ADLX don't write log files; ADLX SDK + Python bindings is the future temp path). Ollama models-loaded via `GET /api/ps`. Deployed to `C:\ProgramData\WfhWatcher\` as `WfhWatcher` WinSW service. 30s sampling verified. **Temperature not captured** — `gpu_temp_c` stays NULL on wfh until amdgpu_top.exe or AMDuProfCLI install.
-- [x] 2026-06-07 **rpi metric sampling** — wrote `agents/rpi/{rpi-watcher.py, rpi-watcher.service}` ahead of formal Phase E. Deployed via scp to `~/bin/` + `~/.config/systemd/user/` on rpi, linger enabled. CPU/SoC temp lands in `data.cpu_temp_c` (jsonb), NOT in the `gpu_temp_c` column — the column is semantically GPU-specific. First row verified: cpu 29.7%, load 1.33, mem 10.8%, disk 45.6%, temp 71.6°C. Phase G is now **live across all 3 hosts** (uwh + wfh + rpi all stream every 30s).
+- [x] 2026-06-07 **elitedesk deploy** — psutil 7.0.0 already present (no apt needed); `~/bin/elitedesk-watcher.py` updated from repo + `systemctl --user restart`. `metrics=on`, samples landing every 30s.
+- [x] 2026-06-07 **win10 metric sampling** — written as `agents/win10/win10-watcher.py` (new sibling of ollama-watcher.py, not bolted into gpu-scheduler.py to preserve scope). GPU sampling via `agents/win10/sample-gpu.ps1` using Windows built-in Get-Counter (no AMD CLI install — investigation showed Adrenalin/ADLX don't write log files; ADLX SDK + Python bindings is the future temp path). Ollama models-loaded via `GET /api/ps`. Deployed to `C:\ProgramData\Win10Watcher\` as `Win10Watcher` WinSW service. 30s sampling verified. **Temperature not captured** — `gpu_temp_c` stays NULL on win10 until amdgpu_top.exe or AMDuProfCLI install.
+- [x] 2026-06-07 **rpi metric sampling** — wrote `agents/rpi/{rpi-watcher.py, rpi-watcher.service}` ahead of formal Phase E. Deployed via scp to `~/bin/` + `~/.config/systemd/user/` on rpi, linger enabled. CPU/SoC temp lands in `data.cpu_temp_c` (jsonb), NOT in the `gpu_temp_c` column — the column is semantically GPU-specific. First row verified: cpu 29.7%, load 1.33, mem 10.8%, disk 45.6%, temp 71.6°C. Phase G is now **live across all 3 hosts** (elitedesk + win10 + rpi all stream every 30s).
 - [ ] **Viewer Hosts tab** — Phase C deliverable (per DESIGN_BRIEF.md); sparklines via uPlot, per-host drill page with top-process tables and recent-warn-events sidebar for correlation
 - [ ] **Status footer in viewer** — per-host last-event lag + last-metric lag, color-coded by staleness
 - [ ] **Saved analytical queries** (stretch) — `docs/saved-queries.json` + a "Queries" tab that runs them and renders as table-or-chart based on shape
@@ -153,21 +153,21 @@ start: "(1) which projects start dual-writing domain events first?
 ## Done
 
 - [x] 2026-06-07 Foundation: git init, .gitignore, generate-env.sh, biome+tsconfig, GHA, README pointer fix, ROADMAP
-- [x] 2026-06-07 Session 2 — docs hygiene: HOSTS.md uwh ports added, viewer Quick Link added, Cloudflare TBD resolved (remotely-managed via Zero Trust), uph/upo SSH aliases retired, stale-entries sections removed.
-- [x] 2026-06-07 Session 3 — ops hardening: ingest healthcheck (wget against /api/health), postgres image switched to debian + pg_cron, 002_pg_cron.sql with 30d host_logs prune + 30d done gpu_jobs prune (failed kept forever), ops/uwh/pg-backup.{sh,service,timer} + NAS-mount docs, Kuma probe recipe in README.
+- [x] 2026-06-07 Session 2 — docs hygiene: HOSTS.md elitedesk ports added, viewer Quick Link added, Cloudflare TBD resolved (remotely-managed via Zero Trust), uph/upo SSH aliases retired, stale-entries sections removed.
+- [x] 2026-06-07 Session 3 — ops hardening: ingest healthcheck (wget against /api/health), postgres image switched to debian + pg_cron, 002_pg_cron.sql with 30d host_logs prune + 30d done gpu_jobs prune (failed kept forever), ops/elitedesk/pg-backup.{sh,service,timer} + NAS-mount docs, Kuma probe recipe in README.
 - [x] 2026-06-07 Functional grilling (round 2): 23 functional decisions captured in `~/.claude/plans/analyze-this-folder-and-curious-shamir.md` "Functional decisions log". Sessions 4 and 4b updated to absorb the actionable ones. Future-direction note added below.
 - [x] 2026-06-07 Doc split: `docs/CONTEXT.md` becomes the foundational project doc (read-first); `docs/DESIGN_BRIEF.md` slimmed to UI-only and references CONTEXT.md; `docs/adr/` introduced with `2026-06-07-no-grafana.md` as the first formal decision record.
-- [x] 2026-06-07 Phase G partial: `host_metrics` schema (003 migration), `/api/metrics` POST+GET routes, `uwh-watcher` metric_sampler_loop with per-process attribution. Awaits uwh deploy (`apt install python3-psutil`) + viewer Hosts tab (Phase C).
+- [x] 2026-06-07 Phase G partial: `host_metrics` schema (003 migration), `/api/metrics` POST+GET routes, `elitedesk-watcher` metric_sampler_loop with per-process attribution. Awaits elitedesk deploy (`apt install python3-psutil`) + viewer Hosts tab (Phase C).
 
 **Carryover** (UI / shell actions on the actual hosts — not file edits):
 - [ ] Tailscale admin console: delete `desktop-t0jdc7e`, `iphone182`, `piotrs-macbook-air`, `piotr-ubuntu` at https://login.tailscale.com/admin/machines (from session 2)
-- [x] 2026-06-07 uwh: deployed session 3 changes — `cd ~/logs-stack && git pull && docker compose down && docker compose up -d --build`. Postgres switched alpine→debian 17.10 with pg_cron, pgdata preserved, ingest rebuilt with /api/metrics.
-- [x] 2026-06-07 uwh: applied 002_pg_cron.sql + 003_host_metrics.sql against the running DB. 3 cron jobs scheduled (host_logs daily 04:00, gpu_jobs daily 04:15, host_metrics hourly :30).
-- [x] 2026-06-07 uwh: Phase G deployed — psutil 7.0.0 already present (apt install unnecessary), `~/bin/uwh-watcher.py` overwritten from `~/logs-stack/agents/uwh/uwh-watcher.py`, `systemctl --user restart uwh-watcher.service`, journal confirms `metrics=on`, first samples landed in `host_metrics` with cpu/mem/disk/net + top_cpu/top_mem attribution.
-- [ ] uwh: mount the NAS share + install the pg-backup timer per `ops/uwh/README.md`.
+- [x] 2026-06-07 elitedesk: deployed session 3 changes — `cd ~/logs-stack && git pull && docker compose down && docker compose up -d --build`. Postgres switched alpine→debian 17.10 with pg_cron, pgdata preserved, ingest rebuilt with /api/metrics.
+- [x] 2026-06-07 elitedesk: applied 002_pg_cron.sql + 003_host_metrics.sql against the running DB. 3 cron jobs scheduled (host_logs daily 04:00, gpu_jobs daily 04:15, host_metrics hourly :30).
+- [x] 2026-06-07 elitedesk: Phase G deployed — psutil 7.0.0 already present (apt install unnecessary), `~/bin/elitedesk-watcher.py` overwritten from `~/logs-stack/agents/elitedesk/elitedesk-watcher.py`, `systemctl --user restart elitedesk-watcher.service`, journal confirms `metrics=on`, first samples landed in `host_metrics` with cpu/mem/disk/net + top_cpu/top_mem attribution.
+- [ ] elitedesk: mount the NAS share + install the pg-backup timer per `ops/elitedesk/README.md`.
 - [ ] Pi (Kuma): add the HTTP monitor per README → "Monitoring" section.
 
-**Deploy mechanism note (uwh-watcher)**: there is no deploy script. The watcher runs from `~/bin/uwh-watcher.py` (NOT from the cloned repo) as a user-scope systemd service (`~/.config/systemd/user/uwh-watcher.service`, enabled). Pulling the repo does not update the running code — you must `cp ~/logs-stack/agents/uwh/uwh-watcher.py ~/bin/uwh-watcher.py && systemctl --user restart uwh-watcher.service`. Same pattern will apply to wfh (via WinSW) and rpi when those agents land — consider writing a small `scripts/deploy-agent.sh` to formalize this.
+**Deploy mechanism note (elitedesk-watcher)**: there is no deploy script. The watcher runs from `~/bin/elitedesk-watcher.py` (NOT from the cloned repo) as a user-scope systemd service (`~/.config/systemd/user/elitedesk-watcher.service`, enabled). Pulling the repo does not update the running code — you must `cp ~/logs-stack/agents/elitedesk/elitedesk-watcher.py ~/bin/elitedesk-watcher.py && systemctl --user restart elitedesk-watcher.service`. Same pattern will apply to win10 (via WinSW) and rpi when those agents land — consider writing a small `scripts/deploy-agent.sh` to formalize this.
 
 **Minor follow-up** (low-priority):
 - [ ] `.github/workflows/check.yml`: bump `actions/checkout` and `actions/setup-node` to v5 when stable, to avoid Node 20 deprecation warning (deadline Sep 2026).
