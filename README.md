@@ -126,6 +126,7 @@ every 60 s; alerts on 2 consecutive failures. To configure:
 
 ## Related
 
+- `docs/ARCHITECTURE.md` — high-level diagram of what runs where and how the pieces wire together. Renders on GitHub.
 - `docs/CONTEXT.md` — **read this first** when starting any work on home-ops. Project identity, data model, well-known `data` keys, use cases, future direction.
 - `docs/DESIGN_BRIEF.md` — UI design brief (for Phase C standalone viewer).
 - `docs/adr/` — formal architectural decision records.
