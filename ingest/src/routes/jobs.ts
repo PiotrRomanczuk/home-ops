@@ -14,6 +14,7 @@ export function registerJobsRoutes(app: Hono): void {
   app.use('/api/jobs/:id/complete', tokenOnly);
   app.use('/api/jobs/:id/fail', tokenOnly);
   app.use('/api/jobs/:id/pause', tokenOnly);
+  app.use('/api/jobs/:id/result', tokenOnly);
 
   app.get('/api/jobs', async (c) => {
     const status = c.req.query('status');
@@ -146,6 +147,25 @@ export function registerJobsRoutes(app: Hono): void {
               finished_at = CASE WHEN status='cancelling' THEN now() ELSE finished_at END
         WHERE id=$1 AND status IN ('running','cancelling') RETURNING *`,
       [id],
+    );
+    if (r.rowCount === 0) return c.json({ error: 'not running' }, 409);
+    return c.json({ job: r.rows[0] });
+  });
+
+  // Mid-flight streaming: worker overwrites the result jsonb without changing
+  // status or finished_at. Scoped to 'running'/'cancelling' so a terminal
+  // result can never be clobbered by a late partial. /complete is still what
+  // flips status to done/cancelled — this endpoint is the firehose, /complete
+  // is the seal.
+  app.post('/api/jobs/:id/result', async (c) => {
+    const id = Number(c.req.param('id'));
+    const body = (await c.req.json().catch(() => ({}))) as { result?: unknown };
+    const r = await pool.query(
+      `UPDATE public.gpu_jobs
+          SET result = $2::jsonb
+        WHERE id=$1 AND status IN ('running','cancelling')
+        RETURNING *`,
+      [id, JSON.stringify(body.result ?? null)],
     );
     if (r.rowCount === 0) return c.json({ error: 'not running' }, 409);
     return c.json({ job: r.rows[0] });

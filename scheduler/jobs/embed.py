@@ -16,7 +16,12 @@ from typing import Any
 OLLAMA_URL = (os.environ.get('OLLAMA_URL') or 'http://127.0.0.1:11434').rstrip('/')
 
 
-def run(job: dict[str, Any], cancel: threading.Event) -> dict[str, Any]:
+def run(
+    job: dict[str, Any],
+    cancel: threading.Event,
+    *,
+    partial: Any = None,  # noqa: ARG001  accepted for signature consistency; embed is one-shot
+) -> dict[str, Any]:
     p = job.get('payload') or {}
     body = {'model': p['model'], 'input': p['input']}
     req = urllib.request.Request(
