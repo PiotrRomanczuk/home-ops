@@ -98,37 +98,28 @@ function turnEl(c, turn, idx) {
     const body = h('div', { class: 'turn-body' });
     body.innerHTML = md(turn.text || '') + (turn.status === 'running' ? '<span class="cursor"></span>' : '');
     el.append(body);
-    if (turn.status === 'running') streamInto(body, turn);
   }
   return el;
 }
 
-/* fake streaming: extend the running turn's text + thinking smoothly */
-const STREAM_EXTRA = ' reads before the next paint, and let the new row settle on its own frame.\n\n**3. Cap the buffer.** Hold ~500 rows max; anything older lives only in the DB and reloads on demand. The DOM stays small, the GC stays quiet, and the tail never stalls the main thread.';
-function streamInto(body, turn) {
-  if (turn._streamed) return;
-  let extra = STREAM_EXTRA, i = 0;
-  const tick = () => {
-    if (!body.isConnected) return;
-    i += Math.max(2, Math.round(Math.random() * 5));
-    const slice = extra.slice(0, i);
-    body.innerHTML = md((turn.text || '') + slice) + '<span class="cursor"></span>';
-    turn.tokens += Math.round(Math.random() * 3);
-    const ts = $('.turn-stat .num', body.parentElement);
-    if (i < extra.length) setTimeout(tick, 55 + Math.random() * 60);
-    else { turn._streamed = true; turn.text = (turn.text || '') + extra; }
-  };
-  setTimeout(tick, 400);
+function cancelTurn(c, turn) {
+  if (turn._job_id) Chat.cancel(turn._job_id);
 }
 
-function cancelTurn(c, turn) {
-  turn.status = 'cancelling';
-  render();
-  setTimeout(() => { turn.status = 'cancelled'; if (statusOf(c) === 'cancelled') c.status = 'cancelled'; render(); }, 1100);
-}
 function forkFrom(c, idx) {
-  const nc = { id: Math.max(...DB.CONVERSATIONS.map(x => x.id)) + 1, title: 'fork: ' + c.title, model: c.model, project: c.project, updated: new Date().toISOString(), status: 'queued', turns: c.turns.slice(0, idx + 1).map(t => ({ ...t })) };
-  DB.CONVERSATIONS.unshift(nc);
+  // Local fork: clone turns up to idx as a new conversation. The next submit
+  // gets a fresh conversation_id, so the new chain stays independent
+  // server-side. The cloned turns have no _job_id and don't poll.
+  const nc = {
+    id: Chat._newConvId(),
+    title: 'fork: ' + c.title,
+    model: c.model,
+    project: c.project,
+    updated: new Date().toISOString(),
+    status: 'done',
+    turns: c.turns.slice(0, idx + 1).map((t) => ({ ...t, _job_id: null })),
+  };
+  Chat.conversations.unshift(nc);
   setState({ conv: nc.id });
 }
 
@@ -144,19 +135,18 @@ function composer(c) {
   function updateSend() { sendBtn.disabled = !ta.value.trim(); }
   function doSend() {
     const v = ta.value.trim(); if (!v) return;
-    const conv = c && c.id ? c : null;
-    const kind = v.startsWith('/summarise') ? 'summarise' : v.startsWith('/embed') ? 'embed' : 'generate';
-    if (conv) {
-      conv.turns.push({ role: 'user', text: v });
-      conv.turns.push({ role: 'assistant', status: 'queued', model: DRAFT.model, tokens: 0, elapsed: 0, text: '' });
-      conv.status = 'queued'; conv.updated = new Date().toISOString();
-      render();
-    } else {
-      const nc = { id: Math.max(0, ...DB.CONVERSATIONS.map(x => x.id)) + 1, title: v.slice(0, 40), model: DRAFT.model, project: DRAFT.project, updated: new Date().toISOString(), status: 'running',
-        turns: [{ role: 'user', text: v }, { role: 'assistant', status: 'running', model: DRAFT.model, tokens: 1, elapsed: 0, started: new Date().toISOString(), thinking: 'Parsing the request and planning a response…', text: '' }] };
-      DB.CONVERSATIONS.unshift(nc);
-      setState({ conv: nc.id });
-    }
+    // v1: route everything through kind=generate. /summarise and /embed have
+    // different payload/result shapes; their handlers are wired separately.
+    Chat.submit({
+      prompt: v,
+      model: DRAFT.model,
+      project: DRAFT.project,
+      convId: c && c.id ? c.id : null,
+      kind: 'generate',
+    });
+    ta.value = '';
+    ta.style.height = 'auto';
+    updateSend();
   }
 
   const modelBtn = pickerModel();
@@ -248,14 +238,20 @@ function emptyState() {
 
 /* ---------- view ---------- */
 VIEWS.chat = function (st, main) {
+  if (!Chat.loaded && !Chat.loading && !Chat.err) Chat.loadAll();
   const focus = st.chat === 'focus';
   const wrap = h('div', { class: 'chat' + (focus ? ' focus' : '') });
 
   // rail
-  const list = h('div', { class: 'crail-list' }, ...DB.CONVERSATIONS.map(c => convRow(c, String(c.id) === st.conv)));
+  const listKids = Chat.conversations.map(c => convRow(c, String(c.id) === st.conv));
+  if (!listKids.length) {
+    listKids.push(h('div', { class: 'crail-empty mut', style: { padding: '14px 16px', fontSize: '11.5px' } },
+      Chat.loading ? 'loading…' : Chat.err ? '✕ ' + Chat.err : 'no conversations yet'));
+  }
+  const list = h('div', { class: 'crail-list' }, ...listKids);
   const rail = h('aside', { class: 'crail' },
     h('div', { class: 'crail-hd' },
-      h('span', { class: 'lbl' }, 'conversations ', h('span', { class: 'faint num', style: { fontWeight: 400 } }, DB.CONVERSATIONS.length)),
+      h('span', { class: 'lbl' }, 'conversations ', h('span', { class: 'faint num', style: { fontWeight: 400 } }, Chat.conversations.length)),
       h('button', { class: 'crail-new', onclick: () => { setState({ conv: null, focusComposer: 1 }); } }, '+ new'),
     ),
     list,
@@ -263,7 +259,7 @@ VIEWS.chat = function (st, main) {
   wrap.append(rail);
 
   // conversation pane
-  const c = DB.CONVERSATIONS.find(x => String(x.id) === st.conv);
+  const c = Chat.conversations.find(x => String(x.id) === st.conv);
   const pane = h('section', { class: 'conv' });
 
   const hd = h('div', { class: 'conv-hd' });
