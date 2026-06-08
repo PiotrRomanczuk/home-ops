@@ -129,7 +129,7 @@ function renderChrome() {
   const counts = {
     chat: (window.Chat?.conversations || DB.CONVERSATIONS).filter(c => c.status === 'running' || c.status === 'queued' || c.status === 'paused').length,
     projects: DB.PROJECTS.filter(p => p.status === 'hot').length,
-    logs: DB.LOGS.filter(l => LV_ORDER[l.level] >= 4).length,
+    logs: (window.Logs?.rows || DB.LOGS).filter(l => LV_ORDER[l.level] >= 4).length,
     hosts: DB.HOSTS.filter(x => x.hd !== 'good').length,
   };
   const tabs = TABS.map(t => h('button', {

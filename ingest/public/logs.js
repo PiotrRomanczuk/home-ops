@@ -3,7 +3,6 @@
    Filter contract in URL: #host=…&level_min=…&grep=…&source=…&tail=1
    ============================================================ */
 
-let TAIL_TIMER = null;
 let LIVE = null; // live array reference for current render
 let CURSOR = 0;
 
@@ -16,6 +15,8 @@ function jsonHL(obj) {
     .replace(/: (\d+\.?\d*)/g, ': <span class="json-n">$1</span>');
 }
 
+// Server-side filtering does the heavy lifting now; this is only used by the
+// in-memory tail to drop rows that no longer match the current filter window.
 function matchLog(l, st) {
   if (st.host && st.host !== 'all' && l.host !== st.host) return false;
   if (st.level_min && LV_ORDER[l.level] < LV_ORDER[st.level_min]) return false;
@@ -85,32 +86,18 @@ function peekData(data) {
   return out;
 }
 
-/* pid correlation popover */
+/* pid correlation popover — count within the loaded window. A full
+   cross-window count would need a server endpoint; defer. */
 let PID_POP = null;
 function pidPop(e, pid) {
   hidePidPop();
-  const count = DB.LOGS.filter(l => l.data && l.data.pid === pid).length;
+  const count = (Logs.rows || []).filter(l => l.data && l.data.pid === pid).length;
   const r = e.target.getBoundingClientRect();
   PID_POP = h('div', { class: 'pid-pop', style: { left: r.left + 'px', top: (r.bottom + 5) + 'px' } },
-    '▷ ', h('span', { class: 'corr', onclick: (ev) => { ev.stopPropagation(); setState({ grep: 'pid', expand: null }); hidePidPop(); } }, count + ' events'), ' with pid=' + pid);
+    '▷ ', h('span', { class: 'corr', onclick: (ev) => { ev.stopPropagation(); setState({ grep: 'pid:' + pid, expand: null }); hidePidPop(); } }, count + ' loaded'), ' with pid=' + pid);
   document.body.append(PID_POP);
 }
 function hidePidPop() { if (PID_POP) { PID_POP.remove(); PID_POP = null; } }
-
-/* synthetic live-tail rows */
-const TAIL_SAMPLES = [
-  ['uwh', 'info', 'docker:cloudflared', 'GET /api/jobs 200', () => ({ ms: 9 + (Math.random() * 8 | 0), bytes: 7000 + (Math.random() * 2000 | 0) })],
-  ['wfh', 'info', 'agent:gpu-sampler', () => 'sample cpu=' + (18 + (Math.random() * 12 | 0)) + ' mem=58 gpu=' + (3 + (Math.random() * 5 | 0)), () => ({ gpu_pct: 3 + (Math.random() * 5 | 0), gpu_temp_c: 60 + (Math.random() * 4 | 0) })],
-  ['rpi', 'debug', 'journald:systemd', 'host_metrics flush ok', () => ({ rows: 3, lag_ms: 6 + (Math.random() * 6 | 0) })],
-  ['uwh', 'info', 'app:home-ops', 'sse keepalive', () => ({ clients: 3 })],
-  ['uwh', 'warn', 'app:stano', 'sse reconnect attempt', () => ({ pid: 8841, backoff_ms: 400 + (Math.random() * 3000 | 0) })],
-];
-function genTailRow() {
-  const s = TAIL_SAMPLES[Math.random() * TAIL_SAMPLES.length | 0];
-  const t = new Date(DB.NOW.getTime() + (Math.random() * 1000 | 0));
-  DB.NOW = new Date(DB.NOW.getTime() + 2000);
-  return { ts: new Date(DB.NOW).toTimeString().slice(0, 8), host: s[0], level: s[1], source: s[2], msg: typeof s[3] === 'function' ? s[3]() : s[3], data: s[4]() };
-}
 
 /* ---------- saved deep-link chips ---------- */
 const SAVED = [
@@ -123,7 +110,10 @@ const SAVED = [
 
 /* ---------- view ---------- */
 VIEWS.logs = function (st, main) {
-  if (TAIL_TIMER) { clearInterval(TAIL_TIMER); TAIL_TIMER = null; }
+  Logs.stopTail();
+  if (!Logs.hosts.length) Logs.loadSourcesOnce();
+  const filterKey = Logs.filterKey(st);
+  if (!Logs.loaded || Logs._key !== filterKey) Logs.loadFor(st);
   const levelMin = st.level_min || 'debug';
   const host = st.host || 'all';
   const tail = st.tail === '1';
@@ -135,9 +125,10 @@ VIEWS.logs = function (st, main) {
     oninput: (e) => { clearTimeout(searchInput._t); searchInput._t = setTimeout(() => setState({ grep: e.target.value || null, expand: null }, true), 160); } });
   const lvStrip = h('div', { class: 'lv-strip' }, ...DB.LEVELS.map((lv, i) =>
     h('button', { class: (levelMin === lv ? 'on ' + lv : ''), title: 'level_min = ' + lv + '  (' + (i + 1) + ')', onclick: () => setState({ level_min: lv === 'debug' ? null : lv, expand: null }) }, lv)));
+  const hostIds = Logs.hosts.length ? Logs.hosts.map(h => h.host) : DB.HOSTS.map(h => h.id);
   const hostSel = h('div', { class: 'host-sel' },
     h('button', { class: host === 'all' ? 'on' : '', onclick: () => setState({ host: null, expand: null }) }, 'all'),
-    ...DB.HOSTS.map(hh => h('button', { class: host === hh.id ? 'on' : '', onclick: () => setState({ host: hh.id, expand: null }) }, hh.id)));
+    ...hostIds.map(id => h('button', { class: host === id ? 'on' : '', onclick: () => setState({ host: id, expand: null }) }, id)));
   const tailBtn = h('button', { class: 'tail-btn' + (tail ? ' on' : ''), title: 'live tail  (f)', onclick: () => setState({ tail: tail ? null : '1' }) },
     h('span', { class: 'tld' }), tail ? 'tailing' : 'paused');
 
@@ -173,34 +164,21 @@ VIEWS.logs = function (st, main) {
   wrap.append(scroll);
   main.append(wrap);
 
-  // populate
-  LIVE = DB.LOGS.filter(l => matchLog(l, st));
+  // populate — Logs.rows is already server-filtered for this state.
+  LIVE = Logs.rows;
   if (CURSOR >= LIVE.length) CURSOR = 0;
   paintLogs(tbody, st);
 
-  if (tail) {
-    TAIL_TIMER = setInterval(() => {
-      const row = genTailRow();
-      DB.LOGS.unshift(row);
-      if (DB.LOGS.length > 600) DB.LOGS.pop();
-      if (!matchLog(row, getState())) return;
-      LIVE.unshift(row);
-      // O(1) insert: prepend new row node, drop tail node if over cap
-      const frag = document.createDocumentFragment();
-      logRowEls(row, 0, getState(), true).forEach(n => frag.append(n));
-      tbody.prepend(frag);
-      // shift indices: cheap—just cap DOM size
-      while (tbody.children.length > 240) tbody.removeChild(tbody.lastChild);
-      updateCount();
-    }, 2000);
-  }
+  if (tail) Logs.startTail(st);
   updateCount();
 };
 
 function paintLogs(tbody, st) {
   clear(tbody);
   if (!LIVE.length) {
-    tbody.append(h('tr', {}, h('td', { colspan: 5 }, h('div', { class: 'empty', style: { height: '160px' } }, h('div', { class: 'big' }, 'no rows match'), 'adjust level / host / grep'))));
+    const msg = Logs.loading ? 'loading…' : Logs.err ? '✕ ' + Logs.err : 'no rows match';
+    const hint = Logs.loading ? '' : Logs.err ? 'check ingest API health' : 'adjust level / host / grep';
+    tbody.append(h('tr', {}, h('td', { colspan: 5 }, h('div', { class: 'empty', style: { height: '160px' } }, h('div', { class: 'big' }, msg), hint))));
     return;
   }
   const frag = document.createDocumentFragment();
@@ -209,7 +187,7 @@ function paintLogs(tbody, st) {
 }
 function updateCount() {
   const el = $('#logCount'); if (!el) return;
-  el.innerHTML = `<b>${LIVE.length}</b> rows · ${DB.LOGS.length} in 30d`;
+  el.innerHTML = `<b>${LIVE.length}</b> loaded${Logs.loading ? ' · …' : ''}`;
 }
 
 /* logs keymap: / focus search, f tail, 1-5 level, j/k cursor, Enter expand */
