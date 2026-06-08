@@ -7,6 +7,8 @@ on:
     branches: [main]
 
 jobs:
+  # ── static checks ────────────────────────────────────────────────────
+
   ingest:
     name: ingest (typecheck + lint)
     runs-on: ubuntu-latest
@@ -27,6 +29,53 @@ jobs:
         working-directory: ingest
         run: npm run check
 
+  python:
+    name: python (compile agents/ scheduler/ clients/)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: py_compile all
+        run: |
+          python3 -m py_compile \
+            agents/_common.py \
+            agents/elitedesk/elitedesk-watcher.py \
+            agents/elitedesk/planner-sync.py \
+            agents/rpi/rpi-watcher.py \
+            agents/win10/win10-watcher.py \
+            scheduler/gpu-scheduler.py \
+            scheduler/jobs/embed.py \
+            scheduler/jobs/generate.py \
+            scheduler/jobs/summarise.py \
+            clients/python/home_ops_log.py
+
+  clients-node:
+    name: clients/node (syntax)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: node --check
+        run: node --check clients/node/home-ops-log.mjs
+
+  scripts:
+    name: scripts (bash -n)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: bash syntax
+        run: |
+          for f in scripts/*.sh; do
+            bash -n "$f" || exit 1
+          done
+          echo "✓ all shell scripts parse"
+
   compose:
     name: docker compose build
     runs-on: ubuntu-latest
@@ -39,3 +88,84 @@ jobs:
           INGEST_TOKEN: ci-placeholder-not-deployed
           LOGS_PASSWORD: ci-placeholder-not-deployed
         run: docker compose build
+
+  # ── tests ────────────────────────────────────────────────────────────
+
+  tests-js:
+    name: tests (vitest — chat-api helpers)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: ingest/package-lock.json
+
+      - name: install
+        working-directory: ingest
+        run: npm ci
+
+      - name: vitest
+        working-directory: ingest
+        run: npm test -- --run
+
+  tests-py:
+    name: tests (unittest — planner-sync parser)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: unittest discover
+        run: python3 -m unittest discover -s agents/tests -p 'test_*.py' -v
+
+  tests-state-machine:
+    name: tests (cancellation state machine vs real postgres)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: ci-placeholder
+          POSTGRES_DB: home_ops
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d home_ops"
+          --health-interval 3s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: ingest/package-lock.json
+
+      - name: install
+        working-directory: ingest
+        run: npm ci
+
+      - name: apply gpu_jobs schema (subset, no pg_cron needed)
+        env:
+          PGPASSWORD: ci-placeholder
+        run: |
+          # State-machine tests only need gpu_jobs + the cancelling-status
+          # enum value. Skip migrations that require the pg_cron extension
+          # since the stock postgres image doesn't ship it.
+          psql -h 127.0.0.1 -U postgres -d home_ops -v ON_ERROR_STOP=1 \
+            -f postgres/migrations/001_init.sql \
+            -f postgres/migrations/004_cancelling_status.sql
+
+      - name: integration tests
+        working-directory: ingest
+        env:
+          DATABASE_URL: postgresql://postgres:ci-placeholder@127.0.0.1:5432/home_ops
+          INGEST_TOKEN: ci-token
+          LOGS_PASSWORD: ci-password
+        run: npm test -- --run src/routes/__tests__/jobs-state-machine.test.ts
