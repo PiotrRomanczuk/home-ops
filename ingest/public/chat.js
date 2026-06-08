@@ -202,7 +202,7 @@ function pickerProject() {
     const m = h('div', { class: 'menu' },
       h('div', { class: 'menu-sec' }, 'tag → project'),
       h('button', { class: 'menu-item' + (!DRAFT.project ? ' on' : ''), onclick: () => { DRAFT.project = null; render(); } }, h('span', { class: 'ghost' }), 'no project'),
-      ...DB.PROJECTS.map(p => h('button', { class: 'menu-item' + (DRAFT.project === p.slug ? ' on' : ''), onclick: () => { DRAFT.project = p.slug; render(); } },
+      ...(window.Projects?.items || DB.PROJECTS).map(p => h('button', { class: 'menu-item' + (DRAFT.project === p.slug ? ' on' : ''), onclick: () => { DRAFT.project = p.slug; render(); } },
         h('span', { class: 'pd', style: { width: '6px', height: '6px', borderRadius: '50%', background: `var(--p-${p.status})` } }), p.slug)),
     );
     wrap.append(m);
