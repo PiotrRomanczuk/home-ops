@@ -3,7 +3,13 @@
    Join key = slug. logs: source='app:<slug>'; jobs: payload.project.
    ============================================================ */
 
-function projLogs(slug) { return (window.Logs?.rows || DB.LOGS).filter(l => l.source === 'app:' + slug); }
+function projLogs(slug) {
+  return (window.Logs?.rows || DB.LOGS).filter(l =>
+    l.source === 'app:' + slug
+    // home-ops's own warnings about this slug (vault conflicts on task toggles).
+    || (l.source === 'app:home-ops' && l.data && l.data.slug === slug)
+  );
+}
 function projJobs(slug) { return (window.Chat?.conversations || DB.CONVERSATIONS).filter(c => c.project === slug); }
 
 /* ---------- card (grid) ---------- */
@@ -51,10 +57,36 @@ function projListRow(p) {
 }
 
 /* ---------- drill page ---------- */
+async function toggleTask(slug, section, idx, item) {
+  const desired = !item[1];
+  item[1] = desired;                // optimistic flip
+  item._pending = true;
+  render();
+  try {
+    await window.api('POST', `/api/projects/${encodeURIComponent(slug)}/tasks/${section}/${idx}/toggle`, { done: desired });
+    item._pending = false;
+    // The worker will write back and the next vault-sync tick (≤60s)
+    // refreshes the parsed Now/Next/Later. Leave the optimistic flip in
+    // place for now — Projects.refreshOne could be triggered if we want
+    // faster convergence.
+    render();
+  } catch (e) {
+    item[1] = !desired;             // rollback
+    item._pending = false;
+    item._error = e.message || 'toggle failed';
+    render();
+    setTimeout(() => { delete item._error; render(); }, 3500);
+  }
+}
+
 function taskList(items, slug, section) {
   return h('div', { class: 'tasklist' }, ...items.map((it, i) =>
-    h('button', { class: 'task' + (it[1] ? ' done' : ''), onclick: () => { it[1] = !it[1]; render(); /* POST /api/projects/:slug/tasks/:i/toggle */ } },
-      h('span', { class: 'cb' }, it[1] ? '✓' : ''),
+    h('button', {
+      class: 'task' + (it[1] ? ' done' : '') + (it._pending ? ' pending' : '') + (it._error ? ' err' : ''),
+      title: it._error || (it._pending ? 'writing to vault…' : ''),
+      onclick: () => toggleTask(slug, section, i, it),
+    },
+      h('span', { class: 'cb' }, it[1] ? '✓' : it._pending ? '◴' : ''),
       h('span', { class: 'tx' }, it[0]),
     )));
 }

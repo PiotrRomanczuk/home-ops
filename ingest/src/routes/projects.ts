@@ -147,4 +147,86 @@ export function registerProjectsRoutes(app: Hono): void {
     if (r.rowCount === 0) return c.json({ error: 'not found' }, 404);
     return c.json({ project: r.rows[0] });
   });
+
+  // Task writeback. POST enqueues a toggle; planner-sync polls and applies.
+  // Validate the section + idx server-side so the worker can trust its input.
+  const SECTIONS = new Set(['now', 'next', 'later']);
+  app.post('/api/projects/:slug/tasks/:section/:idx/toggle', async (c) => {
+    const slug = c.req.param('slug');
+    const section = c.req.param('section');
+    const idx = Number(c.req.param('idx'));
+    if (!SECTIONS.has(section)) return c.json({ error: 'invalid section' }, 400);
+    if (!Number.isInteger(idx) || idx < 0 || idx > 999) return c.json({ error: 'invalid idx' }, 400);
+    const body = (await c.req.json().catch(() => ({}))) as { done?: boolean };
+    if (typeof body.done !== 'boolean') return c.json({ error: 'done (boolean) required' }, 400);
+    const r = await pool.query(
+      `INSERT INTO public.task_toggles (slug, section, idx, done)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id, status, created_at`,
+      [slug, section, idx, body.done],
+    );
+    return c.json({ toggle: r.rows[0] });
+  });
+
+  // Worker drain endpoints — cross-slug list + per-row status update.
+  // Token-only so a misbehaving viewer can't mark random toggles applied.
+  app.use('/api/task_toggles', tokenOnly);
+  app.use('/api/task_toggles/*', tokenOnly);
+
+  app.get('/api/task_toggles', async (c) => {
+    const status = c.req.query('status') ?? 'queued';
+    const limit = Math.min(Math.max(Number(c.req.query('limit') ?? '20'), 1), 100);
+    const r = await pool.query(
+      `SELECT id, created_at, slug, section, idx, done, status, error
+         FROM public.task_toggles
+        WHERE status = $1
+        ORDER BY created_at
+        LIMIT $2`,
+      [status, limit],
+    );
+    return c.json({ toggles: r.rows });
+  });
+
+  app.post('/api/task_toggles/:id/mark', async (c) => {
+    const id = Number(c.req.param('id'));
+    const body = (await c.req.json().catch(() => ({}))) as { status?: string; error?: string };
+    const next = body.status;
+    if (next !== 'applied' && next !== 'conflict' && next !== 'failed') {
+      return c.json({ error: 'invalid status' }, 400);
+    }
+    const r = await pool.query(
+      `UPDATE public.task_toggles
+          SET status = $2,
+              applied_at = CASE WHEN $2 = 'applied' THEN now() ELSE applied_at END,
+              error = $3
+        WHERE id = $1 AND status = 'queued'
+        RETURNING *`,
+      [id, next, (body.error ?? '').slice(0, 2000) || null],
+    );
+    if (r.rowCount === 0) return c.json({ error: 'not queued' }, 409);
+    return c.json({ toggle: r.rows[0] });
+  });
+
+  // Read recent toggles for a slug — the drill page uses this to surface
+  // queued + conflicting writes as chips. Default: last 10 non-applied.
+  app.get('/api/projects/:slug/task_toggles', async (c) => {
+    const slug = c.req.param('slug');
+    const status = c.req.query('status');
+    const limit = Math.min(Math.max(Number(c.req.query('limit') ?? '10'), 1), 100);
+    const params: unknown[] = [slug];
+    let where = 'slug = $1';
+    if (status) {
+      params.push(status);
+      where += ` AND status = $${params.length}`;
+    }
+    const r = await pool.query(
+      `SELECT id, created_at, section, idx, done, status, applied_at, error
+         FROM public.task_toggles
+        WHERE ${where}
+        ORDER BY created_at DESC
+        LIMIT ${limit}`,
+      params,
+    );
+    return c.json({ toggles: r.rows });
+  });
 }

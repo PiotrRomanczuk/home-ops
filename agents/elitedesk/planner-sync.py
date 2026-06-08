@@ -19,11 +19,15 @@ Env:
 """
 from __future__ import annotations
 
+import json
 import os
 import re
 import subprocess
 import sys
+import threading
 import time
+import urllib.error
+import urllib.request
 from pathlib import Path
 from typing import Any
 
@@ -36,11 +40,13 @@ HOST_NAME = os.environ.get('HOST_NAME', 'elitedesk')
 PLANNER_REMOTE = os.environ.get('PLANNER_REMOTE', '')
 PLANNER_DIR = Path(os.environ.get('PLANNER_DIR') or (Path.home() / 'planner-mirror'))
 SYNC_INTERVAL = float(os.environ.get('SYNC_INTERVAL', '60'))
+TOGGLE_INTERVAL = float(os.environ.get('TOGGLE_INTERVAL', '2'))
 
 ic = IngestClient.from_env(host=HOST_NAME, source='agent:planner-sync', timeout=10)
 
 INGEST_BASE = ic.events_url.replace('/api/ingest', '').rstrip('/')
 SYNC_URL = INGEST_BASE + '/api/projects/sync'
+TOGGLES_URL = INGEST_BASE + '/api/task_toggles'
 
 
 def post_log(level: str, message: str, data: dict[str, Any] | None = None) -> None:
@@ -174,6 +180,141 @@ def parse_project_file(path: Path) -> dict[str, Any] | None:
     }
 
 
+# ── task writeback (UI checkbox toggle → markdown file → git push) ────
+
+_TOGGLE_LINE_RE = re.compile(r'^(\s*[-*]\s+\[)([ xX])(\]\s+)(.+?)(\s*)$')
+
+
+def _flip_task_in_section(text: str, section: str, idx: int, done: bool) -> str | None:
+    """Walk the markdown file. Find the `## <section>` header (case-insensitive
+    match on the canonical name OR a "<Name> — ..." variant). Inside that
+    section, find the Nth `- [ ]` / `- [x]` line and flip it. Return the
+    modified text, or None if section/idx wasn't resolvable."""
+    target = section.lower()
+    lines = text.split('\n')
+    in_section = False
+    task_count = 0
+    for i, raw in enumerate(lines):
+        header = re.match(r'^##\s+(.+?)\s*$', raw)
+        if header:
+            name = header.group(1).strip().lower()
+            # Match 'now' / 'next' / 'later' or 'now — ...' variants
+            canonical = name.split(' ')[0] if name else ''
+            in_section = canonical == target or (target == 'pain' and name.startswith('pain'))
+            task_count = 0
+            continue
+        if not in_section:
+            continue
+        m = _TOGGLE_LINE_RE.match(raw)
+        if not m:
+            continue
+        if task_count == idx:
+            new_marker = 'x' if done else ' '
+            lines[i] = f'{m.group(1)}{new_marker}{m.group(3)}{m.group(4)}{m.group(5)}'
+            return '\n'.join(lines)
+        task_count += 1
+    return None
+
+
+def _apply_one_toggle(toggle: dict[str, Any]) -> tuple[str, str | None]:
+    """Returns (status, error). status ∈ {'applied', 'conflict', 'failed'}."""
+    slug = toggle['slug']
+    section = toggle['section']
+    idx = int(toggle['idx'])
+    done = bool(toggle['done'])
+
+    md_path = PLANNER_DIR / 'projects' / f'{slug}.md'
+    if not md_path.exists():
+        return 'failed', f'projects/{slug}.md not found in clone'
+
+    # Pull first — keeps us aligned with any Obsidian edits that landed since
+    # the last 60s sync tick.
+    pull_r = _run_git('pull', '--ff-only')
+    if pull_r.returncode != 0:
+        return 'conflict', f'pre-edit pull failed: {pull_r.stderr.strip()[-300:]}'
+
+    try:
+        text = md_path.read_text(encoding='utf-8')
+    except (OSError, UnicodeDecodeError) as e:
+        return 'failed', f'read failed: {e}'
+
+    new_text = _flip_task_in_section(text, section, idx, done)
+    if new_text is None:
+        return 'failed', f'task not found: section={section} idx={idx}'
+    if new_text == text:
+        # Already in the desired state. Treat as applied — UI got there
+        # first (e.g. concurrent toggle).
+        return 'applied', None
+
+    md_path.write_text(new_text, encoding='utf-8')
+
+    add_r = _run_git('add', str(md_path.relative_to(PLANNER_DIR)))
+    if add_r.returncode != 0:
+        return 'failed', f'git add: {add_r.stderr.strip()[-300:]}'
+    commit_r = _run_git('-c', 'user.name=planner-sync', '-c', 'user.email=planner-sync@home-ops',
+                        'commit', '-m', f'task toggle: {slug}/{section}/{idx} → {"done" if done else "open"}')
+    if commit_r.returncode != 0:
+        return 'failed', f'git commit: {commit_r.stderr.strip()[-300:]}'
+    push_r = _run_git('push')
+    if push_r.returncode != 0:
+        return 'conflict', f'git push: {push_r.stderr.strip()[-300:]}'
+    return 'applied', None
+
+
+def _fetch_queued_toggles(limit: int = 20) -> list[dict[str, Any]]:
+    """GET /api/task_toggles?status=queued. Returns [] on any error so the
+    drain loop just retries next tick."""
+    req = urllib.request.Request(
+        f'{TOGGLES_URL}?status=queued&limit={limit}',
+        headers={'X-Ingest-Token': ic.token},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=8) as r:
+            payload = json.loads(r.read())
+    except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError) as e:
+        post_log('warn', f'task_toggles fetch failed: {type(e).__name__}', {'err': str(e)[:300]})
+        return []
+    return payload.get('toggles') or []
+
+
+def _drain_toggles_once() -> None:
+    """Fetch queued toggles, apply each. Best-effort; per-toggle errors are
+    surfaced via the mark + a warn event, but don't take down the loop."""
+    toggles = _fetch_queued_toggles()
+
+    if not toggles:
+        return
+
+    for t in toggles:
+        status, err = _apply_one_toggle(t)
+        mark_status, mark_body = ic.request(
+            f'{TOGGLES_URL}/{t["id"]}/mark',
+            {'status': status, 'error': err},
+            timeout=5,
+        )
+        if mark_status != 200:
+            post_log('warn', f'mark toggle {t["id"]} {status} failed', {'http': mark_status})
+
+        if status == 'conflict':
+            # Surface in the affected project's drill page via app:home-ops
+            # event with data.slug so projLogs(slug) picks it up.
+            post_log('warn', f'vault conflict on task toggle for {t["slug"]}', {
+                'slug': t['slug'],
+                'section': t['section'],
+                'idx': t['idx'],
+                'error': (err or '')[:300],
+            })
+
+
+def toggles_loop() -> None:
+    while True:
+        try:
+            _drain_toggles_once()
+        except (OSError, ValueError, subprocess.SubprocessError) as e:
+            post_log('error', f'toggles tick raised: {type(e).__name__}', {'err': str(e)[:500]})
+        time.sleep(TOGGLE_INTERVAL)
+
+
 # ── main loop ─────────────────────────────────────────────────────────
 
 def sync_once() -> None:
@@ -211,7 +352,10 @@ def sync_once() -> None:
 
 
 def main() -> None:
-    post_log('info', f'planner-sync up: interval={SYNC_INTERVAL}s dir={PLANNER_DIR}')
+    post_log('info', f'planner-sync up: sync={SYNC_INTERVAL}s toggle={TOGGLE_INTERVAL}s dir={PLANNER_DIR}')
+    # Task toggles drain in their own thread at TOGGLE_INTERVAL so UI feedback
+    # is sub-5s instead of waiting on the 60s vault-sync tick.
+    threading.Thread(target=toggles_loop, daemon=True, name='toggles').start()
     try:
         while True:
             try:
