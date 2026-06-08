@@ -8,6 +8,7 @@ import { registerIngestRoutes } from './routes/ingest.ts';
 import { registerJobsRoutes } from './routes/jobs.ts';
 import { registerLogsRoutes } from './routes/logs.ts';
 import { registerMetricsRoutes } from './routes/metrics.ts';
+import { registerProjectsRoutes } from './routes/projects.ts';
 
 const app = new Hono();
 app.use('*', logger());
@@ -21,6 +22,7 @@ registerIngestRoutes(app);
 registerMetricsRoutes(app);
 registerLogsRoutes(app);
 registerJobsRoutes(app);
+registerProjectsRoutes(app);
 registerAuthRoutes(app);
 
 serve({ fetch: app.fetch, port: env.PORT }, (info) => {
