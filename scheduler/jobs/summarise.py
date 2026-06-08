@@ -55,7 +55,12 @@ def _ollama_generate_stream(model: str, prompt: str, cancel: threading.Event,
     return ''.join(tokens), cancelled
 
 
-def run(job: dict[str, Any], cancel: threading.Event) -> dict[str, Any]:
+def run(
+    job: dict[str, Any],
+    cancel: threading.Event,
+    *,
+    partial: Any = None,  # noqa: ARG001  accepted for signature consistency; mid-flight emit is a v2
+) -> dict[str, Any]:
     p = job.get('payload') or {}
     model = p['model']
     chunks = list(p.get('chunks') or [])

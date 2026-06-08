@@ -243,7 +243,7 @@ def unload_ollama_models() -> None:
 JOBS_DIR = Path(__file__).resolve().parent / 'jobs'
 
 
-def load_handler(kind: str) -> Callable[[dict[str, Any], threading.Event], dict[str, Any]] | None:
+def load_handler(kind: str) -> Callable[..., dict[str, Any]] | None:
     path = JOBS_DIR / f'{kind}.py'
     if not path.exists():
         return None
@@ -274,6 +274,13 @@ def fail(job_id: int, error: str) -> None:
 
 def pause(job_id: int) -> None:
     http('POST', f'/api/jobs/{job_id}/pause', {})
+
+
+def update_partial(job_id: int, result: dict[str, Any]) -> None:
+    """Mid-flight result update — handlers call this from inside their
+    streaming loop so the UI sees response/thinking accumulate without
+    waiting for /complete. Status-preserving on the server side."""
+    http('POST', f'/api/jobs/{job_id}/result', {'result': result}, timeout=3)
 
 
 def runner_loop() -> None:
@@ -327,8 +334,14 @@ def runner_loop() -> None:
         watcher_u = threading.Thread(target=watch_for_user_cancel, daemon=True)
         watcher_g.start()
         watcher_u.start()
+        def partial(result: dict[str, Any]) -> None:
+            try:
+                update_partial(job_id, result)
+            except Exception as e:
+                print(f'partial update failed for job {job_id}: {e}', file=sys.stderr)
+
         try:
-            result = handler(job, cancel)
+            result = handler(job, cancel, partial=partial)
             if cancel.is_set():
                 why = cancel_reason.get('why', 'gaming')
                 if why == 'user':
