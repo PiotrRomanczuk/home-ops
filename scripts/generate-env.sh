@@ -60,9 +60,9 @@ cat <<MSG
 Wrote $target (mode 0600).
 
 Mirror INGEST_TOKEN into the per-host agent env files:
-  uwh: ~/.config/uwh-watcher.env
-  wfh: C:\\ProgramData\\OllamaWatcher\\watcher.env
-  wfh: C:\\ProgramData\\GpuScheduler\\scheduler.env
+  elitedesk: ~/.config/elitedesk-watcher.env
+  win10: C:\\ProgramData\\OllamaWatcher\\watcher.env
+  win10: C:\\ProgramData\\GpuScheduler\\scheduler.env
   rpi: ~/.config/rpi-watcher.env  (Phase E)
 
 INGEST_TOKEN=$ingest_token

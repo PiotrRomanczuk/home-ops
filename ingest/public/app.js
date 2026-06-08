@@ -146,7 +146,7 @@ function renderChrome() {
     h('div', { class: 'brand' },
       h('span', { class: 'dot' }),
       'home-ops',
-      h('span', { class: 'ver' }, 'uwh'),
+      h('span', { class: 'ver' }, 'elitedesk'),
     ),
     h('nav', { class: 'tabs' }, ...tabs),
     h('div', { class: 'right' },
@@ -186,7 +186,7 @@ function renderFooter() {
     h('div', { class: 'seg num', title: 'gpu_jobs queue', onclick: () => setState({ tab: 'chat' }), style: { cursor: 'pointer' } },
       'queue ', h('b', { style: { color: q.q_running ? 'var(--s-running)' : 'var(--fg-muted)', fontWeight: 600 } }, q.q_running + 'r'),
       '/', h('b', { style: { color: q.q_queued ? 'var(--s-queued)' : 'var(--fg-muted)', fontWeight: 600 } }, q.q_queued + 'q')),
-    h('div', { class: 'seg vram', title: 'models resident in wfh VRAM' },
+    h('div', { class: 'seg vram', title: 'models resident in win10 VRAM' },
       'vram ', h('b', {}, vram), h('span', { class: 'faint' }, ' ' + totVram + 'GB')),
     h('div', { class: 'spacer' }),
     h('button', { class: 'foot-add', title: 'quick-capture → inbox.md  (press c)', onclick: openCapture },
@@ -197,7 +197,7 @@ function renderFooter() {
 /* ---------- quick-capture (one field, posts to inbox.md) ---------- */
 function openCapture() {
   if ($('#capture')) return;
-  const input = h('input', { class: 'cap-in foc', placeholder: 'note → inbox.md … (e.g. look into wfh OllamaWatcher silence)', autofocus: true });
+  const input = h('input', { class: 'cap-in foc', placeholder: 'note → inbox.md … (e.g. look into win10 OllamaWatcher silence)', autofocus: true });
   const wrap = h('div', { id: 'capture', class: 'cap-wrap' },
     h('form', { class: 'cap-form', onsubmit: (e) => { e.preventDefault(); submitCapture(input.value); } },
       h('span', { class: 'cap-pre' }, '+'),

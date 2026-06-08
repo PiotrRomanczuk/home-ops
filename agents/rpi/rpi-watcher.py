@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """rpi-watcher — host metrics + SoC temp for the Pi monitoring box.
 
-Sibling of uwh-watcher and wfh-watcher. No GPU (Pi 5 has only a small
+Sibling of elitedesk-watcher and win10-watcher. No GPU (Pi 5 has only a small
 VideoCore — no separate sampling). Pi's CPU/SoC temperature lands in
 data.cpu_temp_c rather than gpu_temp_c — the schema column is GPU-specific.
 

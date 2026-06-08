@@ -19,24 +19,24 @@ graph TB
     browser["Browser<br/>home-ops console UI<br/>(4 tabs + footer)"]
   end
 
-  %% ─────────── uwh ───────────
-  subgraph uwh["🖧 uwh · always-on server"]
+  %% ─────────── elitedesk ───────────
+  subgraph elitedesk["🖧 elitedesk · always-on server"]
     direction TB
     pg[("Postgres 17<br/>host_logs · host_metrics<br/>gpu_jobs · projects")]
     ingest["ingest API<br/>(Hono / Node)<br/>:64421"]
-    uwh_watcher["uwh-watcher<br/>journald + docker"]
+    elitedesk_watcher["elitedesk-watcher<br/>journald + docker"]
     planner_sync["planner-sync<br/>vault → projects"]
     pg_cron["pg_cron<br/>30-day prune"]
     git_bare[("git/planner.git<br/>(bare)")]
     backup["pg_dump → NAS<br/>(systemd timer, 04:30)"]
   end
 
-  %% ─────────── wfh ───────────
-  subgraph wfh["🎮 wfh · GPU box · Radeon 7700 XT"]
+  %% ─────────── win10 ───────────
+  subgraph win10["🎮 win10 · GPU box · Radeon 7700 XT"]
     direction TB
     ollama["Ollama<br/>qwen3, bge-m3, …"]
     gpu_sched["gpu-scheduler<br/>claim + gaming-detect<br/>+ streaming partials"]
-    wfh_watcher["wfh-watcher<br/>GPU% / VRAM / Ollama"]
+    win10_watcher["win10-watcher<br/>GPU% / VRAM / Ollama"]
     ollama_watcher["ollama-watcher<br/>(server.err.log tail)"]
   end
 
@@ -54,8 +54,8 @@ graph TB
   planner_sync == "POST /api/projects/sync" ==> ingest
 
   %% ─── Log + metric shipping (batched, 2s window) ───
-  uwh_watcher --> ingest
-  wfh_watcher --> ingest
+  elitedesk_watcher --> ingest
+  win10_watcher --> ingest
   ollama_watcher --> ingest
   rpi_watcher --> ingest
 
@@ -79,23 +79,23 @@ graph TB
   classDef human fill:#21283a,stroke:#58a6ff,color:#f0f3f6
   class pg,git_bare,vault store
   class browser human
-  class ingest,uwh_watcher,planner_sync,pg_cron,backup,ollama,gpu_sched,wfh_watcher,ollama_watcher,rpi_watcher,kuma,beszel service
+  class ingest,elitedesk_watcher,planner_sync,pg_cron,backup,ollama,gpu_sched,win10_watcher,ollama_watcher,rpi_watcher,kuma,beszel service
 ```
 
 ## What each piece does
 
 | Component | Host | Role | Lifecycle |
 | --- | --- | --- | --- |
-| `ingest` | uwh | HTTP API in front of Postgres. Routes: `/api/{ingest,metrics,logs,jobs,projects,sources,health}`. Auth: ingest-token for machines, cookie for browser. | Docker compose, healthcheck on `/api/health` |
-| `postgres` | uwh | Single Postgres. 4 tables, all jsonb-heavy. 30-day retention on logs+metrics, indefinite on failed/cancelled jobs. | Docker compose |
-| `uwh-watcher` | uwh | Tails journald units (cloudflared, docker, ssh) + named docker container logs. Also samples host_metrics every 30s. | systemd-user |
-| `planner-sync` | uwh | Pulls planner repo every 60s, parses `projects/*.md` frontmatter + sections, POSTs full snapshot to `/api/projects/sync` (upsert + delete-others). | systemd-user |
-| `pg_cron` | uwh | Nightly prune of host_logs > 30d, gpu_jobs (done) > 30d. Inside the postgres container; no host-level cron. | pg_cron extension |
-| `pg-backup` | uwh | `pg_dump -Fc` → NAS SMB share, 04:30 local, 14-day retention. | systemd-user timer |
-| `gpu-scheduler` | wfh | Claims jobs from queue. Gaming-detect via GPU 3D-engine util + foreground exe. Streams partials every ~250ms during generation. Honours user cancel in ~1s. | WinSW service |
-| `ollama` | wfh | LLM runtime. `/api/generate` (stream=true) + `/api/embed`. Models loaded as needed; `keep_alive=0` on pause to free VRAM. | Windows service |
-| `wfh-watcher` | wfh | Samples GPU util / VRAM / temperature via PowerShell. Logs Ollama metrics. | WinSW service |
-| `ollama-watcher` | wfh | Tails `Ollama.err.log` → log events. | WinSW service |
+| `ingest` | elitedesk | HTTP API in front of Postgres. Routes: `/api/{ingest,metrics,logs,jobs,projects,sources,health}`. Auth: ingest-token for machines, cookie for browser. | Docker compose, healthcheck on `/api/health` |
+| `postgres` | elitedesk | Single Postgres. 4 tables, all jsonb-heavy. 30-day retention on logs+metrics, indefinite on failed/cancelled jobs. | Docker compose |
+| `elitedesk-watcher` | elitedesk | Tails journald units (cloudflared, docker, ssh) + named docker container logs. Also samples host_metrics every 30s. | systemd-user |
+| `planner-sync` | elitedesk | Pulls planner repo every 60s, parses `projects/*.md` frontmatter + sections, POSTs full snapshot to `/api/projects/sync` (upsert + delete-others). | systemd-user |
+| `pg_cron` | elitedesk | Nightly prune of host_logs > 30d, gpu_jobs (done) > 30d. Inside the postgres container; no host-level cron. | pg_cron extension |
+| `pg-backup` | elitedesk | `pg_dump -Fc` → NAS SMB share, 04:30 local, 14-day retention. | systemd-user timer |
+| `gpu-scheduler` | win10 | Claims jobs from queue. Gaming-detect via GPU 3D-engine util + foreground exe. Streams partials every ~250ms during generation. Honours user cancel in ~1s. | WinSW service |
+| `ollama` | win10 | LLM runtime. `/api/generate` (stream=true) + `/api/embed`. Models loaded as needed; `keep_alive=0` on pause to free VRAM. | Windows service |
+| `win10-watcher` | win10 | Samples GPU util / VRAM / temperature via PowerShell. Logs Ollama metrics. | WinSW service |
+| `ollama-watcher` | win10 | Tails `Ollama.err.log` → log events. | WinSW service |
 | `rpi-watcher` | rpi | CPU / mem / disk / SoC temp every 30s. | systemd-user |
 | `kuma` + `beszel` | rpi | External health probe + time-series visualisation (third-party tools). | docker |
 
@@ -130,7 +130,7 @@ browser  ──POST /api/jobs──▶  ingest  ──INSERT─▶  postgres
 **2. An event from any host → log line in the UI**
 
 ```
-journalctl -f ──▶ uwh-watcher ──batch every 2s──▶ POST /api/ingest
+journalctl -f ──▶ elitedesk-watcher ──batch every 2s──▶ POST /api/ingest
                                                           │
                                                           ▼
                                                      INSERT host_logs
@@ -143,7 +143,7 @@ journalctl -f ──▶ uwh-watcher ──batch every 2s──▶ POST /api/inge
 ```
 edit projects/<slug>.md  ──▶  obsidian-git auto-commit (5min)
                                               │
-                            push ──▶ uwh:git/planner.git (bare)
+                            push ──▶ elitedesk:git/planner.git (bare)
                                               │
                   planner-sync pulls every 60s, parses, POSTs
                                               │

@@ -245,7 +245,7 @@
     </div>
     
     <div class="filter-input-wrapper">
-      <input type="text" class="filter-input" value="level>=info -source:uptime-kuma" placeholder="e.g. host=uwh level>=warn">
+      <input type="text" class="filter-input" value="level>=info -source:uptime-kuma" placeholder="e.g. host=elitedesk level>=warn">
     </div>
   </div>
 
@@ -265,14 +265,14 @@
         <tr>
           <td class="col-ts">just now</td>
           <td class="col-level lvl-info">INFO</td>
-          <td class="col-host">uwh</td>
+          <td class="col-host">elitedesk</td>
           <td class="col-source">docker:home-ops-ingest-1</td>
           <td class="col-msg">--> GET /api/logs?level_min=info&since_min=60</td>
         </tr>
         <tr>
           <td class="col-ts">2s ago</td>
           <td class="col-level lvl-info">INFO</td>
-          <td class="col-host">wfh</td>
+          <td class="col-host">win10</td>
           <td class="col-source">agent:gpu-scheduler</td>
           <td class="col-msg">gaming detected → workload paused</td>
         </tr>
@@ -281,7 +281,7 @@
         <tr class="expanded">
           <td class="col-ts">1m ago</td>
           <td class="col-level lvl-error">ERROR</td>
-          <td class="col-host">uwh</td>
+          <td class="col-host">elitedesk</td>
           <td class="col-source">journald:cloudflared</td>
           <td class="col-msg">Connection terminated error="accept stream listener"</td>
         </tr>
@@ -297,7 +297,7 @@
         <tr>
           <td class="col-ts">2m ago</td>
           <td class="col-level lvl-warn">WARN</td>
-          <td class="col-host">wfh</td>
+          <td class="col-host">win10</td>
           <td class="col-source">app:ollama-server</td>
           <td class="col-msg">model load failed, retrying</td>
         </tr>
@@ -316,7 +316,7 @@
             <tr>
               <td class="col-ts">${i}m ago</td>
               <td class="col-level lvl-debug">DEBUG</td>
-              <td class="col-host">uwh</td>
+              <td class="col-host">elitedesk</td>
               <td class="col-source">agent:system-metrics</td>
               <td class="col-msg">collected metrics from 12 subsystems</td>
             </tr>
@@ -330,8 +330,8 @@
   <!-- Status Footer -->
   <div class="status-footer">
     <div class="status-item"><div class="status-dot dot-good"></div> API OK</div>
-    <div class="status-item"><div class="status-dot dot-good"></div> uwh:1s</div>
-    <div class="status-item"><div class="status-dot dot-good"></div> wfh:3s</div>
+    <div class="status-item"><div class="status-dot dot-good"></div> elitedesk:1s</div>
+    <div class="status-item"><div class="status-dot dot-good"></div> win10:3s</div>
     <div class="status-item"><div class="status-dot dot-warn"></div> rpi:45s</div>
   </div>
 

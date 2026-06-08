@@ -6,7 +6,7 @@
   <arguments>"C:\ProgramData\GpuScheduler\gpu-scheduler.py"</arguments>
   <env name="INGEST_URL" value="http://192.168.1.75:64421"/>
   <env name="INGEST_TOKEN" value="REPLACE_AT_INSTALL"/>
-  <env name="HOST_NAME" value="wfh"/>
+  <env name="HOST_NAME" value="win10"/>
   <env name="OLLAMA_URL" value="http://127.0.0.1:11434"/>
   <env name="GAMES_FILE" value="C:\ProgramData\GpuScheduler\games.txt"/>
   <env name="POLL_SECONDS" value="15"/>

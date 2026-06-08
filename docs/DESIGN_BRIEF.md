@@ -33,11 +33,11 @@ disk pct, queue depth at a glance.
 1. **Dark theme by default.** Light mode optional; same component shapes recolored.
 2. **Monospace everything** — body, table cells, labels, buttons, numbers (tabular numerals).
 3. **Information density** — desktop fits ~40 rows above the fold at 1440×900. No card wrappers per row. No oversized padding.
-4. **Filter state is a URL fragment** — every state combination shareable + reloadable. Existing contract: `#host=uwh&source=docker:foo&level_min=warn&since_min=60&grep=oom&tail=0` — extend it for the Jobs / Hosts views as needed.
+4. **Filter state is a URL fragment** — every state combination shareable + reloadable. Existing contract: `#host=elitedesk&source=docker:foo&level_min=warn&since_min=60&grep=oom&tail=0` — extend it for the Jobs / Hosts views as needed.
 5. **Mobile parity** — every operation possible on desktop is possible on a 390-wide phone. Slower OK, absent not.
 6. **Live tail must not jank** — every 2s, append new rows in-place without layout-thrash. Virtualized list optional below 2000 rows.
 7. **No new HTTP API** — read `CONTEXT.md` for the existing API. If you need a query that isn't there, propose it but don't redesign the API.
-8. **Single binary deploy** — fits either the existing Hono server serving static files from `ingest/public/`, or a separate Next.js app (Phase C plan) reading the same API.
+8. **Single binary deploy** — fits the existing Hono server serving the static Vite SPA build from `ingest/public/`. No separate Node process for the UI.
 
 ## Aesthetic direction
 
@@ -55,7 +55,7 @@ Take the existing minimal dark-monospace aesthetic and **make it distinct**.
 - **Small-caps column headers** with subtle letter-spacing — differentiates header from data without making it heavy.
 - **Color sparingly**: accent only for active state + interactive affordances. Severity colors only on the `level` column + maybe a thin left-border per row for `warn+`.
 - **Time as primary axis**: toggle between absolute (`21:08:41`) and relative (`3m ago`). Mobile defaults to relative, desktop to absolute.
-- **Status density in chrome**: e.g. footer showing `uwh: 2s ago • wfh: 8s ago • rpi: 4m ago`, each segment green/yellow/red by lag.
+- **Status density in chrome**: e.g. footer showing `elitedesk: 2s ago • win10: 8s ago • rpi: 4m ago`, each segment green/yellow/red by lag.
 - **Microinteractions**: tail pause/resume on `f`, level threshold via `1-5`, search focus on `/`, row navigation via `j/k`. Hint via small `kbd` badges in tooltips.
 
 ## Anti-patterns to avoid
@@ -83,10 +83,10 @@ Plus one cross-cutting document (≤300 words):
 
 ## Stretch (optional — pick what excites you, name what you'd defer)
 
-- **Saved deep-link chips** — pre-defined filter sets above the filter bar: "warn+ 1h", "uwh errors", "active jobs", "wfh idle GPU". Customizable via `localStorage`.
+- **Saved deep-link chips** — pre-defined filter sets above the filter bar: "warn+ 1h", "elitedesk errors", "active jobs", "win10 idle GPU". Customizable via `localStorage`.
 - **Correlation chips in row data** — clicking `pid: 31254` in any row's data filters all logs by that pid across hosts. Hover: "▷ 12 events with pid=31254" affordance.
 - **Tail direction toggle** — some operators read bottom-up (terminal-style), others top-down (browser-style). Make it a setting, surface the active mode.
-- **Scratch filter DSL** — small text input accepting `host=uwh source~docker level≥warn 1h` and parsing into the existing filter state. Pairs with the URL-fragment story.
+- **Scratch filter DSL** — small text input accepting `host=elitedesk source~docker level≥warn 1h` and parsing into the existing filter state. Pairs with the URL-fragment story.
 - **Live host-status sparkline in the footer** — a tiny inline 60-min-rolling sparkline per host, color-tinted by current CPU%. Makes the footer carry signal, not just text.
 
 ## Out of scope

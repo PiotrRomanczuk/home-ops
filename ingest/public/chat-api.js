@@ -48,7 +48,7 @@ function jobToTurns(job) {
       thinking: r.thinking || null,
       text: r.response || '',
       fail_reason: job.last_error || null,
-      paused_reason: job.status === 'paused' ? 'gaming on wfh — will resume when GPU idle' : null,
+      paused_reason: job.status === 'paused' ? 'gaming on win10 — will resume when GPU idle' : null,
       _job_id: job.id,
     },
   ];
@@ -151,7 +151,7 @@ const Chat = {
         if (r.eval_count != null) t.tokens = r.eval_count;
         t.elapsed = elapsedSec(job);
         if (job.last_error) t.fail_reason = job.last_error;
-        t.paused_reason = job.status === 'paused' ? 'gaming on wfh — will resume when GPU idle' : null;
+        t.paused_reason = job.status === 'paused' ? 'gaming on win10 — will resume when GPU idle' : null;
         c.status = job.status;
         c.updated = job.finished_at || job.started_at || job.created_at;
         const after = `${t.status}|${(t.text || '').length}|${(t.thinking || '').length}`;

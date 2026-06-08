@@ -6,7 +6,7 @@
 # - Writes a date-stamped .dump file to $BACKUP_DIR.
 # - Prunes files older than $RETENTION_DAYS.
 #
-# Designed to be invoked by ops/uwh/pg-backup.timer at 04:30 daily, 30 min
+# Designed to be invoked by ops/elitedesk/pg-backup.timer at 04:30 daily, 30 min
 # after Kuma's 04:00 backup so they don't fight for the SMB mount.
 
 set -euo pipefail
@@ -19,7 +19,7 @@ DB_USER="${DB_USER:-postgres}"
 
 if [[ ! -d "$BACKUP_DIR" ]]; then
   printf 'BACKUP_DIR does not exist: %s\n' "$BACKUP_DIR" >&2
-  printf 'Mount the NAS share first — see ops/uwh/README.md for the fstab entry.\n' >&2
+  printf 'Mount the NAS share first — see ops/elitedesk/README.md for the fstab entry.\n' >&2
   exit 1
 fi
 

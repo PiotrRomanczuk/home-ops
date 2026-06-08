@@ -36,7 +36,7 @@ existing custom viewer using a lightweight chart library (e.g. uPlot,
 ## Reasoning
 
 1. **It solves the wrong problem.** The stated analytical goal is to
-   *discover* infrastructure-usage patterns ("is uwh underutilized?",
+   *discover* infrastructure-usage patterns ("is elitedesk underutilized?",
    "what's eating GPU when I'm not gaming?"). Grafana's strength is
    *monitoring* (panels you stare at to confirm a state), not querying.
    Discovery is better served by SQL via `psql` for ad-hoc work and

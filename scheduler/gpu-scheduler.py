@@ -11,7 +11,7 @@ Two long-lived threads:
 Env:
   INGEST_URL          base /api/* URL (e.g. http://192.168.1.75:64421)
   INGEST_TOKEN        shared secret
-  HOST_NAME           defaults to 'wfh'
+  HOST_NAME           defaults to 'win10'
   OLLAMA_URL          defaults to http://127.0.0.1:11434
   GAMES_FILE          defaults to C:\\ProgramData\\GpuScheduler\\games.txt
   GPU_THRESHOLD       3D engine util %, default 30
@@ -44,7 +44,7 @@ except ImportError:
 
 INGEST_URL = (os.environ.get('INGEST_URL', '') or '').rstrip('/')
 INGEST_TOKEN = os.environ.get('INGEST_TOKEN', '')
-HOST_NAME = os.environ.get('HOST_NAME', 'wfh')
+HOST_NAME = os.environ.get('HOST_NAME', 'win10')
 OLLAMA_URL = (os.environ.get('OLLAMA_URL') or 'http://127.0.0.1:11434').rstrip('/')
 GAMES_FILE = Path(os.environ.get('GAMES_FILE') or r'C:\ProgramData\GpuScheduler\games.txt')
 GPU_THRESHOLD = float(os.environ.get('GPU_THRESHOLD', '30'))

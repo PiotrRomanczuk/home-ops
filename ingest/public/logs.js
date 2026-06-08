@@ -102,9 +102,9 @@ function hidePidPop() { if (PID_POP) { PID_POP.remove(); PID_POP = null; } }
 /* ---------- saved deep-link chips ---------- */
 const SAVED = [
   { id: 'warn1h', label: 'warn+ 1h', patch: { level_min: 'warn', host: null, grep: null, source: null }, color: 'var(--lv-warn)' },
-  { id: 'wfherr', label: 'wfh errors', patch: { level_min: 'error', host: 'wfh', grep: null, source: null }, color: 'var(--lv-error)' },
+  { id: 'win10err', label: 'win10 errors', patch: { level_min: 'error', host: 'win10', grep: null, source: null }, color: 'var(--lv-error)' },
   { id: 'twilio', label: 'twilio 429', patch: { grep: 'twilio', level_min: 'error', host: null, source: null }, color: 'var(--lv-error)' },
-  { id: 'gpu', label: 'gpu sampler', patch: { grep: 'gpu', level_min: 'debug', host: 'wfh', source: null }, color: 'var(--accent)' },
+  { id: 'gpu', label: 'gpu sampler', patch: { grep: 'gpu', level_min: 'debug', host: 'win10', source: null }, color: 'var(--accent)' },
   { id: 'ssh', label: 'ssh auth', patch: { grep: 'ssh', level_min: 'info', host: null, source: null }, color: 'var(--good)' },
 ];
 

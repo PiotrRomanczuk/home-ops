@@ -1,15 +1,13 @@
 <service>
-  <id>WfhWatcher</id>
-  <name>Wfh Watcher</name>
-  <description>Samples host CPU/mem/disk/net, AMD GPU util/VRAM, and Ollama state on wfh; posts to home-ops ingest API.</description>
+  <id>OllamaWatcher</id>
+  <name>Ollama Watcher</name>
+  <description>Tails Ollama log files and ships structured events to the home-ops ingest API.</description>
   <executable>C:\Program Files (x86)\Microsoft Visual Studio\Shared\Python39_64\python.exe</executable>
-  <arguments>"C:\ProgramData\WfhWatcher\wfh-watcher.py"</arguments>
+  <arguments>"C:\ProgramData\OllamaWatcher\ollama-watcher.py"</arguments>
   <env name="INGEST_URL" value="http://192.168.1.75:64421/api/ingest"/>
   <env name="INGEST_TOKEN" value="REPLACE_AT_INSTALL"/>
-  <env name="HOST_NAME" value="wfh"/>
-  <env name="METRIC_INTERVAL" value="60"/>
-  <env name="GPU_PS1_PATH" value="C:\ProgramData\WfhWatcher\sample-gpu.ps1"/>
-  <env name="OLLAMA_URL" value="http://localhost:11434"/>
+  <env name="HOST_NAME" value="win10"/>
+  <env name="OLLAMA_LOG" value="C:\ProgramData\Ollama-Service\Ollama.err.log"/>
   <env name="PYTHONUNBUFFERED" value="1"/>
   <log mode="roll-by-size">
     <sizeThreshold>2048</sizeThreshold>

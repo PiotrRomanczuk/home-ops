@@ -8,8 +8,8 @@
 const NOW = new Date('2026-06-08T21:08:41');
 
 const HOSTS = [
-  { id: 'uwh', role: 'server',     up: '41d 06:12', lag: 2,  hd: 'good' },
-  { id: 'wfh', role: 'gpu',        up: '3d 18:44',  lag: 4,  hd: 'good' },
+  { id: 'elitedesk', role: 'server',     up: '41d 06:12', lag: 2,  hd: 'good' },
+  { id: 'win10', role: 'gpu',        up: '3d 18:44',  lag: 4,  hd: 'good' },
   { id: 'rpi', role: 'monitoring', up: '88d 22:01', lag: 8,  hd: 'good' },
 ];
 
@@ -112,7 +112,7 @@ const CONVERSATIONS = [
       { role: 'user', text: '/summarise the 3 error-level events from app:guitar-crm today — what\'s the common cause?' },
       { role: 'assistant', status: 'paused', model: 'qwen3:8b',
         thinking: 'Pulling the three error rows. They share pid 31254 and all reference the Twilio client...',
-        tokens: 240, elapsed: 6, started: '2026-06-08T20:40:48', paused_reason: 'gaming on wfh — will resume when GPU idle',
+        tokens: 240, elapsed: 6, started: '2026-06-08T20:40:48', paused_reason: 'gaming on win10 — will resume when GPU idle',
         text: 'All three errors trace back to the Twilio reminder batch hitting the sandbox rate limit (HTTP 429). They share `pid: 31254`. The cron fires 14 SMS in a tight loop at 09:00; the sandbox caps at' },
     ],
   },
@@ -164,36 +164,36 @@ function mkLog(t, host, level, source, msg, data) {
 }
 // generated-ish dense stream, newest first
 const LOGS = [
-  mkLog('21:08:39','uwh','info','app:home-ops','router resolved #tab=chat&conv=47',{tab:'chat',conv:47,ms:2}),
-  mkLog('21:08:38','wfh','info','agent:OllamaWatcher','gpu_models_loaded=[qwen3:8b,nomic-embed-text]',{vram_gb:6.2,temp_c:61}),
-  mkLog('21:08:37','wfh','warn','app:home-ops','job 46 paused: gaming preempt detected',{job:46,fg_proc:'cs2.exe',pid:31254}),
-  mkLog('21:08:35','uwh','info','docker:cloudflared','conn registered iad07 h2',{conn:'a91f',rtt_ms:11}),
-  mkLog('21:08:33','uwh','info','app:home-ops','sse client connected',{clients:3,ip:'100.92.x.x'}),
+  mkLog('21:08:39','elitedesk','info','app:home-ops','router resolved #tab=chat&conv=47',{tab:'chat',conv:47,ms:2}),
+  mkLog('21:08:38','win10','info','agent:OllamaWatcher','gpu_models_loaded=[qwen3:8b,nomic-embed-text]',{vram_gb:6.2,temp_c:61}),
+  mkLog('21:08:37','win10','warn','app:home-ops','job 46 paused: gaming preempt detected',{job:46,fg_proc:'cs2.exe',pid:31254}),
+  mkLog('21:08:35','elitedesk','info','docker:cloudflared','conn registered iad07 h2',{conn:'a91f',rtt_ms:11}),
+  mkLog('21:08:33','elitedesk','info','app:home-ops','sse client connected',{clients:3,ip:'100.92.x.x'}),
   mkLog('21:08:30','rpi','debug','journald:systemd','host_metrics flush ok',{rows:3,lag_ms:8}),
-  mkLog('21:08:22','wfh','info','agent:gpu-sampler','sample cpu=22 mem=58 gpu=4',{gpu_pct:4,gpu_temp_c:61}),
-  mkLog('21:08:19','uwh','info','docker:postgres','checkpoint complete',{buffers:412,wal_mb:6.1}),
-  mkLog('21:08:11','uwh','error','app:guitar-crm','twilio send failed 429 rate_limited',{pid:31254,to:'+1503xxx"',code:429,batch:14}),
-  mkLog('21:08:11','uwh','warn','app:guitar-crm','reminder batch retry 2/3',{pid:31254,delay_ms:2400}),
-  mkLog('21:07:58','wfh','info','agent:OllamaWatcher','load qwen3:8b resident',{vram_gb:5.8,load_ms:1840}),
-  mkLog('21:07:41','uwh','info','app:home-ops','job 47 enqueued kind=generate',{job:47,project:'home-ops',model:'qwen3:8b'}),
-  mkLog('21:07:33','uwh','info','docker:cloudflared','GET /api/jobs 200',{ms:14,bytes:8201}),
+  mkLog('21:08:22','win10','info','agent:gpu-sampler','sample cpu=22 mem=58 gpu=4',{gpu_pct:4,gpu_temp_c:61}),
+  mkLog('21:08:19','elitedesk','info','docker:postgres','checkpoint complete',{buffers:412,wal_mb:6.1}),
+  mkLog('21:08:11','elitedesk','error','app:guitar-crm','twilio send failed 429 rate_limited',{pid:31254,to:'+1503xxx"',code:429,batch:14}),
+  mkLog('21:08:11','elitedesk','warn','app:guitar-crm','reminder batch retry 2/3',{pid:31254,delay_ms:2400}),
+  mkLog('21:07:58','win10','info','agent:OllamaWatcher','load qwen3:8b resident',{vram_gb:5.8,load_ms:1840}),
+  mkLog('21:07:41','elitedesk','info','app:home-ops','job 47 enqueued kind=generate',{job:47,project:'home-ops',model:'qwen3:8b'}),
+  mkLog('21:07:33','elitedesk','info','docker:cloudflared','GET /api/jobs 200',{ms:14,bytes:8201}),
   mkLog('21:06:50','rpi','info','journald:ssh','accepted publickey for ada',{from:'100.92.x.x',port:54122}),
-  mkLog('21:06:12','uwh','debug','app:home-ops','health probe ok',{ingest:'ok',q_running:1,q_queued:2}),
-  mkLog('21:05:44','uwh','warn','app:stano','sse reconnect storm: 9 clients in 1200ms',{pid:8841,clients:9}),
-  mkLog('21:04:09','wfh','info','docker:ollama','POST /api/generate stream open',{model:'qwen3:8b',job:47}),
-  mkLog('21:03:21','uwh','info','app:guitar-crm','stripe webhook charge.succeeded',{evt:'evt_3Pq',amt:6000,pid:31254}),
-  mkLog('21:02:55','uwh','error','app:guitar-crm','twilio send failed 429 rate_limited',{pid:31254,to:'+1971xxx',code:429,batch:14}),
+  mkLog('21:06:12','elitedesk','debug','app:home-ops','health probe ok',{ingest:'ok',q_running:1,q_queued:2}),
+  mkLog('21:05:44','elitedesk','warn','app:stano','sse reconnect storm: 9 clients in 1200ms',{pid:8841,clients:9}),
+  mkLog('21:04:09','win10','info','docker:ollama','POST /api/generate stream open',{model:'qwen3:8b',job:47}),
+  mkLog('21:03:21','elitedesk','info','app:guitar-crm','stripe webhook charge.succeeded',{evt:'evt_3Pq',amt:6000,pid:31254}),
+  mkLog('21:02:55','elitedesk','error','app:guitar-crm','twilio send failed 429 rate_limited',{pid:31254,to:'+1971xxx',code:429,batch:14}),
   mkLog('21:01:30','rpi','debug','journald:systemd','cron run reminder-batch start',{unit:'reminder.timer'}),
-  mkLog('21:00:02','uwh','info','docker:postgres','autovacuum host_logs',{dead:18402,ms:920}),
-  mkLog('20:58:41','uwh','error','app:guitar-crm','twilio send failed 429 rate_limited',{pid:31254,to:'+1206xxx',code:429,batch:14}),
-  mkLog('20:55:10','wfh','info','agent:gpu-sampler','sample cpu=18 mem=55 gpu=3',{gpu_pct:3,gpu_temp_c:59}),
-  mkLog('20:52:00','uwh','info','app:job-search','ashby scrape ok 42 postings',{new:6,dupe:36}),
-  mkLog('20:49:13','uwh','warn','app:job-search','greenhouse parser returned 0 rows',{board:'acme',selector:'.opening'}),
-  mkLog('20:44:22','uwh','info','docker:cloudflared','GET /api/projects 200',{ms:31,rows:6}),
-  mkLog('20:40:48','wfh','warn','app:home-ops','job 46 paused gaming preempt',{job:46,pid:31254}),
+  mkLog('21:00:02','elitedesk','info','docker:postgres','autovacuum host_logs',{dead:18402,ms:920}),
+  mkLog('20:58:41','elitedesk','error','app:guitar-crm','twilio send failed 429 rate_limited',{pid:31254,to:'+1206xxx',code:429,batch:14}),
+  mkLog('20:55:10','win10','info','agent:gpu-sampler','sample cpu=18 mem=55 gpu=3',{gpu_pct:3,gpu_temp_c:59}),
+  mkLog('20:52:00','elitedesk','info','app:job-search','ashby scrape ok 42 postings',{new:6,dupe:36}),
+  mkLog('20:49:13','elitedesk','warn','app:job-search','greenhouse parser returned 0 rows',{board:'acme',selector:'.opening'}),
+  mkLog('20:44:22','elitedesk','info','docker:cloudflared','GET /api/projects 200',{ms:31,rows:6}),
+  mkLog('20:40:48','win10','warn','app:home-ops','job 46 paused gaming preempt',{job:46,pid:31254}),
   mkLog('20:38:00','rpi','info','journald:systemd','disk usage rpi / 41%',{used_gb:24,total_gb:59}),
-  mkLog('20:31:17','uwh','debug','app:home-ops','inbox.md appended 1 line',{file:'inbox.md',bytes:62}),
-  mkLog('20:22:05','uwh','info','docker:postgres','connection from 100.92.x.x',{db:'homeops',backend:31901}),
+  mkLog('20:31:17','elitedesk','debug','app:home-ops','inbox.md appended 1 line',{file:'inbox.md',bytes:62}),
+  mkLog('20:22:05','elitedesk','info','docker:postgres','connection from 100.92.x.x',{db:'homeops',backend:31901}),
 ];
 
 /* ---------- host_metrics (sparkline series + top procs) ---------- */
@@ -203,14 +203,14 @@ function series(base, amp, n) {
   return a;
 }
 const METRICS = {
-  uwh: {
+  elitedesk: {
     cpu: 31, mem: 47, disk: 38, net: '4.1MB/s', gpu: null,
     cpu_s: series(28,18,60), mem_s: series(46,8,60), gpu_s: null,
     lag: 2,
     top_cpu: [['postgres',14.2,31901],['cloudflared',6.1,1102],['node ingest',5.4,2890],['docker-proxy',2.1,1140],['journald',1.0,402]],
     docker: ['postgres','cloudflared','ingest','caddy'],
   },
-  wfh: {
+  win10: {
     cpu: 22, mem: 58, disk: 71, net: '0.9MB/s', gpu: 4, gpu_mem: 38, gpu_temp: 61,
     cpu_s: series(24,22,60), mem_s: series(57,6,60), gpu_s: series(8,30,60),
     lag: 4,

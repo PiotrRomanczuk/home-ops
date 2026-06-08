@@ -44,7 +44,7 @@ function hostCard(host, st) {
   );
   card.append(metrics);
 
-  // gpu models (wfh only)
+  // gpu models (win10 only)
   if (m.gpu_models) {
     card.append(h('div', { class: 'gpu-strip' },
       h('span', { class: 'lbl' }, 'gpu models loaded · ' + m.gpu_temp + '°C'),

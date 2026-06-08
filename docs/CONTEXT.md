@@ -16,7 +16,7 @@ updated: 2026-06-07
 
 A personal observability + automation stack running on a 3-host home
 network behind Tailscale. Three pillars, all sitting on a shared
-Postgres on `uwh`:
+Postgres on `elitedesk`:
 
 1. **Centralized structured logs** (`host_logs`) — every host runs a
    small Python agent that tails journald, docker, app, and system
@@ -38,7 +38,7 @@ Postgres on `uwh`:
    when does utilization spike?" layer, joinable with logs for
    correlation that no single existing tool provides.
 
-All three live in the same Postgres database (`home_ops`) on uwh.
+All three live in the same Postgres database (`home_ops`) on elitedesk.
 This is deliberate — the cross-pillar joins are the project's reason
 to exist.
 
@@ -46,8 +46,8 @@ to exist.
 
 | Host | Role | Hardware | Always-on? |
 | --- | --- | --- | --- |
-| **uwh** (`piotr-hp-elitedesk`) | The server. Ingest API + Postgres + log-shipping agent + (eventually) pg-backup timer | HP EliteDesk, i7-6700K, 31 GB RAM, no dGPU | Yes |
-| **wfh** (`windows-pc`) | The GPU box. Ollama backend + Ollama-log watcher + GPU job scheduler | i7-6700K, 67 GB RAM, AMD Radeon RX 7700 XT (12 GB VRAM) | Yes |
+| **elitedesk** (`piotr-hp-elitedesk`) | The server. Ingest API + Postgres + log-shipping agent + (eventually) pg-backup timer | HP EliteDesk, i7-6700K, 31 GB RAM, no dGPU | Yes |
+| **win10** (`windows-pc`) | The GPU box. Ollama backend + Ollama-log watcher + GPU job scheduler | i7-6700K, 67 GB RAM, AMD Radeon RX 7700 XT (12 GB VRAM) | Yes |
 | **rpi** (`pi`) | Monitoring + low-power services. Kuma + Beszel today; (planned) log-shipping agent, Telegram notification bot | Pi 5, 8 GB RAM, 29 GB SD | Yes, lowest power |
 | **mac** | Workstation, dev environment, launchd-scheduled producers (planned: scheduled queries / digest generators against home-ops Postgres) | M-series, varies | No (sleeps overnight) |
 
@@ -80,7 +80,7 @@ gate on top.
   id:           number;     // monotonic
   ts:           string;     // ISO 8601 — source timestamp
   ingested_at:  string;     // when home-ops received it. lag = ingested_at - ts
-  host:         string;     // 'uwh' | 'wfh' | 'rpi' | 'mac' | future hosts
+  host:         string;     // 'elitedesk' | 'win10' | 'rpi' | 'mac' | future hosts
   source:       string;     // see "source naming" below
   level:        'debug'|'info'|'warn'|'error'|'fatal';
   message:      string;     // single-line, up to ~8000 chars
@@ -91,7 +91,7 @@ gate on top.
 **Source naming** — convention is `<facility>:<name>`:
 - `journald:<unit>` — systemd journal (e.g. `journald:cloudflared`, `journald:ssh`)
 - `docker:<container-name>` — container stdout/stderr (e.g. `docker:home-ops-ingest-1`)
-- `agent:<name>` — agent self-logging (e.g. `agent:uwh-watcher`, `agent:gpu-scheduler`)
+- `agent:<name>` — agent self-logging (e.g. `agent:elitedesk-watcher`, `agent:gpu-scheduler`)
 - `app:<service>` — first-party app dual-writes (e.g. `app:stano-scraper`, `app:cv-generator`)
 
 **Well-known `data` keys** — agents normalize their source's fields
@@ -224,7 +224,7 @@ Anything not on this list is **not** a current scope concern.
 3. **"What happened at 14:32 when X broke?"** → time-range + host filter → expand row → use correlation keys (`pid`, `trace_id`) to find related events across sources.
 4. **"What's the queue doing?"** → Jobs view: queued/running/paused/done/failed counts + list. Inspect failed jobs' `last_error` and `payload`. Cancel mid-flight if needed.
 5. **"Is the stack itself healthy?"** → persistent indicator: ingest API health, per-host last-event lag (so dead agents are visible), disk pct.
-6. **"Are my hosts being used well?"** → metrics view: per-host CPU/mem/GPU over time, top-N process attribution, queries like "uwh weekly avg CPU" or "wfh idle-GPU hours when not gaming."
+6. **"Are my hosts being used well?"** → metrics view: per-host CPU/mem/GPU over time, top-N process attribution, queries like "elitedesk weekly avg CPU" or "win10 idle-GPU hours when not gaming."
 
 ## Future-facing — what home-ops potentially is
 
@@ -248,7 +248,7 @@ scope, but the design must not foreclose them:
   but for notes, ideas, lesson plans. Semantic search across
   "everything I've thought about" becomes a SQL query.
 - **Infrastructure optimization analytics**: `host_metrics` + `host_logs`
-  joins answer "is uwh underutilized? could it host more workloads?"
+  joins answer "is elitedesk underutilized? could it host more workloads?"
   or "what's the actual cost of running Ollama always-loaded?".
 
 Design implications:
@@ -280,10 +280,10 @@ Design implications:
 - **Stack survives Stano outages** — separate Postgres, separate
   process tree, separate UI. Only crossing point is `app:stano-scraper`
   events.
-- **Deploy via `git pull`** on uwh; no CI-driven deploy yet
+- **Deploy via `git pull`** on elitedesk; no CI-driven deploy yet
   (`~/.claude/plans/analyze-this-folder-and-curious-shamir.md` Q3).
 - **All migrations idempotent and tracked** via `schema_migrations`
-  table + `ops/uwh/apply-migrations.sh` (per Q20).
+  table + `ops/elitedesk/apply-migrations.sh` (per Q20).
 - **Mobile parity**: every desktop operation works on a 390-wide phone.
 
 ## Repos + canonical paths

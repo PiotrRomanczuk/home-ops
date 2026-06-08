@@ -2,7 +2,7 @@
 """planner-sync — pulls the Obsidian planner repo and syncs project state
 into Postgres via POST /api/projects/sync.
 
-Runs on uwh (where the planner bare repo lives anyway). Pulls every
+Runs on elitedesk (where the planner bare repo lives anyway). Pulls every
 SYNC_INTERVAL seconds, parses projects/*.md frontmatter + Now/Next/Later
 sections, POSTs the full set. The server-side handler upserts each row
 and deletes any slug missing from the payload, so vault deletes
@@ -11,7 +11,7 @@ propagate without a separate command.
 Env:
   INGEST_URL       (required) e.g. http://127.0.0.1:64421/api/ingest
   INGEST_TOKEN     (required) shared secret
-  HOST_NAME        defaults to 'uwh'
+  HOST_NAME        defaults to 'elitedesk'
   PLANNER_REMOTE   git URL to clone if PLANNER_DIR is missing
                    (e.g. file:///home/piotr/git/planner.git)
   PLANNER_DIR      local working clone, defaults to ~/planner-mirror
@@ -32,7 +32,7 @@ from typing import Any
 
 INGEST_URL = (os.environ.get('INGEST_URL') or '').rstrip('/')
 INGEST_TOKEN = os.environ.get('INGEST_TOKEN', '')
-HOST_NAME = os.environ.get('HOST_NAME', 'uwh')
+HOST_NAME = os.environ.get('HOST_NAME', 'elitedesk')
 PLANNER_REMOTE = os.environ.get('PLANNER_REMOTE', '')
 PLANNER_DIR = Path(os.environ.get('PLANNER_DIR') or (Path.home() / 'planner-mirror'))
 SYNC_INTERVAL = float(os.environ.get('SYNC_INTERVAL', '60'))

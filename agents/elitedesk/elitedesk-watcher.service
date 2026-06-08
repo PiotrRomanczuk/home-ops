@@ -1,11 +1,11 @@
 [Unit]
-Description=home-ops uwh watcher
+Description=home-ops elitedesk watcher
 After=network.target docker.service
 
 [Service]
 Type=simple
-EnvironmentFile=%h/.config/uwh-watcher.env
-ExecStart=/usr/bin/python3 %h/bin/uwh-watcher.py
+EnvironmentFile=%h/.config/elitedesk-watcher.env
+ExecStart=/usr/bin/python3 %h/bin/elitedesk-watcher.py
 Restart=on-failure
 RestartSec=5
 StandardOutput=journal

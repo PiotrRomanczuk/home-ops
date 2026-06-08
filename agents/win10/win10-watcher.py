@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""wfh-watcher — host metrics + GPU + Ollama state for the Windows GPU box.
+"""win10-watcher — host metrics + GPU + Ollama state for the Windows GPU box.
 
-Sibling of uwh-watcher (no journald / docker tailing on Windows). The
+Sibling of elitedesk-watcher (no journald / docker tailing on Windows). The
 ollama log tail is a separate process (ollama-watcher.py). This one is
-the wfh equivalent of uwh-watcher's metric_sampler_loop.
+the win10 equivalent of elitedesk-watcher's metric_sampler_loop.
 
 Env:
   INGEST_URL       (required) e.g. http://192.168.1.75:64421/api/ingest
   INGEST_TOKEN     (required) shared secret
-  HOST_NAME        defaults to 'wfh'
+  HOST_NAME        defaults to 'win10'
   METRIC_INTERVAL  seconds between samples (default 30)
   METRIC_DISK_PATH default 'C:\\'
   METRIC_TOP_N     top-N processes (default 10)
@@ -29,7 +29,7 @@ from typing import Any
 
 INGEST_URL = os.environ.get('INGEST_URL', '')
 INGEST_TOKEN = os.environ.get('INGEST_TOKEN', '')
-HOST_NAME = os.environ.get('HOST_NAME', 'wfh')
+HOST_NAME = os.environ.get('HOST_NAME', 'win10')
 METRIC_INTERVAL = float(os.environ.get('METRIC_INTERVAL', '30'))
 METRIC_URL = os.environ.get('METRIC_URL') or INGEST_URL.replace('/api/ingest', '/api/metrics')
 METRIC_DISK_PATH = os.environ.get('METRIC_DISK_PATH', 'C:\\')
@@ -163,11 +163,11 @@ def metric_sampler_loop() -> None:
 
 
 def main() -> None:
-    post_log('info', f'wfh-watcher up: interval={METRIC_INTERVAL}s gpu_ps1={GPU_PS1_PATH.name} ollama={OLLAMA_URL}')
+    post_log('info', f'win10-watcher up: interval={METRIC_INTERVAL}s gpu_ps1={GPU_PS1_PATH.name} ollama={OLLAMA_URL}')
     try:
         metric_sampler_loop()
     except KeyboardInterrupt:
-        post_log('info', 'wfh-watcher shutting down (SIGINT)')
+        post_log('info', 'win10-watcher shutting down (SIGINT)')
 
 
 if __name__ == '__main__':

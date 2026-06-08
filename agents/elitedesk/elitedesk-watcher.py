@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""uwh-watcher — tails journald units + named Docker container logs and
+"""elitedesk-watcher — tails journald units + named Docker container logs and
 posts structured events to the home-ops ingest API.
 
 Runs as a systemd --user service. Configurable via env:
   INGEST_URL       (required) e.g. http://192.168.1.75:64421/api/ingest
   INGEST_TOKEN     (required) shared secret
-  HOST_NAME        defaults to 'uwh'
+  HOST_NAME        defaults to 'elitedesk'
   WATCH_UNITS      comma-separated systemd units; default cloudflared,docker,ssh
   WATCH_CONTAINERS comma-separated docker container names; default supabase_db_stano,supabase_kong_stano,supabase_db_StudentManager
   BATCH_SECONDS    flush window; default 2
@@ -28,7 +28,7 @@ import urllib.error
 
 INGEST_URL = os.environ.get('INGEST_URL', '')
 INGEST_TOKEN = os.environ.get('INGEST_TOKEN', '')
-HOST_NAME = os.environ.get('HOST_NAME', 'uwh')
+HOST_NAME = os.environ.get('HOST_NAME', 'elitedesk')
 WATCH_UNITS = [u.strip() for u in os.environ.get('WATCH_UNITS', 'cloudflared,docker,ssh').split(',') if u.strip()]
 WATCH_CONTAINERS = [c.strip() for c in os.environ.get(
     'WATCH_CONTAINERS',
@@ -290,7 +290,7 @@ def main() -> None:
         t = threading.Thread(target=metric_sampler_loop, daemon=True, name='metrics')
         t.start(); threads.append(t)
     print(
-        f'uwh-watcher up: {len(WATCH_UNITS)} units, {len(WATCH_CONTAINERS)} containers, '
+        f'elitedesk-watcher up: {len(WATCH_UNITS)} units, {len(WATCH_CONTAINERS)} containers, '
         f'metrics={"on" if METRICS_ENABLED else "off"}',
         flush=True,
     )
