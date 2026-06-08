@@ -25,7 +25,7 @@ from typing import Any
 _here = Path(__file__).resolve().parent
 sys.path.insert(0, str(_here))
 sys.path.insert(0, str(_here.parent))
-from _common import IngestClient  # noqa: E402
+from _common import IngestClient, Shutdown  # noqa: E402
 
 HOST_NAME = os.environ.get('HOST_NAME', 'elitedesk')
 WATCH_UNITS = [u.strip() for u in os.environ.get('WATCH_UNITS', 'cloudflared,docker,ssh').split(',') if u.strip()]
@@ -44,6 +44,7 @@ METRIC_DISK_PATH = os.environ.get('METRIC_DISK_PATH', '/')
 METRIC_TOP_N = int(os.environ.get('METRIC_TOP_N', '10'))
 
 ic = IngestClient.from_env(host=HOST_NAME)
+shutdown = Shutdown()
 
 
 def level_from_priority(prio: str) -> str:
@@ -140,7 +141,7 @@ def follow_docker_container(name: str, out: queue.Queue[dict[str, Any]]) -> None
 def shipper(q: queue.Queue[dict[str, Any]]) -> None:
     buf: list[dict[str, Any]] = []
     last_flush = time.monotonic()
-    while True:
+    while not shutdown.is_set():
         timeout = max(0.05, BATCH_SECONDS - (time.monotonic() - last_flush))
         try:
             ev = q.get(timeout=timeout)
@@ -151,6 +152,17 @@ def shipper(q: queue.Queue[dict[str, Any]]) -> None:
             send(buf)
             buf = []
             last_flush = time.monotonic()
+    # Soft-drain on shutdown: pull whatever's left in the queue (with a cap)
+    # and ship as one final batch. 5s budget so a flood doesn't block exit.
+    drain_deadline = time.monotonic() + 5.0
+    while time.monotonic() < drain_deadline and len(buf) < BATCH_MAX:
+        try:
+            buf.append(q.get_nowait())
+        except queue.Empty:
+            break
+    if buf:
+        send(buf)
+    print(f'elitedesk-watcher: drained {len(buf)} events, exiting', file=sys.stderr)
 
 
 def send(events: list[dict[str, Any]]) -> None:
@@ -239,11 +251,16 @@ def metric_sampler_loop() -> None:
                 },
             }
             send_metric(metric)
-        except Exception as e:  # noqa: BLE001  — narrow in session 4 refactor
-            print(f'metric sample failed: {e}', file=sys.stderr)
+        except (psutil.Error, OSError, AttributeError, KeyError, ValueError) as e:
+            # Narrowed from `except Exception` — these are the realistic
+            # failure modes of a psutil sample tick. AttributeError/KeyError
+            # cover defensive paths when process_iter returns unexpected
+            # shapes (procs racing exit during enumeration).
+            print(f'metric sample failed ({type(e).__name__}): {e}', file=sys.stderr)
 
 
 def main() -> None:
+    shutdown.install()
     q: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=10_000)
     threads: list[threading.Thread] = []
     for unit in WATCH_UNITS:
@@ -255,12 +272,9 @@ def main() -> None:
     if METRICS_ENABLED:
         t = threading.Thread(target=metric_sampler_loop, daemon=True, name='metrics')
         t.start(); threads.append(t)
-    print(
-        f'elitedesk-watcher up: {len(WATCH_UNITS)} units, {len(WATCH_CONTAINERS)} containers, '
-        f'metrics={"on" if METRICS_ENABLED else "off"}',
-        flush=True,
-    )
+    ic.post_log('info', f'elitedesk-watcher up: {len(WATCH_UNITS)} units, {len(WATCH_CONTAINERS)} containers, metrics={METRICS_ENABLED}')
     shipper(q)
+    ic.post_log('info', 'elitedesk-watcher down')
 
 
 if __name__ == '__main__':
