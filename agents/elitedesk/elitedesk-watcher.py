@@ -13,21 +13,20 @@ Runs as a systemd --user service. Configurable via env:
 """
 from __future__ import annotations
 
-import json
 import os
 import queue
 import subprocess
 import sys
 import threading
 import time
+from pathlib import Path
 from typing import Any
 
-import urllib.request
-import urllib.error
+_here = Path(__file__).resolve().parent
+sys.path.insert(0, str(_here))
+sys.path.insert(0, str(_here.parent))
+from _common import IngestClient  # noqa: E402
 
-
-INGEST_URL = os.environ.get('INGEST_URL', '')
-INGEST_TOKEN = os.environ.get('INGEST_TOKEN', '')
 HOST_NAME = os.environ.get('HOST_NAME', 'elitedesk')
 WATCH_UNITS = [u.strip() for u in os.environ.get('WATCH_UNITS', 'cloudflared,docker,ssh').split(',') if u.strip()]
 WATCH_CONTAINERS = [c.strip() for c in os.environ.get(
@@ -41,14 +40,10 @@ BATCH_MAX = int(os.environ.get('BATCH_MAX', '100'))
 # Disabled at the source if psutil isn't installed; falling back to log-only is fine.
 METRICS_ENABLED = os.environ.get('METRICS_ENABLED', '1') not in ('0', 'false', 'no', '')
 METRIC_INTERVAL = float(os.environ.get('METRIC_INTERVAL', '30'))
-METRIC_URL = os.environ.get('METRIC_URL') or INGEST_URL.replace('/api/ingest', '/api/metrics')
 METRIC_DISK_PATH = os.environ.get('METRIC_DISK_PATH', '/')
 METRIC_TOP_N = int(os.environ.get('METRIC_TOP_N', '10'))
 
-
-if not INGEST_URL or not INGEST_TOKEN:
-    print('INGEST_URL and INGEST_TOKEN required', file=sys.stderr)
-    sys.exit(1)
+ic = IngestClient.from_env(host=HOST_NAME)
 
 
 def level_from_priority(prio: str) -> str:
@@ -159,23 +154,7 @@ def shipper(q: queue.Queue[dict[str, Any]]) -> None:
 
 
 def send(events: list[dict[str, Any]]) -> None:
-    body = json.dumps({'events': events}).encode()
-    req = urllib.request.Request(
-        INGEST_URL,
-        data=body,
-        method='POST',
-        headers={'Content-Type': 'application/json', 'X-Ingest-Token': INGEST_TOKEN},
-    )
-    for attempt in range(3):
-        try:
-            with urllib.request.urlopen(req, timeout=5) as r:
-                if 200 <= r.status < 300:
-                    return
-                print(f'ingest non-2xx: {r.status}', file=sys.stderr)
-        except urllib.error.URLError as e:
-            print(f'ingest attempt {attempt + 1} failed: {e}', file=sys.stderr)
-        time.sleep(1 + attempt)
-    print(f'dropped {len(events)} events after 3 retries', file=sys.stderr)
+    ic.post_events(events)
 
 
 # ── metric sampler ────────────────────────────────────────────────────
@@ -189,20 +168,7 @@ def send(events: list[dict[str, Any]]) -> None:
 # logs an error once and exits — log shipping continues unaffected.
 
 def send_metric(metric: dict[str, Any]) -> None:
-    body = json.dumps(metric).encode()
-    req = urllib.request.Request(
-        METRIC_URL,
-        data=body,
-        method='POST',
-        headers={'Content-Type': 'application/json', 'X-Ingest-Token': INGEST_TOKEN},
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=5) as r:
-            if 200 <= r.status < 300:
-                return
-            print(f'metrics non-2xx: {r.status}', file=sys.stderr)
-    except urllib.error.URLError as e:
-        print(f'metrics POST failed: {e}', file=sys.stderr)
+    ic.post_metrics(metric)
 
 
 def metric_sampler_loop() -> None:
