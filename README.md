@@ -126,6 +126,7 @@ every 60 s; alerts on 2 consecutive failures. To configure:
 
 ## Related
 
+- `mcp/README.md` — MCP server for Claude Desktop / Claude Code. Lets an LLM client read home-ops state and submit jobs to the local qwen3 queue via MCP tools.
 - `docs/ARCHITECTURE.md` — high-level diagram of what runs where and how the pieces wire together. Renders on GitHub.
 - `docs/CONTEXT.md` — **read this first** when starting any work on home-ops. Project identity, data model, well-known `data` keys, use cases, future direction.
 - `docs/DESIGN_BRIEF.md` — UI design brief (for Phase C standalone viewer).
