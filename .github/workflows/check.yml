@@ -51,7 +51,8 @@ jobs:
             scheduler/jobs/embed.py \
             scheduler/jobs/generate.py \
             scheduler/jobs/summarise.py \
-            clients/python/home_ops_log.py
+            clients/python/home_ops_log.py \
+            clients/python/rhcsa_log.py
 
   clients-node:
     name: clients/node (syntax)

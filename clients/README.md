@@ -11,9 +11,10 @@ vendor by copying, no install step.
 
 The whole point: surface project lifecycle and errors in the home-ops console
 (Logs tab, Projects drill page) so cross-pillar correlation actually has
-data flowing. Right now `app:<slug>` is documented as the join key between
-`projects` and `host_logs`, but no project emits to it. These clients fix
-that.
+data flowing. `app:<slug>` is documented as the join key between
+`projects` and `host_logs`. The first real emitter is `python/rhcsa_log.py`
+(source `app:rhcsa`); the rest of the projects are still to be wired
+(see Sprinkle targets).
 
 ## Surfaces
 
@@ -91,6 +92,38 @@ recoverable when home-ops is down for whatever reason.
 - Don't emit secrets in `data`. The console renders the jsonb verbatim.
 - Don't emit huge blobs. The server caps `message` at 8k chars; keep
   `data` under a few KB.
+
+## `app:rhcsa` — study logger (first consumer)
+
+`python/rhcsa_log.py` is a runnable CLI built on `home_ops_log.py`. It's
+the reference example of `app:<slug>` in action — emitting RHCSA (EX200)
+study events so sessions, exercise attempts and timed sims land in the
+console under `source = app:rhcsa` and (later) feed the `rhcsa_progress`
+dashboard. See `~/Obsidian/MainCV-Planner/RHCSA-EX200/`.
+
+```bash
+export INGEST_URL=http://192.168.1.75:64421/api/ingest   # LAN; or the tailnet host off-LAN
+export INGEST_TOKEN=<same secret the watchers use>
+
+python3 clients/python/rhcsa_log.py start "shell + pipes drill" --week 1
+python3 clients/python/rhcsa_log.py exercise 1 --minutes 4.2 --week 1   # passes unless --fail
+python3 clients/python/rhcsa_log.py exercise 8 --fail --note "fcontext vs restorecon"
+python3 clients/python/rhcsa_log.py sim --minutes 142 --score 240       # /300
+python3 clients/python/rhcsa_log.py weak "autofs idle-unmount timeout"
+python3 clients/python/rhcsa_log.py done --minutes 95
+```
+
+Suggested shell alias so it's one word during study:
+
+```bash
+alias rhcsa-log='INGEST_URL=http://192.168.1.75:64421/api/ingest \
+  INGEST_TOKEN=<secret> python3 ~/Desktop/MainCV/home-ops/clients/python/rhcsa_log.py'
+```
+
+Events use the well-known `duration_ms` key (from `--minutes`); exercise
+passes are `info`, fails/weak points are `warn`, so they surface under a
+level-`≥warn` filter. Best-effort: with no token set it just prints the
+local confirmation and emits nothing — handy as an offline log.
 
 ## Sprinkle targets
 
