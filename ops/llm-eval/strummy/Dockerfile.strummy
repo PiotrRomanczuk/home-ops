@@ -1,0 +1,24 @@
+# strummy-eval — snapshot of the guitar-crm repo (source only) with deps + aider,
+# for reconstruction-to-green eval tasks. Tests are hermetic (jest.setup mocks
+# Supabase/env/fetch), so NO real secrets or network are needed or baked in.
+# Build context must contain repo/ (rsynced source, minus node_modules/.git/.env*).
+FROM node:22-bookworm-slim
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends git python3 python3-pip \
+ && rm -rf /var/lib/apt/lists/*
+RUN pip install --no-cache-dir --break-system-packages aider-chat
+
+WORKDIR /app
+ENV HUSKY=0 NEXT_TELEMETRY_DISABLED=1 CI=true
+COPY repo/ /app/
+RUN npm ci
+
+# Test env only — dummy values; jest.setup.js also auto-fills these.
+ENV NEXT_PUBLIC_SUPABASE_URL=https://example.supabase.co \
+    NEXT_PUBLIC_SUPABASE_ANON_KEY=test-anon-key \
+    SUPABASE_SERVICE_ROLE_KEY=test-service-role-key
+
+COPY strummy-entry.sh /usr/local/bin/entry.sh
+RUN chmod +x /usr/local/bin/entry.sh
+ENTRYPOINT ["entry.sh"]
