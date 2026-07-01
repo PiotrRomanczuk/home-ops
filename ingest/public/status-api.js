@@ -33,11 +33,13 @@ const Status = {
     return Math.max(0, Math.round((nowMs - +new Date(ts)) / 1000));
   },
 
-  // 'good' | 'warn' | 'stale' — worst of event-lag and metric-lag
+  // 'good' | 'warn' | 'stale' | 'noagent'. Hosts that only emit app:*
+  // events but run no watcher agent (no metrics at all) are 'noagent' —
+  // shown neutrally, never counted as dead in the banner.
   hostHealth(row) {
     const m = this.lagSec(row.last_metric_ts);
+    if (m == null) return 'noagent';
     // metrics sample every 30s: <=90s good, <=5m warn, else stale
-    if (m == null) return 'stale';
     return m <= 90 ? 'good' : m <= 300 ? 'warn' : 'stale';
   },
 

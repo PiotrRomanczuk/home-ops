@@ -45,6 +45,8 @@
 .st-eh { color: var(--accent); min-width: 52px; }
 .st-em { color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+.hd.noagent { background: var(--border); box-shadow: none; }
+
 .st-meta { font-size: 10px; color: var(--fg-muted); text-align: center; padding-top: 2px; }
 
 @media (min-width: 720px) {
