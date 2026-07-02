@@ -1,0 +1,16 @@
+[Unit]
+Description=home-ops local-LLM eval tick (coding via aider sandbox + soft tasks via gpu_jobs)
+After=docker.service network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=%h/.config/home-ops/llm-eval.env
+ExecStart=/usr/bin/python3 %h/bin/eval-tick.py
+# A full tick is ~N_tasks x TASK_TIMEOUT plus judging; hard-cap well below the
+# 6h timer period so overlapping ticks are impossible.
+TimeoutStartSec=2h
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target
