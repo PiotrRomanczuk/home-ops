@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import signal
 import sys
 import threading
@@ -25,6 +26,15 @@ import time
 import urllib.error
 import urllib.request
 from typing import Any, Callable, Sequence
+
+# Matches CSI ANSI escape sequences (colors, cursor moves) that terminal-aware
+# loggers (e.g. Hono's request logger) emit even when stdout isn't a TTY —
+# docker captures them as literal bytes, so they land verbatim in log messages.
+_ANSI_RE = re.compile(r'\x1b\[[0-9;]*[a-zA-Z]')
+
+
+def strip_ansi(s: str) -> str:
+    return _ANSI_RE.sub('', s)
 
 
 # ── shutdown coordination ─────────────────────────────────────────────
