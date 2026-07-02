@@ -1,23 +1,35 @@
 #!/usr/bin/env python3
-"""rpi-watcher — host metrics + SoC temp for the Pi monitoring box.
+"""rpi-watcher — host metrics + SoC temp + log shipping for the Pi monitoring box.
 
 Sibling of elitedesk-watcher and win10-watcher. No GPU (Pi 5 has only a small
 VideoCore — no separate sampling). Pi's CPU/SoC temperature lands in
 data.cpu_temp_c rather than gpu_temp_c — the schema column is GPU-specific.
 
+Log shipping (same follower/shipper pattern as elitedesk-watcher):
+  - docker container stdout/stderr for WATCH_CONTAINERS → source docker:<name>
+  - journald at warning-or-worse across all units → source journald:<unit>
+
 Env:
-  INGEST_URL       (required) e.g. http://192.168.1.75:64421/api/ingest
-  INGEST_TOKEN     (required) shared secret
-  HOST_NAME        defaults to 'rpi'
-  METRIC_INTERVAL  seconds between samples (default 30)
-  METRIC_DISK_PATH default '/'
-  METRIC_TOP_N     top-N processes (default 10)
-  TEMP_PATH        thermal zone file (default /sys/class/thermal/thermal_zone0/temp)
+  INGEST_URL        (required) e.g. http://192.168.1.75:64421/api/ingest
+  INGEST_TOKEN      (required) shared secret
+  HOST_NAME         defaults to 'rpi'
+  METRIC_INTERVAL   seconds between samples (default 30)
+  METRIC_DISK_PATH  default '/'
+  METRIC_TOP_N      top-N processes (default 10)
+  TEMP_PATH         thermal zone file (default /sys/class/thermal/thermal_zone0/temp)
+  WATCH_CONTAINERS  comma-separated; default uptime-kuma,beszel,homeassistant
+  JOURNAL_PRIORITY  journald -p threshold (default 4 = warning)
+  BATCH_MAX         shipper batch size (default 100)
+  BATCH_SECONDS     shipper flush interval (default 3)
 """
 from __future__ import annotations
 
+import json
 import os
+import queue
+import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -35,6 +47,11 @@ METRIC_INTERVAL = float(os.environ.get('METRIC_INTERVAL', '30'))
 METRIC_DISK_PATH = os.environ.get('METRIC_DISK_PATH', '/')
 METRIC_TOP_N = int(os.environ.get('METRIC_TOP_N', '10'))
 TEMP_PATH = Path(os.environ.get('TEMP_PATH', '/sys/class/thermal/thermal_zone0/temp'))
+WATCH_CONTAINERS = [c.strip() for c in os.environ.get(
+    'WATCH_CONTAINERS', 'uptime-kuma,beszel,homeassistant').split(',') if c.strip()]
+JOURNAL_PRIORITY = os.environ.get('JOURNAL_PRIORITY', '4')
+BATCH_MAX = int(os.environ.get('BATCH_MAX', '100'))
+BATCH_SECONDS = float(os.environ.get('BATCH_SECONDS', '3'))
 
 ic = IngestClient.from_env(host=HOST_NAME)
 shutdown = Shutdown()
@@ -46,6 +63,121 @@ def post_log(level: str, message: str, data: dict[str, Any] | None = None) -> No
 
 def send_metric(metric: dict[str, Any]) -> None:
     ic.post_metrics(metric)
+
+
+def level_from_priority(prio: str) -> str:
+    try:
+        p = int(prio)
+    except (TypeError, ValueError):
+        return 'info'
+    if p <= 2:
+        return 'fatal'
+    if p == 3:
+        return 'error'
+    if p == 4:
+        return 'warn'
+    return 'info'
+
+
+def make_event(source: str, level: str, message: str,
+               data: dict[str, Any] | None = None, ts: str | None = None) -> dict[str, Any]:
+    e: dict[str, Any] = {'host': HOST_NAME, 'source': source, 'level': level, 'message': message[:8000]}
+    if data:
+        e['data'] = data
+    if ts:
+        e['ts'] = ts
+    return e
+
+
+def follow_docker_container(name: str, out: queue.Queue[dict[str, Any]]) -> None:
+    """Tail one container's stdout/stderr. Restarts on crash / container churn."""
+    while not shutdown.is_set():
+        cmd = ['docker', 'logs', '-f', '--since', '1s', '--tail', '0', name]
+        try:
+            p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        except FileNotFoundError:
+            print('docker not found, sleeping then retrying', file=sys.stderr)
+            time.sleep(30)
+            continue
+        assert p.stdout is not None
+        for line in p.stdout:
+            line = line.rstrip()
+            if not line:
+                continue
+            lower = line.lower()
+            if any(k in lower for k in ('error', 'fatal', 'panic')):
+                lvl = 'error'
+            elif 'warn' in lower:
+                lvl = 'warn'
+            else:
+                lvl = 'info'
+            out.put(make_event(f'docker:{name}', lvl, line))
+        p.wait()
+        time.sleep(3)
+
+
+def follow_journald_errors(out: queue.Queue[dict[str, Any]]) -> None:
+    """Tail journald across ALL units at warning-or-worse ("syslog errors")."""
+    while not shutdown.is_set():
+        cmd = ['journalctl', '-f', '-o', 'json', '-n', '0', '-p', JOURNAL_PRIORITY]
+        try:
+            p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+        except FileNotFoundError:
+            print('journalctl not found, sleeping then retrying', file=sys.stderr)
+            time.sleep(30)
+            continue
+        assert p.stdout is not None
+        for line in p.stdout:
+            try:
+                rec = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            msg = rec.get('MESSAGE') or ''
+            if isinstance(msg, list):
+                msg = ' '.join(str(x) for x in msg)
+            unit = rec.get('_SYSTEMD_UNIT') or rec.get('SYSLOG_IDENTIFIER') or 'syslog'
+            ts_micro = rec.get('__REALTIME_TIMESTAMP')
+            ts_iso = None
+            if ts_micro:
+                try:
+                    ts_iso = time.strftime('%Y-%m-%dT%H:%M:%S', time.gmtime(int(ts_micro) / 1_000_000)) + 'Z'
+                except ValueError:
+                    pass
+            data = {k.lstrip('_').lower(): v for k, v in rec.items() if k in {
+                'PRIORITY', 'SYSLOG_IDENTIFIER', '_PID', '_COMM', '_SYSTEMD_UNIT',
+            }}
+            out.put(make_event(
+                f'journald:{unit}',
+                level_from_priority(rec.get('PRIORITY', '6')),
+                str(msg), data, ts_iso,
+            ))
+        p.wait()
+        time.sleep(3)
+
+
+def shipper(q: queue.Queue[dict[str, Any]]) -> None:
+    """Batch events off the queue and POST. Soft-drains (5s cap) on shutdown."""
+    buf: list[dict[str, Any]] = []
+    last_flush = time.monotonic()
+    while not shutdown.is_set():
+        timeout = max(0.05, BATCH_SECONDS - (time.monotonic() - last_flush))
+        try:
+            buf.append(q.get(timeout=timeout))
+        except queue.Empty:
+            pass
+        if buf and (len(buf) >= BATCH_MAX or time.monotonic() - last_flush >= BATCH_SECONDS):
+            ic.post_events(buf)
+            buf = []
+            last_flush = time.monotonic()
+    drain_deadline = time.monotonic() + 5.0
+    while time.monotonic() < drain_deadline and len(buf) < BATCH_MAX:
+        try:
+            buf.append(q.get_nowait())
+        except queue.Empty:
+            break
+    if buf:
+        ic.post_events(buf)
+    print(f'rpi-watcher: drained {len(buf)} events, exiting', file=sys.stderr)
 
 
 def read_soc_temp_c() -> float | None:
@@ -124,8 +256,18 @@ def metric_sampler_loop() -> None:
 
 def main() -> None:
     shutdown.install()
-    post_log('info', f'rpi-watcher up: interval={METRIC_INTERVAL}s temp_path={TEMP_PATH}')
+    q: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=10_000)
+    for name in WATCH_CONTAINERS:
+        threading.Thread(target=follow_docker_container, args=(name, q), daemon=True).start()
+    threading.Thread(target=follow_journald_errors, args=(q,), daemon=True).start()
+    ship = threading.Thread(target=shipper, args=(q,))
+    ship.start()
+    post_log('info', (
+        f'rpi-watcher up: interval={METRIC_INTERVAL}s temp_path={TEMP_PATH} '
+        f'containers={",".join(WATCH_CONTAINERS)} journal_p={JOURNAL_PRIORITY}'
+    ))
     metric_sampler_loop()
+    ship.join(timeout=8)
     post_log('info', 'rpi-watcher down (signal)')
 
 
