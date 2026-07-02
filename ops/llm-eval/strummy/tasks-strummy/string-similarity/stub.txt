@@ -1,0 +1,7 @@
+/**
+ * String similarity using Levenshtein distance.
+ * Returns a score from 0 (completely different) to 100 (identical after normalization).
+ */
+export function calculateSimilarity(str1: string, str2: string): number {
+  throw new Error('not implemented');
+}
