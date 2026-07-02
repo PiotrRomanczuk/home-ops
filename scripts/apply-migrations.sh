@@ -11,13 +11,13 @@
 # Env (optional):
 #   CONTAINER  postgres container name; default 'home-ops-postgres-1'
 #   DB         database name; default 'home_ops'
-#   USER       postgres role;  default 'postgres'
+#   DB_USER    postgres role;  default 'postgres'
 
 set -euo pipefail
 
 CONTAINER="${CONTAINER:-home-ops-postgres-1}"
 DB="${DB:-home_ops}"
-USER="${USER:-postgres}"
+DB_USER="${DB_USER:-postgres}"
 
 cd "$(dirname "$0")/.."
 MIGRATIONS_DIR="$(pwd)/postgres/migrations"
@@ -28,7 +28,7 @@ if [ ! -d "$MIGRATIONS_DIR" ]; then
 fi
 
 PSQL() {
-  docker exec -i "$CONTAINER" psql -U "$USER" -d "$DB" -v ON_ERROR_STOP=1 "$@"
+  docker exec -i "$CONTAINER" psql -U "$DB_USER" -d "$DB" -v ON_ERROR_STOP=1 "$@"
 }
 
 # 1. Ensure the tracking table exists. Idempotent.
