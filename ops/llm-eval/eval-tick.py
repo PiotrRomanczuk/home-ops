@@ -191,8 +191,10 @@ def main() -> None:
     graded = grade_pending()
     last = psql('SELECT coalesce(max(id), 0) FROM eval_runs')
     model = MODELS[int(last) % len(MODELS)]
+    # -tA still prints the "INSERT 0 1" command tag after the RETURNING row.
     run_id = int(psql(
-        f"INSERT INTO eval_runs (model_focus, note) VALUES ('{q(model)}', 'tick') RETURNING id"))
+        f"INSERT INTO eval_runs (model_focus, note) VALUES ('{q(model)}', 'tick') RETURNING id"
+    ).splitlines()[0])
     log('info', f'eval tick start: run={run_id} focus={model} graded_prev={graded}')
     coded = run_coding(run_id, model)
     submit_soft(run_id, model)
