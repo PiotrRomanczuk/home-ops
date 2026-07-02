@@ -113,12 +113,14 @@ window.LV_ORDER = LV_ORDER;
    CHROME (top tab strip)
    ============================================================ */
 const TABS = [
-  { id: 'chat',     label: 'Chat',     key: '1', ico: icoChat },
-  { id: 'projects', label: 'Projects', key: '2', ico: icoProj },
-  { id: 'logs',     label: 'Logs',     key: '3', ico: icoLogs },
-  { id: 'hosts',    label: 'Hosts',    key: '4', ico: icoHosts },
+  { id: 'status',   label: 'Status',   key: '1', ico: icoStatus },
+  { id: 'chat',     label: 'Chat',     key: '2', ico: icoChat },
+  { id: 'projects', label: 'Projects', key: '3', ico: icoProj },
+  { id: 'logs',     label: 'Logs',     key: '4', ico: icoLogs },
+  { id: 'hosts',    label: 'Hosts',    key: '5', ico: icoHosts },
 ];
 function icon(p) { return `<svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`; }
+function icoStatus() { return icon('<circle cx="8" cy="8" r="5.5"/><path d="M5 8.3l2 2 4-4.5"/>'); }
 function icoChat()  { return icon('<path d="M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z"/>'); }
 function icoProj()  { return icon('<rect x="2.5" y="2.5" width="4.5" height="4.5"/><rect x="9" y="2.5" width="4.5" height="4.5"/><rect x="2.5" y="9" width="4.5" height="4.5"/><rect x="9" y="9" width="4.5" height="4.5"/>'); }
 function icoLogs()  { return icon('<path d="M3 4h10M3 7h10M3 10h7M3 13h4"/>'); }
@@ -138,7 +140,7 @@ function renderChrome() {
     title: `${t.label}  (press ${t.key})`,
   },
     h('span', { class: 'ico', html: t.ico() }),
-    t.label,
+    h('span', { class: 'label-hide' }, t.label),
     counts[t.id] ? h('span', { class: 'ct num' }, String(counts[t.id])) : null,
   ));
 
@@ -247,7 +249,7 @@ document.addEventListener('keydown', (e) => {
   const typing = /^(INPUT|TEXTAREA)$/.test(document.activeElement?.tagName) || document.activeElement?.isContentEditable;
   if (typing) return;
   const st = getState();
-  if (e.key >= '1' && e.key <= '4' && !e.metaKey && !e.ctrlKey) {
+  if (e.key >= '1' && e.key <= '5' && !e.metaKey && !e.ctrlKey) {
     const t = TABS[+e.key - 1]; if (t) { setState({ tab: t.id, conv: null, slug: null }); e.preventDefault(); }
   } else if (e.key === 'c') { openCapture(); e.preventDefault(); }
   else if (e.key === 't') { toggleTimeMode(); }
@@ -257,6 +259,8 @@ document.addEventListener('keydown', (e) => {
 
 /* boot */
 window.addEventListener('DOMContentLoaded', () => {
-  if (!location.hash) history.replaceState(null, '', '#tab=chat');
+  // Phones land on the glanceable Status dashboard; desktop keeps Chat.
+  const defaultTab = window.matchMedia('(max-width: 720px)').matches ? 'status' : 'chat';
+  if (!location.hash) history.replaceState(null, '', '#tab=' + defaultTab);
   render();
 });
