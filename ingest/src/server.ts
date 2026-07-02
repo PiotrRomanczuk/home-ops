@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import { logger } from 'hono/logger';
 import { env } from './env.ts';
 import { registerAuthRoutes } from './routes/auth.ts';
+import { registerEvalsRoutes } from './routes/evals.ts';
 import { registerHealthRoutes } from './routes/health.ts';
 import { registerIngestRoutes } from './routes/ingest.ts';
 import { registerJobsRoutes } from './routes/jobs.ts';
@@ -24,6 +25,7 @@ registerMetricsRoutes(app);
 registerLogsRoutes(app);
 registerJobsRoutes(app);
 registerProjectsRoutes(app);
+registerEvalsRoutes(app);
 registerStatusRoutes(app);
 registerAuthRoutes(app);
 

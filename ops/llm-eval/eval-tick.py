@@ -140,17 +140,41 @@ def grade_pending() -> int:
     return graded
 
 
+def task_gate(name: str, kind: str) -> tuple[str, int]:
+    """Upsert this task's board card (eval_tasks) and return (stage, timeout_s).
+
+    The Evals board is authoritative: callers must only run stages
+    'testing'/'active'. Unknown dirs auto-register as 'testing' so new task
+    dirs always surface on the board. Also refreshes has_files, since only
+    this process can see ~/llm-eval on the host filesystem.
+    """
+    row = psql(f"""
+        INSERT INTO eval_tasks (name, kind, stage, has_files, files_seen_at)
+        VALUES ('{q(name)}', '{q(kind)}', 'testing', true, now())
+        ON CONFLICT (name) DO UPDATE SET has_files = true, files_seen_at = now()
+        RETURNING stage || '|' || coalesce(timeout_s::text, '')""").splitlines()[0]
+    stage, _, timeout = row.partition('|')
+    return stage.strip(), int(timeout) if timeout.strip() else TASK_TIMEOUT
+
+
+RUNNABLE_STAGES = ('testing', 'active')
+
+
 def run_coding(run_id: int, model: str) -> int:
     runner = EVAL_HOME / 'run-coding-task.sh'
     done = 0
     for task_dir in sorted((EVAL_HOME / 'tasks').iterdir()):
         if not (task_dir / 'PROMPT.md').exists():
             continue
+        stage, timeout_s = task_gate(task_dir.name, 'python')
+        if stage not in RUNNABLE_STAGES:
+            log('info', f'coding task {task_dir.name} skipped (stage={stage})')
+            continue
         try:
             r = subprocess.run(
                 [str(runner), str(task_dir), model],
-                capture_output=True, text=True, timeout=TASK_TIMEOUT + 120,
-                env={**os.environ, 'OLLAMA_URL': OLLAMA_URL, 'TASK_TIMEOUT': str(TASK_TIMEOUT)})
+                capture_output=True, text=True, timeout=timeout_s + 120,
+                env={**os.environ, 'OLLAMA_URL': OLLAMA_URL, 'TASK_TIMEOUT': str(timeout_s)})
             out = json.loads(r.stdout.strip().splitlines()[-1])
         except (subprocess.TimeoutExpired, json.JSONDecodeError, IndexError, OSError) as e:
             log('error', f'coding task {task_dir.name} runner failed: {e}')
@@ -186,9 +210,26 @@ def submit_soft(run_id: int, model: str) -> None:
             'eval_run_id': run_id, 'task_kind': 'summarise'}})
 
 
+def register_strummy_cards() -> None:
+    """Keep board cards fresh for strummy task dirs.
+
+    The strummy runner is not wired into the tick yet (separate work in
+    flight); registering here means the cards still show up on the Evals
+    board with has_files maintained. When strummy execution lands, it
+    should call task_gate() per task like run_coding does.
+    """
+    strummy_tasks = EVAL_HOME / 'strummy' / 'tasks-strummy'
+    if not strummy_tasks.is_dir():
+        return
+    for task_dir in sorted(strummy_tasks.iterdir()):
+        if (task_dir / 'PROMPT.md').exists():
+            task_gate(task_dir.name, 'strummy')
+
+
 def main() -> None:
     t0 = time.monotonic()
     graded = grade_pending()
+    register_strummy_cards()
     last = psql('SELECT coalesce(max(id), 0) FROM eval_runs')
     model = MODELS[int(last) % len(MODELS)]
     # -tA still prints the "INSERT 0 1" command tag after the RETURNING row.
