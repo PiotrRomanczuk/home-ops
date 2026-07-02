@@ -57,7 +57,7 @@ function parseTs(t) {
   return new Date(t);
 }
 function rel(t) {
-  const d = parseTs(t), s = Math.round((DB.NOW - d) / 1000);
+  const d = parseTs(t), s = Math.round((Date.now() - d) / 1000);
   if (s < 0) return 'now';
   if (s < 60) return s + 's ago';
   const m = Math.round(s / 60); if (m < 60) return m + 'm ago';
@@ -65,7 +65,7 @@ function rel(t) {
   return Math.round(hr / 24) + 'd ago';
 }
 function relShort(t) {
-  const d = parseTs(t), s = Math.round((DB.NOW - d) / 1000);
+  const d = parseTs(t), s = Math.round((Date.now() - d) / 1000);
   if (s < 60) return s + 's';
   const m = Math.round(s / 60); if (m < 60) return m + 'm';
   const hr = Math.round(m / 60); if (hr < 24) return hr + 'h';

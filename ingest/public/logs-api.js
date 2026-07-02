@@ -64,9 +64,6 @@ const Logs = {
       this.rows = (r.rows || []).map(mapLogRow);
       this.latestId = r.latest_id || (this.rows[0]?.id ?? 0);
       this.loaded = true;
-      // Sync the global now-anchor so relative times in the table read against
-      // wall-clock now, not the data.js mock anchor.
-      if (window.DB) DB.NOW = new Date();
     } catch (e) {
       this.err = e.message;
     } finally {

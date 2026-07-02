@@ -25,7 +25,7 @@ from typing import Any
 _here = Path(__file__).resolve().parent
 sys.path.insert(0, str(_here))
 sys.path.insert(0, str(_here.parent))
-from _common import IngestClient, Shutdown  # noqa: E402
+from _common import IngestClient, Shutdown, strip_ansi  # noqa: E402
 
 HOST_NAME = os.environ.get('HOST_NAME', 'elitedesk')
 WATCH_UNITS = [u.strip() for u in os.environ.get('WATCH_UNITS', 'cloudflared,docker,ssh').split(',') if u.strip()]
@@ -122,7 +122,7 @@ def follow_docker_container(name: str, out: queue.Queue[dict[str, Any]]) -> None
             time.sleep(30); continue
         assert p.stdout is not None
         for line in p.stdout:
-            line = line.rstrip()
+            line = strip_ansi(line.rstrip())
             if not line: continue
             lower = line.lower()
             if any(k in lower for k in ('error', 'fatal', 'panic')):
