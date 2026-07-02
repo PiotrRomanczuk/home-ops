@@ -18,6 +18,11 @@ Tools:
   get_project           — single project with Now/Next/Later markdown
   get_host_metrics      — latest metric sample(s) for hosts
   models_loaded         — what's resident in win10 VRAM right now
+  list_eval_tasks       — Evals board: cards + pass-rate stats per task
+  create_eval_task      — add an 'idea' card to the board
+  set_eval_task_stage   — move a card (controls what the 6h eval tick runs)
+  update_eval_task      — edit a card's notes / timeout override
+  get_eval_task_scores  — recent per-run results for one task
 
 Env:
   INGEST_URL    e.g. http://elitedesk.tail266853.ts.net:64421/api/ingest
@@ -338,6 +343,171 @@ def models_loaded() -> str:
             "gpu_mem_pct": rows[0].get("gpu_mem_pct"),
             "gpu_temp_c": rows[0].get("gpu_temp_c"),
             "ts": rows[0].get("ts"),
+        }
+    )
+
+
+# ── eval board tools ─────────────────────────────────────────────
+#
+# The Evals board (eval_tasks table, Evals tab in the viewer) manages the
+# lifecycle of local-LLM eval tasks: idea → building → testing → active →
+# paused → retired. The board is AUTHORITATIVE — the 6-hourly eval tick
+# runs only tasks whose stage is 'testing' or 'active'. Creating a card
+# does NOT create task files on disk (that stays manual / Claude-assisted
+# on elitedesk under ~/llm-eval); `has_files` shows whether eval-tick has
+# seen the task's directory.
+
+EVAL_STAGES = ("idea", "building", "testing", "active", "paused", "retired")
+
+
+def _resolve_eval_task(task: str) -> tuple[dict | None, str | None]:
+    """Find a board card by name or numeric id. Returns (card, error)."""
+    code, body = _request("GET", "/api/eval_tasks")
+    if code != 200 or not body:
+        return None, f"HTTP {code}"
+    cards = body.get("tasks") or []
+    key = task.strip()
+    if key.isdigit():
+        hit = next((t for t in cards if t.get("id") == int(key)), None)
+    else:
+        hit = next((t for t in cards if t.get("name") == key), None)
+    if not hit:
+        known = ", ".join(t.get("name", "?") for t in cards)
+        return None, f"no eval task matching {task!r} (known: {known})"
+    return hit, None
+
+
+@mcp.tool()
+def list_eval_tasks(stage: str | None = None, kind: str | None = None) -> str:
+    """List the Evals board: eval-task cards with lifecycle stage + result stats.
+
+    Stages: idea | building | testing | active | paused | retired.
+    Only 'testing' and 'active' run in the 6-hourly eval tick — the board
+    gates the tick, so this is the source of truth for the benchmark suite.
+
+    Args:
+      stage: filter to one stage (None = whole board)
+      kind: 'python' (pytest sandbox tasks) | 'strummy' (guitar-crm
+            reconstruction tasks) | None (all)
+
+    Returns JSON: { tasks: [{id, name, kind, stage, notes, timeout_s,
+      has_files, n_runs, n_passed, avg_iterations, last_passed, last_model,
+      last_scored_at, ...}] }. has_files=false on a testing/active card
+    means eval-tick can't find its directory — it will be skipped in
+    practice and needs files created under ~/llm-eval on elitedesk.
+    """
+    code, body = _request("GET", "/api/eval_tasks")
+    if code != 200 or not body:
+        return json.dumps({"error": f"HTTP {code}", "body": body})
+    cards = body.get("tasks") or []
+    if stage:
+        cards = [t for t in cards if t.get("stage") == stage]
+    if kind:
+        cards = [t for t in cards if t.get("kind") == kind]
+    return json.dumps({"tasks": cards})
+
+
+@mcp.tool()
+def create_eval_task(name: str, kind: str = "python", notes: str | None = None) -> str:
+    """Add a new eval-task idea card to the Evals board (stage='idea').
+
+    This records intent only — no files are created. To make the task
+    runnable: write its files on elitedesk (~/llm-eval/tasks/<name>/ with
+    PROMPT.md + solution.py + test_solution.py for python; strummy tasks
+    use PROMPT.md + stub.txt + meta.env under strummy/tasks-strummy/),
+    then move the card to 'testing' with set_eval_task_stage.
+
+    Args:
+      name: dir-safe id, lowercase (^[a-z0-9][a-z0-9_-]{0,63}$), e.g.
+            'lru-cache' or 'chord-transpose'
+      kind: 'python' | 'strummy'
+      notes: what the task should prove, edge cases to cover, etc.
+    """
+    code, body = _request("POST", "/api/eval_tasks", body={"name": name, "kind": kind, "notes": notes})
+    if code == 409:
+        return json.dumps({"error": f"eval task {name!r} already exists"})
+    if code not in (200, 201):
+        return json.dumps({"error": f"HTTP {code}", "body": body})
+    return json.dumps(body)
+
+
+@mcp.tool()
+def set_eval_task_stage(task: str, stage: str) -> str:
+    """Move an eval-task card to a new lifecycle stage.
+
+    THIS CONTROLS WHAT RUNS: 'testing' and 'active' are in the 6-hourly
+    rotation; 'paused'/'retired' remove the task from runs without touching
+    its files. Typical flows: idea → building (files being written) →
+    testing (first results, provisional) → active (steady benchmark);
+    active → paused (temporarily out); anything → retired.
+
+    Args:
+      task: card name (e.g. 'rle-encode') or numeric id
+      stage: idea | building | testing | active | paused | retired
+    """
+    if stage not in EVAL_STAGES:
+        return json.dumps({"error": f"invalid stage {stage!r} (valid: {', '.join(EVAL_STAGES)})"})
+    card, err = _resolve_eval_task(task)
+    if err:
+        return json.dumps({"error": err})
+    code, body = _request("POST", f"/api/eval_tasks/{card['id']}/stage", body={"stage": stage})
+    if code != 200:
+        return json.dumps({"error": f"HTTP {code}", "body": body})
+    return json.dumps(body)
+
+
+@mcp.tool()
+def update_eval_task(task: str, notes: str | None = None, timeout_s: int | None = None) -> str:
+    """Edit an eval-task card's notes and/or per-task timeout override.
+
+    Args:
+      task: card name or numeric id
+      notes: replaces the card's notes (pass '' to clear); None = leave as-is
+      timeout_s: per-task runner timeout in seconds (1..3600); overrides the
+                 global TASK_TIMEOUT (600s) for this task only. None = leave
+                 as-is. Long reconstruction tasks (e.g. the 66-assertion
+                 'notes' module) may need 900+.
+    """
+    card, err = _resolve_eval_task(task)
+    if err:
+        return json.dumps({"error": err})
+    patch: dict = {}
+    if notes is not None:
+        patch["notes"] = notes
+    if timeout_s is not None:
+        patch["timeout_s"] = int(timeout_s)
+    if not patch:
+        return json.dumps({"error": "nothing to update — pass notes and/or timeout_s"})
+    code, body = _request("POST", f"/api/eval_tasks/{card['id']}/update", body=patch)
+    if code != 200:
+        return json.dumps({"error": f"HTTP {code}", "body": body})
+    return json.dumps(body)
+
+
+@mcp.tool()
+def get_eval_task_scores(task: str, limit: int = 15) -> str:
+    """Recent per-run results for one eval task (newest first).
+
+    Args:
+      task: card name or numeric id
+      limit: max rows (default 15, capped at 30)
+
+    Returns JSON: { task: {name, stage, kind}, scores: [{run_id, model,
+      passed, iterations, tok_per_s, latency_ms, scored_at}] }. Use this to
+    answer "is qwen3:8b getting better at X?" or to decide whether a
+    'testing' card has earned 'active'.
+    """
+    card, err = _resolve_eval_task(task)
+    if err:
+        return json.dumps({"error": err})
+    code, body = _request("GET", f"/api/eval_tasks/{card['id']}/scores")
+    if code != 200 or not body:
+        return json.dumps({"error": f"HTTP {code}", "body": body})
+    capped = max(1, min(int(limit), 30))
+    return json.dumps(
+        {
+            "task": {"name": card["name"], "stage": card["stage"], "kind": card["kind"]},
+            "scores": (body.get("scores") or [])[:capped],
         }
     )
 
