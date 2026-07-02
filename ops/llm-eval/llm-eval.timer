@@ -1,0 +1,11 @@
+[Unit]
+Description=Fire llm-eval tick every 6 hours
+
+[Timer]
+OnCalendar=*-*-* 00/6:00:00
+Persistent=true
+RandomizedDelaySec=120
+Unit=llm-eval.service
+
+[Install]
+WantedBy=timers.target
