@@ -283,5 +283,44 @@ class BoardRenderTests(unittest.TestCase):
         self.assertNotEqual(self.mod._managed_hash(a), self.mod._managed_hash(c))
 
 
+class TestProjectFiles(unittest.TestCase):
+    """Discovery must follow the vault layout: projects/*.md plus one group
+    folder deep, excluding dated snapshot notes and deeper working docs."""
+
+    def setUp(self):
+        self.mod = _load_planner_sync()
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        for rel in (
+            'rhcsa-lab.md',
+            'Private/home-ops.md',
+            'Private/job-search.md',
+            'Private/2026-07-02-strummy-eval-week.md',  # dated note — skip
+            'Marszal/stano.md',
+            'Strummy/Strummy.md',
+            'Strummy/design-preview/song-detail.md',  # too deep — skip
+            'Private/notes.txt',  # not markdown — skip
+        ):
+            p = self.root / rel
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text('---\nstatus: hot\n---\n# x\n', encoding='utf-8')
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_discovers_top_level_and_group_folders_only(self):
+        names = [p.stem for p in self.mod._project_files(self.root)]
+        self.assertEqual(
+            sorted(names),
+            ['Strummy', 'home-ops', 'job-search', 'rhcsa-lab', 'stano'],
+        )
+
+    def test_find_project_file_matches_slug_in_group_folder(self):
+        p = self.mod._find_project_file(self.root, 'home-ops')
+        assert p is not None
+        self.assertEqual(p, self.root / 'Private' / 'home-ops.md')
+        self.assertIsNone(self.mod._find_project_file(self.root, 'song-detail'))
+
+
 if __name__ == '__main__':
     unittest.main()
