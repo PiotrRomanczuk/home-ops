@@ -328,7 +328,29 @@ def toggles_loop() -> None:
 # Reconciliation is watermark + managed-section-hash based; see board_sync_once.
 
 _MANAGED = (('Now', 'now'), ('Next', 'next'), ('Later', 'later'))
-_board_last: dict[str, Any] = {'watermark': None, 'hash': None}
+
+# Reconciliation baseline. Persisted across restarts: without it the first
+# tick after a restart takes the "DB is authoritative" branch and overwrites
+# any Obsidian edits made while the agent was down.
+STATE_FILE = Path(os.environ.get('STATE_FILE') or f'{PLANNER_DIR}.state.json')
+
+
+def _load_state() -> dict[str, Any]:
+    try:
+        raw = json.loads(STATE_FILE.read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        return {'watermark': None, 'hash': None}
+    return {'watermark': raw.get('watermark'), 'hash': raw.get('hash')}
+
+
+def _save_state() -> None:
+    try:
+        STATE_FILE.write_text(json.dumps(_board_last), encoding='utf-8')
+    except OSError as e:
+        post_log('warn', f'state file write failed: {e}', {'path': str(STATE_FILE)})
+
+
+_board_last: dict[str, Any] = _load_state()
 
 
 def _hash(text: str) -> str:
@@ -474,6 +496,7 @@ def board_sync_once() -> None:
         if res:
             _board_last['watermark'] = res.get('updatedAt')
             _board_last['hash'] = _managed_hash(current)
+            _save_state()
         return
 
     rendered = render_sections_md(tasks)
@@ -487,6 +510,7 @@ def board_sync_once() -> None:
             return  # retry next tick; don't advance the baseline
         _board_last['watermark'] = watermark
         _board_last['hash'] = _managed_hash(new_md)
+        _save_state()
     elif _managed_hash(current) != _board_last['hash']:
         # Board untouched but the vault's managed sections changed in Obsidian.
         focus_text = next((t['text'] for t in tasks if t.get('is_focus')), None)
@@ -495,6 +519,7 @@ def board_sync_once() -> None:
         if res:
             _board_last['watermark'] = res.get('updatedAt')
             _board_last['hash'] = _managed_hash(current)
+            _save_state()
 
 
 # ── main loop ─────────────────────────────────────────────────────────
