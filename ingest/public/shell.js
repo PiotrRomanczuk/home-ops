@@ -21,8 +21,8 @@
    Load this INSTEAD of the vanilla boot by using index-shell.html.
    ============================================================ */
 
-import { html, render as mount } from '/static/vendor/htm-preact-standalone.mjs';
-import { useReducer, useEffect, useRef, useLayoutEffect } from '/static/vendor/htm-preact-standalone.mjs';
+import { html, render as mount } from '/static/htm-preact-standalone.js';
+import { useReducer, useEffect, useRef, useLayoutEffect } from '/static/htm-preact-standalone.js';
 import { StatusView } from '/static/status-preact.js';
 
 window.__SHELL = true;

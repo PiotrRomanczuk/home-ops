@@ -16,11 +16,13 @@
      • Data + lifecycle are colocated in the component (useState +
        useEffect), not a global mutable singleton that pokes render().
      • No build step: preact+hooks+htm are vendored as one local file
-       (vendor/htm-preact-standalone.mjs), same pattern as Sortable.
+       (htm-preact-standalone.js), same pattern as Sortable.
    ============================================================ */
 
-import { html, render } from '/static/vendor/htm-preact-standalone.mjs';
-import { useState, useEffect } from '/static/vendor/htm-preact-standalone.mjs';
+// Flat path + .js extension: the server serves only /static/:name (single
+// segment, no subdirs) and its MIME map has .js but not .mjs.
+import { html, render } from '/static/htm-preact-standalone.js';
+import { useState, useEffect } from '/static/htm-preact-standalone.js';
 
 const REFRESH_MS = 15_000;
 
