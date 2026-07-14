@@ -40,19 +40,26 @@ function Resolve-GpuLuid {
     throw "cannot parse LUID from counter path: $($top.Path)"
 }
 
-function Get-GpuComputePct {
+function Get-GpuUtilPct {
     param($luid)
-    # MAX across compute engines on the dedicated GPU. Matches the convention
-    # nvidia-smi uses for GPU Utilization (0-100), not a sum (which can exceed
-    # 100 on multi-engine GPUs). Skip 3D/copy/video — Ollama lands on compute.
-    # Engine instances only exist while processes hold GPU contexts, so an
+    # Overall GPU utilisation for the dedicated GPU, 0-100. Task Manager's
+    # convention: sum each engine type's instances, then take the MAX across
+    # types. We consider the two primary work engines — 3D (games, compositor)
+    # and compute (Ollama, embeddings). copy/video are excluded so media
+    # playback doesn't inflate the number. An earlier version read compute
+    # ONLY, which reported 0 during gaming because games run on the 3D engine.
+    # Engine instances only exist while a process holds a GPU context, so an
     # empty/missing counter set means idle, not failure.
     try {
-        $samples = (Get-Counter '\GPU Engine(*engtype_compute*)\Utilization Percentage' -MaxSamples 1).CounterSamples |
+        $samples = (Get-Counter '\GPU Engine(*)\Utilization Percentage' -MaxSamples 1).CounterSamples |
             Where-Object { $_.Path -like "*$luid*" }
     } catch { return 0.0 }
     if (-not $samples) { return 0.0 }
-    [math]::Round(($samples | Measure-Object CookedValue -Maximum).Maximum, 1)
+    $threeD  = [double](($samples | Where-Object { $_.Path -like '*engtype_3D*' }      | Measure-Object CookedValue -Sum).Sum)
+    $compute = [double](($samples | Where-Object { $_.Path -like '*engtype_compute*' } | Measure-Object CookedValue -Sum).Sum)
+    $util = [math]::Max($threeD, $compute)
+    if ($util -gt 100) { $util = 100 }
+    [math]::Round($util, 1)
 }
 
 function Get-GpuVramMb {
@@ -88,7 +95,7 @@ function Get-TopGpuMem {
 try {
     $resolvedLuid = Resolve-GpuLuid -preferred $Luid
     $vramMb  = Get-GpuVramMb -luid $resolvedLuid
-    $gpuPct  = Get-GpuComputePct -luid $resolvedLuid
+    $gpuPct  = Get-GpuUtilPct -luid $resolvedLuid
     $topMem  = Get-TopGpuMem -luid $resolvedLuid -n $TopN
     $sample = [PSCustomObject]@{
         gpu_pct       = $gpuPct
