@@ -190,15 +190,18 @@ def parse_project_file(path: Path) -> dict[str, Any] | None:
 _TOGGLE_LINE_RE = re.compile(r'^(\s*[-*]\s+\[)([ xX])(\]\s+)(.+?)(\s*)$')
 
 
-def _flip_task_in_section(text: str, section: str, idx: int, done: bool) -> str | None:
+def _flip_task_in_section(text: str, section: str, idx: int, done: bool,
+                          task_text: str | None = None) -> str | None:
     """Walk the markdown file. Find the `## <section>` header (case-insensitive
     match on the canonical name OR a "<Name> — ..." variant). Inside that
-    section, find the Nth `- [ ]` / `- [x]` line and flip it. Return the
-    modified text, or None if section/idx wasn't resolvable."""
+    section, flip the checkbox line whose text equals `task_text`; when there
+    is no text anchor (or no match — e.g. the task was reworded since the UI
+    rendered), fall back to the Nth `- [ ]` / `- [x]` line. Return the
+    modified text, or None if the task wasn't resolvable."""
     target = section.lower()
     lines = text.split('\n')
     in_section = False
-    task_count = 0
+    candidates: list[tuple[int, re.Match[str]]] = []
     for i, raw in enumerate(lines):
         header = re.match(r'^##\s+(.+?)\s*$', raw)
         if header:
@@ -206,19 +209,24 @@ def _flip_task_in_section(text: str, section: str, idx: int, done: bool) -> str 
             # Match 'now' / 'next' / 'later' or 'now — ...' variants
             canonical = name.split(' ')[0] if name else ''
             in_section = canonical == target or (target == 'pain' and name.startswith('pain'))
-            task_count = 0
             continue
         if not in_section:
             continue
         m = _TOGGLE_LINE_RE.match(raw)
-        if not m:
-            continue
-        if task_count == idx:
-            new_marker = 'x' if done else ' '
-            lines[i] = f'{m.group(1)}{new_marker}{m.group(3)}{m.group(4)}{m.group(5)}'
-            return '\n'.join(lines)
-        task_count += 1
-    return None
+        if m:
+            candidates.append((i, m))
+
+    chosen: tuple[int, re.Match[str]] | None = None
+    if task_text:
+        chosen = next(((i, m) for i, m in candidates if m.group(4).strip() == task_text), None)
+    if chosen is None and 0 <= idx < len(candidates):
+        chosen = candidates[idx]
+    if chosen is None:
+        return None
+    i, m = chosen
+    new_marker = 'x' if done else ' '
+    lines[i] = f'{m.group(1)}{new_marker}{m.group(3)}{m.group(4)}{m.group(5)}'
+    return '\n'.join(lines)
 
 
 def _apply_one_toggle(toggle: dict[str, Any]) -> tuple[str, str | None]:
@@ -243,7 +251,7 @@ def _apply_one_toggle(toggle: dict[str, Any]) -> tuple[str, str | None]:
     except (OSError, UnicodeDecodeError) as e:
         return 'failed', f'read failed: {e}'
 
-    new_text = _flip_task_in_section(text, section, idx, done)
+    new_text = _flip_task_in_section(text, section, idx, done, toggle.get('text'))
     if new_text is None:
         return 'failed', f'task not found: section={section} idx={idx}'
     if new_text == text:
