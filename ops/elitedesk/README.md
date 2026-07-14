@@ -16,6 +16,7 @@ stack. They're version-controlled here; installed by symlinking into
 | `pg-backup.timer` | Fires `pg-backup.service` daily at 04:30 | `systemctl --user enable --now` |
 | `daily-digest.sql` | Read-only queries that build the digest body | (piped into psql) |
 | `daily-digest.sh` | Assembles + emails the morning home-ops digest | `chmod +x` |
+| `send-digest.py` | stdlib `smtplib` sender (default transport, no install/sudo) | (called by the `.sh`) |
 | `daily-digest.service` | Oneshot unit that runs `daily-digest.sh` | `systemctl --user link` |
 | `daily-digest.timer` | Fires `daily-digest.service` daily at 07:00 | `systemctl --user enable --now` |
 
@@ -95,21 +96,34 @@ list in `projects/home-ops.md` in Obsidian (desktop or phone) — `planner-sync`
 syncs it into the `projects` table within 60s. You can also tick items off from
 the web console; the `task_toggles` writeback flows the change back to the vault.
 
-## Prerequisites — outbound mail via msmtp + Gmail
+## Prerequisites — outbound mail
 
 The digest sends through your own Gmail account over SMTP using an **app
-password** (not your login password — requires 2FA enabled on the Google
-account).
+password** (not your login password — requires 2-Step Verification on the
+account: Google Account → Security → 2-Step Verification → App passwords →
+"Mail" → copy the 16-char value).
+
+Two transports are supported, selected by `DIGEST_TRANSPORT` in the env file.
+
+### Default — `smtplib` (no install, no sudo)
+
+Uses Python's standard library (already on elitedesk). The app password lives in
+a `0600` file that the sender reads at send time; it is never placed in an env
+var or committed.
 
 ```bash
-# 1. Install msmtp
+mkdir -p ~/.config/home-ops
+# Paste the 16-char app password with hidden input, no shell-history trace:
+read -rs APPPW
+printf '%s' "$APPPW" > ~/.config/home-ops/smtp.pass
+chmod 600 ~/.config/home-ops/smtp.pass
+unset APPPW
+```
+
+### Alternative — `msmtp` (set `DIGEST_TRANSPORT=msmtp`)
+
+```bash
 sudo apt install -y msmtp
-
-# 2. Create a Gmail app password:
-#    Google Account → Security → 2-Step Verification → App passwords
-#    → generate one for "Mail". Copy the 16-char value.
-
-# 3. Write ~/.msmtprc (0600 — never world-readable, it holds the app password)
 install -m 600 /dev/null ~/.msmtprc
 cat > ~/.msmtprc <<'RC'
 defaults
@@ -128,9 +142,6 @@ password       <16-char-app-password>
 account default : gmail
 RC
 chmod 600 ~/.msmtprc
-
-# 4. Sanity-check the transport
-echo -e "Subject: msmtp test\n\nhello" | msmtp -a gmail p.romanczuk@gmail.com
 ```
 
 ## Config
@@ -138,8 +149,9 @@ echo -e "Subject: msmtp test\n\nhello" | msmtp -a gmail p.romanczuk@gmail.com
 ```bash
 cd ~/logs-stack
 cp ops/elitedesk/daily-digest.env.example ops/elitedesk/daily-digest.env
-# Edit DIGEST_TO / DIGEST_FROM / MSMTP_ACCOUNT to match the ~/.msmtprc account.
-# daily-digest.env is gitignored — the mail password stays in ~/.msmtprc.
+# Set DIGEST_TO / DIGEST_FROM. Leave DIGEST_TRANSPORT=smtplib (default) unless
+# you set up msmtp above. daily-digest.env is gitignored; the password lives in
+# ~/.config/home-ops/smtp.pass (smtplib) or ~/.msmtprc (msmtp), never in the env.
 chmod +x ops/elitedesk/daily-digest.sh
 ```
 
