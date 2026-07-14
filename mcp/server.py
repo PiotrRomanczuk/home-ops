@@ -20,7 +20,7 @@ Tools:
   models_loaded         — what's resident in win10 VRAM right now
 
 Env:
-  INGEST_URL    e.g. http://elitedesk.tail266853.ts.net:64421/api/ingest
+  INGEST_URL    e.g. http://elitedesk.<tailnet>.ts.net:64421/api/ingest
                 or http://192.168.1.75:64421/api/ingest on LAN
   INGEST_TOKEN  shared secret (same one the watchers use)
 

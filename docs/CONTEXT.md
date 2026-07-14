@@ -46,13 +46,13 @@ to exist.
 
 | Host | Role | Hardware | Always-on? |
 | --- | --- | --- | --- |
-| **elitedesk** (`piotr-hp-elitedesk`) | The server. Ingest API + Postgres + log-shipping agent + (eventually) pg-backup timer | HP EliteDesk, i7-6700K, 31 GB RAM, no dGPU | Yes |
+| **elitedesk** | The server. Ingest API + Postgres + log-shipping agent + (eventually) pg-backup timer | HP EliteDesk, i7-6700K, 31 GB RAM, no dGPU | Yes |
 | **win10** (`windows-pc`) | The GPU box. Ollama backend + Ollama-log watcher + GPU job scheduler | i7-6700K, 67 GB RAM, AMD Radeon RX 7700 XT (12 GB VRAM) | Yes |
 | **rpi** (`pi`) | Monitoring + low-power services. Kuma + Beszel today; (planned) log-shipping agent, Telegram notification bot | Pi 5, 8 GB RAM, 29 GB SD | Yes, lowest power |
 | **mac** | Workstation, dev environment, launchd-scheduled producers (planned: scheduled queries / digest generators against home-ops Postgres) | M-series, varies | No (sleeps overnight) |
 
 Network: `192.168.1.0/24`, Tailscale tailnet
-`p.romanczuk@gmail.com` (`*.tail266853.ts.net`). Pi advertises NAS
+(`*.<tailnet>.ts.net`, MagicDNS). Pi advertises NAS
 (`192.168.1.25/32`) for off-LAN access.
 
 Full inventory: `~/Desktop/MainCV/infrastructure/HOSTS.md` (also

@@ -27,7 +27,7 @@ that.
 1. Copy the relevant file into the project's `lib/` (or wherever).
 2. Set env vars on the host where the project runs:
    ```
-   INGEST_URL=http://elitedesk.tail266853.ts.net:64421/api/ingest
+   INGEST_URL=http://elitedesk.<tailnet>.ts.net:64421/api/ingest
    INGEST_TOKEN=<same one the watchers use>
    # optional: HOME_OPS_HOST=mac        # default is os.hostname()
    ```

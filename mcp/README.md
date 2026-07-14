@@ -73,9 +73,9 @@ or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
   "mcpServers": {
     "home-ops": {
       "command": "uv",
-      "args": ["run", "/Users/piotr/Desktop/MainCV/home-ops/mcp/server.py"],
+      "args": ["run", "/path/to/home-ops/mcp/server.py"],
       "env": {
-        "INGEST_URL": "http://elitedesk.tail266853.ts.net:64421/api/ingest",
+        "INGEST_URL": "http://elitedesk.<tailnet>.ts.net:64421/api/ingest",
         "INGEST_TOKEN": "<paste from ~/logs-stack/.env on elitedesk>"
       }
     }
@@ -96,8 +96,8 @@ infrastructure doc for which path to prefer.
 claude mcp add home-ops \
   --command uv \
   --args run \
-  --args /Users/piotr/Desktop/MainCV/home-ops/mcp/server.py \
-  --env INGEST_URL=http://elitedesk.tail266853.ts.net:64421/api/ingest \
+  --args /path/to/home-ops/mcp/server.py \
+  --env INGEST_URL=http://elitedesk.<tailnet>.ts.net:64421/api/ingest \
   --env INGEST_TOKEN=<secret>
 ```
 
@@ -124,7 +124,7 @@ JSON shape above.
 The MCP CLI ships with a dev inspector:
 
 ```bash
-INGEST_URL=http://elitedesk.tail266853.ts.net:64421/api/ingest \
+INGEST_URL=http://elitedesk.<tailnet>.ts.net:64421/api/ingest \
 INGEST_TOKEN=<secret> \
 uv run --with 'mcp[cli]' mcp dev mcp/server.py
 ```

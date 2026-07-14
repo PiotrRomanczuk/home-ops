@@ -32,7 +32,7 @@ sudo install -m 600 -o root -g root /dev/null /etc/kuma-backup/credentials
 
 # /etc/fstab
 //192.168.1.25/monitoring-backup /mnt/nas/monitoring-backup cifs \
-  credentials=/etc/kuma-backup/credentials,uid=$(id -u piotr),gid=$(id -g piotr),file_mode=0640,dir_mode=0750,_netdev,nofail 0 0
+  credentials=/etc/kuma-backup/credentials,uid=$(id -u <user>),gid=$(id -g <user>),file_mode=0640,dir_mode=0750,_netdev,nofail 0 0
 
 sudo mount -a
 mkdir -p /mnt/nas/monitoring-backup/home-ops
@@ -61,7 +61,7 @@ If you need the timer to fire even when nobody is logged in (typical for a
 headless box that doesn't keep a user session alive), enable lingering once:
 
 ```bash
-loginctl enable-linger piotr
+loginctl enable-linger <user>
 ```
 
 ## Verify
