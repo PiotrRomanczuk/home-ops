@@ -31,7 +31,9 @@ const Board = {
     if (window.render) window.render();
   },
 
-  byId(id) { return this.items.find((t) => t.id === Number(id)) || null; },
+  // board_tasks.id is bigserial → node-postgres returns it as a string, so
+  // compare as strings (Number() coercion would never match, breaking drag).
+  byId(id) { return this.items.find((t) => String(t.id) === String(id)) || null; },
 
   // Items in one column, sorted by position (server order of truth).
   column(col) {
