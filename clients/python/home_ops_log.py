@@ -17,7 +17,7 @@ Usage:
         # on exception: emits send_reminders_failed with the data + error
 
 Env:
-    INGEST_URL    e.g. http://elitedesk.tail266853.ts.net:64421/api/ingest
+    INGEST_URL    e.g. http://elitedesk.<tailnet>.ts.net:64421/api/ingest
                   or http://192.168.1.75:64421/api/ingest on LAN
     INGEST_TOKEN  shared secret (same one the watchers use)
     HOME_OPS_HOST optional override for the `host` field; defaults to socket.gethostname()

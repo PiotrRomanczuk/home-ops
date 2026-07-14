@@ -13,7 +13,7 @@ Env:
   INGEST_TOKEN     (required) shared secret
   HOST_NAME        defaults to 'elitedesk'
   PLANNER_REMOTE   git URL to clone if PLANNER_DIR is missing
-                   (e.g. file:///home/piotr/git/planner.git)
+                   (e.g. file:///home/<user>/git/planner.git)
   PLANNER_DIR      local working clone, defaults to ~/planner-mirror
   SYNC_INTERVAL    seconds between syncs, default 60
 """

@@ -112,12 +112,12 @@ ls -lh /mnt/nas/monitoring-backup/home-ops/
 
 ## Monitoring
 
-Kuma on the Pi probes `http://piotr-hp-elitedesk.tail266853.ts.net:64421/api/health`
+Kuma on the Pi probes `http://elitedesk.<tailnet>.ts.net:64421/api/health`
 every 60 s; alerts on 2 consecutive failures. To configure:
 
 1. Open Kuma → **Add New Monitor**.
 2. Type: HTTP(s). Friendly name: `home-ops ingest`.
-3. URL: `http://piotr-hp-elitedesk.tail266853.ts.net:64421/api/health`.
+3. URL: `http://elitedesk.<tailnet>.ts.net:64421/api/health`.
 4. Heartbeat interval: `60`. Retries: `2`. Heartbeat retry interval: `30`.
 5. Method: GET. Body / headers: blank.
 6. Accepted status codes: `200-299`.

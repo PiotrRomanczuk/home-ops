@@ -160,7 +160,7 @@ start: "(1) which projects start dual-writing domain events first?
 - [x] 2026-06-07 Phase G partial: `host_metrics` schema (003 migration), `/api/metrics` POST+GET routes, `elitedesk-watcher` metric_sampler_loop with per-process attribution. Awaits elitedesk deploy (`apt install python3-psutil`) + viewer Hosts tab (Phase C).
 
 **Carryover** (UI / shell actions on the actual hosts — not file edits):
-- [ ] Tailscale admin console: delete `desktop-t0jdc7e`, `iphone182`, `piotrs-macbook-air`, `piotr-ubuntu` at https://login.tailscale.com/admin/machines (from session 2)
+- [ ] Tailscale admin console: delete stale devices at https://login.tailscale.com/admin/machines (from session 2)
 - [x] 2026-06-07 elitedesk: deployed session 3 changes — `cd ~/logs-stack && git pull && docker compose down && docker compose up -d --build`. Postgres switched alpine→debian 17.10 with pg_cron, pgdata preserved, ingest rebuilt with /api/metrics.
 - [x] 2026-06-07 elitedesk: applied 002_pg_cron.sql + 003_host_metrics.sql against the running DB. 3 cron jobs scheduled (host_logs daily 04:00, gpu_jobs daily 04:15, host_metrics hourly :30).
 - [x] 2026-06-07 elitedesk: Phase G deployed — psutil 7.0.0 already present (apt install unnecessary), `~/bin/elitedesk-watcher.py` overwritten from `~/logs-stack/agents/elitedesk/elitedesk-watcher.py`, `systemctl --user restart elitedesk-watcher.service`, journal confirms `metrics=on`, first samples landed in `host_metrics` with cpu/mem/disk/net + top_cpu/top_mem attribution.
