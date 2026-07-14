@@ -1,0 +1,15 @@
+[Unit]
+Description=home-ops morning digest email (metrics + eval + errors + Today's focus)
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/logs-stack
+ExecStart=%h/logs-stack/ops/elitedesk/daily-digest.sh
+# Stream stdout/stderr to journald — elitedesk-watcher picks it up into host_logs.
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target
