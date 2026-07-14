@@ -36,7 +36,14 @@ REPO_DIR="${REPO_DIR:-${HOME}/logs-stack}"
 DIGEST_TO="${DIGEST_TO:-}"
 DIGEST_FROM="${DIGEST_FROM:-}"
 DIGEST_SUBJECT_PREFIX="${DIGEST_SUBJECT_PREFIX:-[home-ops]}"
+
+# Transport: 'smtplib' (Python stdlib, no install/sudo — default) or 'msmtp'.
+DIGEST_TRANSPORT="${DIGEST_TRANSPORT:-smtplib}"
 MSMTP_ACCOUNT="${MSMTP_ACCOUNT:-default}"
+SMTP_HOST="${SMTP_HOST:-smtp.gmail.com}"
+SMTP_PORT="${SMTP_PORT:-587}"
+SMTP_USER="${SMTP_USER:-$DIGEST_FROM}"
+SMTP_PASS_FILE="${SMTP_PASS_FILE:-$HOME/.config/home-ops/smtp.pass}"
 
 DRY_RUN=0
 [[ "${1:-}" == "--dry-run" ]] && DRY_RUN=1
@@ -46,8 +53,22 @@ if [[ "$DRY_RUN" -eq 0 ]]; then
     printf 'DIGEST_TO and DIGEST_FROM must be set (see daily-digest.env.example)\n' >&2
     exit 1
   fi
-  command -v msmtp >/dev/null 2>&1 || {
-    printf 'msmtp not installed. See ops/elitedesk/README.md.\n' >&2; exit 1; }
+  case "$DIGEST_TRANSPORT" in
+    smtplib)
+      command -v python3 >/dev/null 2>&1 || {
+        printf 'python3 not found (needed for smtplib transport)\n' >&2; exit 1; }
+      [[ -f "$SMTP_PASS_FILE" ]] || {
+        printf 'app-password file missing: %s — see ops/elitedesk/README.md\n' \
+          "$SMTP_PASS_FILE" >&2; exit 1; }
+      ;;
+    msmtp)
+      command -v msmtp >/dev/null 2>&1 || {
+        printf 'msmtp not installed. See ops/elitedesk/README.md.\n' >&2; exit 1; }
+      ;;
+    *)
+      printf 'unknown DIGEST_TRANSPORT: %s (use smtplib or msmtp)\n' \
+        "$DIGEST_TRANSPORT" >&2; exit 1 ;;
+  esac
 fi
 
 if ! docker inspect "$CONTAINER" >/dev/null 2>&1; then
@@ -137,9 +158,20 @@ MSG
 
 if [[ "$DRY_RUN" -eq 1 ]]; then
   printf '%s\n' "$MESSAGE"
-  printf '\n--- dry run: not sent ---\n' >&2
+  printf '\n--- dry run: not sent (transport=%s) ---\n' "$DIGEST_TRANSPORT" >&2
   exit 0
 fi
 
-printf '%s\n' "$MESSAGE" | msmtp -a "$MSMTP_ACCOUNT" "$DIGEST_TO"
-printf 'digest sent to %s\n' "$DIGEST_TO"
+case "$DIGEST_TRANSPORT" in
+  smtplib)
+    printf '%s' "$HTML" | \
+      MAIL_FROM="$DIGEST_FROM" MAIL_TO="$DIGEST_TO" MAIL_SUBJECT="$SUBJECT" \
+      SMTP_HOST="$SMTP_HOST" SMTP_PORT="$SMTP_PORT" SMTP_USER="$SMTP_USER" \
+      SMTP_PASS_FILE="$SMTP_PASS_FILE" \
+      python3 "${SCRIPT_DIR}/send-digest.py"
+    ;;
+  msmtp)
+    printf '%s\n' "$MESSAGE" | msmtp -a "$MSMTP_ACCOUNT" "$DIGEST_TO"
+    printf 'digest sent to %s\n' "$DIGEST_TO"
+    ;;
+esac
