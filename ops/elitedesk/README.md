@@ -15,10 +15,15 @@ stack. They're version-controlled here; installed by symlinking into
 | `pg-backup.service` | Oneshot unit that runs `pg-backup.sh` | `systemctl --user link` |
 | `pg-backup.timer` | Fires `pg-backup.service` daily at 04:30 | `systemctl --user enable --now` |
 | `daily-digest.sql` | Read-only queries that build the digest body | (piped into psql) |
-| `daily-digest.sh` | Assembles + emails the morning home-ops digest | `chmod +x` |
+| `daily-digest.sh` | Assembles + emails the digest; `--mode morning\|evening` | `chmod +x` |
 | `send-digest.py` | stdlib `smtplib` sender (default transport, no install/sudo) | (called by the `.sh`) |
-| `daily-digest.service` | Oneshot unit that runs `daily-digest.sh` | `systemctl --user link` |
-| `daily-digest.timer` | Fires `daily-digest.service` daily at 07:00 | `systemctl --user enable --now` |
+| `daily-digest.service` | Oneshot unit — `daily-digest.sh` (morning) | `systemctl --user link` |
+| `daily-digest.timer` | Fires the morning digest daily at 07:00 | `systemctl --user enable --now` |
+| `daily-digest-evening.service` | Oneshot unit — `daily-digest.sh --mode evening` | `systemctl --user link` |
+| `daily-digest-evening.timer` | Fires the evening digest daily at 21:00 | `systemctl --user enable --now` |
+
+Migration `postgres/migrations/014_night_digest.sql` adds `queue_night_digest()`,
+called by the **evening** run to enqueue the overnight LLM narrative.
 
 ## Prerequisites — NAS mount
 
@@ -85,10 +90,28 @@ docker run --rm -i postgres:17 pg_restore --list < /mnt/nas/monitoring-backup/ho
 
 # Daily digest email
 
-A morning email (07:00 Europe/Warsaw) summarising the stack over the last 24h:
-host health, sentinel alerts, error counts + top recurring failures, LLM-eval
-progress, the eval board, GPU queue, commits — and **Today's focus**, pulled
-from the top of the `## Next` list in `~/Obsidian/MainCV-Planner/projects/home-ops.md`.
+Two emails a day, same rich HTML, one `daily-digest.sh` with `--mode`:
+
+- **Morning (07:00)** — `--mode morning` (default). The 24h stack summary
+  (host health, sentinel alerts, error counts + top recurring failures, LLM-eval
+  progress, eval board, GPU queue, commits) + **Today's focus** (top of the
+  `## Next` list in `projects/home-ops.md`) + the **🌙 Overnight narrative**: an
+  LLM briefing written on the GPU overnight (see below).
+- **Evening (21:00)** — `--mode evening`. The same end-of-day snapshot, and it
+  **queues the overnight narrative job** now that the win10 box is done gaming
+  and the GPU is free. `queue_night_digest()` (migration 014) inserts one
+  `summarise` `gpu_job` from the day's infra/eval/gpu/project state; the win10
+  scheduler runs it overnight; the next morning's digest reads `result.summary`.
+  Idempotent per day. If the GPU didn't finish, the morning card says so and the
+  rest of the email is unaffected.
+
+**Apply the migration once** (functions aren't re-run from `docker-entrypoint-initdb.d`
+on an existing volume):
+
+```bash
+docker exec -i home-ops-postgres-1 psql -U postgres -d home_ops \
+  < ~/logs-stack/postgres/migrations/014_night_digest.sql
+```
 
 **Steering the process.** There is no separate task store. To change what
 tomorrow's digest features as *Today's focus*, reorder or edit the `## Next`
@@ -158,23 +181,29 @@ chmod +x ops/elitedesk/daily-digest.sh
 ## Test before scheduling
 
 ```bash
-# Prints the full HTML message to stdout, sends nothing:
-ops/elitedesk/daily-digest.sh --dry-run
+# Prints the full HTML message to stdout, sends nothing (evening also reports
+# that it WOULD queue the overnight narrative, but doesn't mutate anything):
+ops/elitedesk/daily-digest.sh --dry-run                 # morning
+ops/elitedesk/daily-digest.sh --mode evening --dry-run  # evening
 
 # Send one for real to confirm the whole path:
-ops/elitedesk/daily-digest.sh
+ops/elitedesk/daily-digest.sh                 # morning
+ops/elitedesk/daily-digest.sh --mode evening  # evening (also queues the night job)
 ```
 
 ## Install the timer
 
 ```bash
-ln -sf ~/logs-stack/ops/elitedesk/daily-digest.service ~/.config/systemd/user/
-ln -sf ~/logs-stack/ops/elitedesk/daily-digest.timer   ~/.config/systemd/user/
+# Morning + evening — symlink both service/timer pairs
+ln -sf ~/logs-stack/ops/elitedesk/daily-digest.service         ~/.config/systemd/user/
+ln -sf ~/logs-stack/ops/elitedesk/daily-digest.timer           ~/.config/systemd/user/
+ln -sf ~/logs-stack/ops/elitedesk/daily-digest-evening.service ~/.config/systemd/user/
+ln -sf ~/logs-stack/ops/elitedesk/daily-digest-evening.timer   ~/.config/systemd/user/
 systemctl --user daemon-reload
-systemctl --user enable --now daily-digest.timer
+systemctl --user enable --now daily-digest.timer daily-digest-evening.timer
 systemctl --user list-timers --all | grep daily-digest
 
-# 07:00 is interpreted in the host's timezone — confirm it's Europe/Warsaw:
+# 07:00 / 21:00 are interpreted in the host's timezone — confirm it's Europe/Warsaw:
 timedatectl | grep 'Time zone'
 ```
 
@@ -185,6 +214,7 @@ Requires `loginctl enable-linger <user>` (already set for the backup timer) so
 ## Verify
 
 ```bash
-systemctl --user start daily-digest.service     # fire once now
-journalctl --user -u daily-digest.service -n 30  # check the run (also lands in host_logs)
+systemctl --user start daily-digest.service          # fire the morning digest now
+systemctl --user start daily-digest-evening.service  # fire the evening digest (queues the night job)
+journalctl --user -u daily-digest.service -u daily-digest-evening.service -n 40
 ```
