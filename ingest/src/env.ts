@@ -14,4 +14,7 @@ export const env = {
   LOGS_PASSWORD,
   PORT: Number(process.env.PORT ?? 8080),
   PUBLIC_DIR: process.env.PUBLIC_DIR ?? path.resolve(process.cwd(), 'public'),
+  // When set, the viewer login is bypassed and the console is open to anyone
+  // who can reach the port. Worker/token endpoints stay protected regardless.
+  AUTH_PUBLIC: process.env.AUTH_PUBLIC === '1' || process.env.AUTH_PUBLIC === 'true',
 } as const;

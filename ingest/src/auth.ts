@@ -18,7 +18,7 @@ export const tokenOnly: MiddlewareHandler = async (c, next) =>
   hasIngestToken(c) ? next() : c.json({ error: 'unauthorized' }, 401);
 
 export const viewerOrToken: MiddlewareHandler = async (c, next) =>
-  hasViewerAuth(c) || hasIngestToken(c) ? next() : c.json({ error: 'unauthorized' }, 401);
+  env.AUTH_PUBLIC || hasViewerAuth(c) || hasIngestToken(c) ? next() : c.json({ error: 'unauthorized' }, 401);
 
 export function setAuthCookie(c: Context): void {
   setCookie(c, COOKIE_NAME, COOKIE_VALUE, {
