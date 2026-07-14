@@ -185,6 +185,27 @@ def parse_project_file(path: Path) -> dict[str, Any] | None:
     }
 
 
+# Dated snapshot notes (e.g. 2026-07-02-strummy-eval-week.md) coexist with
+# project files in the vault but are working documents, not project state.
+_DATED_NOTE_RE = re.compile(r'^\d{4}-\d{2}-\d{2}-')
+
+
+def _project_files(projects_dir: Path) -> list[Path]:
+    """Project files live at projects/*.md and one folder deep
+    (projects/<group>/*.md — the vault groups them under Private/, Marszal/,
+    etc.). Anything deeper (e.g. Strummy/design-preview/*) is a working doc,
+    not a project."""
+    found = list(projects_dir.glob('*.md')) + list(projects_dir.glob('*/*.md'))
+    return sorted(p for p in found if not _DATED_NOTE_RE.match(p.name))
+
+
+def _find_project_file(projects_dir: Path, slug: str) -> Path | None:
+    for p in _project_files(projects_dir):
+        if p.stem == slug:
+            return p
+    return None
+
+
 # ── task writeback (UI checkbox toggle → markdown file → git push) ────
 
 _TOGGLE_LINE_RE = re.compile(r'^(\s*[-*]\s+\[)([ xX])(\]\s+)(.+?)(\s*)$')
@@ -236,9 +257,9 @@ def _apply_one_toggle(toggle: dict[str, Any]) -> tuple[str, str | None]:
     idx = int(toggle['idx'])
     done = bool(toggle['done'])
 
-    md_path = PLANNER_DIR / 'projects' / f'{slug}.md'
-    if not md_path.exists():
-        return 'failed', f'projects/{slug}.md not found in clone'
+    md_path = _find_project_file(PLANNER_DIR / 'projects', slug)
+    if md_path is None:
+        return 'failed', f'{slug}.md not found under projects/ in clone'
 
     # Pull first — keeps us aligned with any Obsidian edits that landed since
     # the last 60s sync tick.
@@ -484,8 +505,8 @@ def board_sync_once() -> None:
       first tick with an empty board → seed the board from the vault.
     Loop-safe: after each write we store the managed-section hash, so our own
     commit is not seen as an external edit next tick."""
-    md_path = PLANNER_DIR / 'projects' / f'{BOARD_SLUG}.md'
-    if not md_path.exists():
+    md_path = _find_project_file(PLANNER_DIR / 'projects', BOARD_SLUG)
+    if md_path is None:
         return
     board = _board_get(BOARD_SLUG)
     if board is None:
@@ -554,7 +575,7 @@ def sync_once() -> None:
 
     records: list[dict[str, Any]] = []
     skipped: list[str] = []
-    for md in sorted(projects_dir.glob('*.md')):
+    for md in _project_files(projects_dir):
         rec = parse_project_file(md)
         if rec is None:
             skipped.append(md.name)
