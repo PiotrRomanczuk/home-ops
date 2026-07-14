@@ -36,6 +36,9 @@ services:
       DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required}@postgres:5432/home_ops
       INGEST_TOKEN: ${INGEST_TOKEN:?INGEST_TOKEN required (run scripts/generate-env.sh)}
       LOGS_PASSWORD: ${LOGS_PASSWORD:?LOGS_PASSWORD required (run scripts/generate-env.sh)}
+      # Set AUTH_PUBLIC=1 in .env to open the console with no viewer login
+      # (worker/token endpoints stay protected). Reachable over LAN + Tailscale.
+      AUTH_PUBLIC: ${AUTH_PUBLIC:-}
       PORT: "8080"
     ports:
       - "0.0.0.0:64421:8080"
