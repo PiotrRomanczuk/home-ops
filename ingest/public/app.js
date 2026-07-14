@@ -46,7 +46,9 @@ function setState(patch, replace) {
   const str = Object.entries(s).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&');
   if (replace) history.replaceState(null, '', '#' + str);
   else location.hash = str;
-  if (replace) render();
+  // replaceState fires no hashchange, so re-render explicitly. window.render is
+  // the vanilla render() by default, or the Preact shell's re-render if loaded.
+  if (replace) window.render();
 }
 window.setState = setState; window.getState = getState;
 
@@ -168,7 +170,7 @@ function renderChrome() {
     ),
   );
 }
-function toggleTimeMode() { window.__abs = !window.__abs; render(); }
+function toggleTimeMode() { window.__abs = !window.__abs; window.render(); }
 
 /* ============================================================
    AMBIENT FOOTER
@@ -250,7 +252,7 @@ function render() {
 }
 window.render = render;
 
-window.addEventListener('hashchange', render);
+window.addEventListener('hashchange', () => window.render());
 
 /* ---------- global keymap ---------- */
 document.addEventListener('keydown', (e) => {
@@ -270,5 +272,5 @@ window.addEventListener('DOMContentLoaded', () => {
   // Phones land on the glanceable Status dashboard; desktop keeps Chat.
   const defaultTab = window.matchMedia('(max-width: 720px)').matches ? 'status' : 'chat';
   if (!location.hash) history.replaceState(null, '', '#tab=' + defaultTab);
-  render();
+  window.render();
 });

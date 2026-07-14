@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>home-ops — console (Preact shell)</title>
+<link rel="stylesheet" href="/static/styles.css">
+<link rel="stylesheet" href="/static/chat.css">
+<link rel="stylesheet" href="/static/projects.css">
+<link rel="stylesheet" href="/static/logs.css">
+<link rel="stylesheet" href="/static/hosts.css">
+<link rel="stylesheet" href="/static/status.css">
+<link rel="stylesheet" href="/static/evals.css">
+<link rel="stylesheet" href="/static/board.css">
+</head>
+<body>
+<div id="app"></div>
+
+<!-- Same helper + per-tab scripts as index.html. app.js loads for its helper
+     library (h, state, TABS, icons, DB, openCapture, VIEWS registry, keymap);
+     its render loop stays dormant because shell.js sets window.__SHELL and
+     overrides window.render. The per-tab view files still register VIEWS.* —
+     the legacy bridge in shell.js drives them for not-yet-migrated tabs. -->
+<script src="/static/data.js"></script>
+<script src="/static/chat-pure.js"></script>
+<script src="/static/chat-api.js"></script>
+<script src="/static/logs-api.js"></script>
+<script src="/static/projects-api.js"></script>
+<script src="/static/hosts-api.js"></script>
+<script src="/static/status-api.js"></script>
+<script src="/static/evals-api.js"></script>
+<script src="/static/Sortable.min.js"></script>
+<script src="/static/board-api.js"></script>
+<script src="/static/app.js"></script>
+<script src="/static/chat.js"></script>
+<script src="/static/projects.js"></script>
+<script src="/static/logs.js"></script>
+<script src="/static/hosts.js"></script>
+<script src="/static/status.js"></script>
+<script src="/static/evals.js"></script>
+<script src="/static/board.js"></script>
+
+<!-- Preact owns the shell. Imports status-preact.js (native Status) + vendor. -->
+<script type="module" src="/static/shell.js"></script>
+</body>
+</html>
