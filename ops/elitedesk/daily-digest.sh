@@ -265,7 +265,7 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
   printf '%s\n' "$MESSAGE"
   printf '\n--- dry run: not sent (transport=%s) ---\n' "$DIGEST_TRANSPORT" >&2
   [[ "$MODE" == evening ]] && \
-    printf '--- dry run: would queue_night_digest() for the overnight narrative ---\n' >&2
+    printf '%s\n' '--- dry run: would queue_night_digest() for the overnight narrative ---' >&2
   exit 0
 fi
 
