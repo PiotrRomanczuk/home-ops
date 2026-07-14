@@ -20,7 +20,10 @@ export function registerAuthRoutes(app: Hono): void {
   app.get('/static/:name', async (c) => serveStatic(c.req.param('name')));
 
   app.get('/', (c) => {
-    if (!hasViewerAuth(c)) return c.redirect('/login');
+    // AUTH_PUBLIC opens the console with no viewer login. The API viewer-guard
+    // already honors it (auth.ts); the root page must too, else it bounces to
+    // /login even in public mode. Worker/token endpoints stay protected.
+    if (!env.AUTH_PUBLIC && !hasViewerAuth(c)) return c.redirect('/login');
     return serveStatic('index.html');
   });
 }
