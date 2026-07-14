@@ -1,0 +1,12 @@
+[Unit]
+Description=Fire home-ops evening digest at 21:00 Europe/Warsaw
+
+[Timer]
+# OnCalendar follows the host's system timezone. Verify with `timedatectl`
+# that elitedesk is set to Europe/Warsaw so 21:00 means 21:00 local.
+OnCalendar=*-*-* 21:00:00
+Persistent=true
+Unit=daily-digest-evening.service
+
+[Install]
+WantedBy=timers.target

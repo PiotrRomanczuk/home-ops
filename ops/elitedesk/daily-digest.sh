@@ -48,8 +48,23 @@ SMTP_PORT="${SMTP_PORT:-587}"
 SMTP_USER="${SMTP_USER:-$DIGEST_FROM}"
 SMTP_PASS_FILE="${SMTP_PASS_FILE:-$HOME/.config/home-ops/smtp.pass}"
 
+# Mode: 'morning' (default — the overnight LLM narrative + planner focus) or
+# 'evening' (end-of-day snapshot that also queues the overnight narrative job).
+MODE=morning
 DRY_RUN=0
-[[ "${1:-}" == "--dry-run" ]] && DRY_RUN=1
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --dry-run)       DRY_RUN=1 ;;
+    --mode)          shift; MODE="${1:-morning}" ;;
+    --mode=*)        MODE="${1#*=}" ;;
+    morning|evening) MODE="$1" ;;
+    *) printf 'unknown argument: %s (use --mode morning|evening, --dry-run)\n' "$1" >&2; exit 1 ;;
+  esac
+  shift
+done
+if [[ "$MODE" != morning && "$MODE" != evening ]]; then
+  printf 'bad --mode: %s (use morning or evening)\n' "$MODE" >&2; exit 1
+fi
 
 if [[ "$DRY_RUN" -eq 0 ]]; then
   if [[ -z "$DIGEST_TO" || -z "$DIGEST_FROM" ]]; then
@@ -156,7 +171,11 @@ COMMITS_H="$(printf '%s' "$COMMITS" | esc)"
 FOCUS_H="$(printf '%s' "$FOCUS"     | esc)"
 
 # --- Compose the email -------------------------------------------------------
-SUBJECT="${DIGEST_SUBJECT_PREFIX} ${TODAY} · ${STAT_HOSTS_OK}/${STAT_HOSTS_TOTAL} up · ${STAT_ERRORS:-0} err · ${FOCUS}"
+if [[ "$MODE" == evening ]]; then
+  SUBJECT="${DIGEST_SUBJECT_PREFIX} ${TODAY} evening · ${STAT_HOSTS_OK}/${STAT_HOSTS_TOTAL} up · ${STAT_ERRORS:-0} err"
+else
+  SUBJECT="${DIGEST_SUBJECT_PREFIX} ${TODAY} · ${STAT_HOSTS_OK}/${STAT_HOSTS_TOTAL} up · ${STAT_ERRORS:-0} err · ${FOCUS}"
+fi
 SUBJECT="$(printf '%.140s' "$SUBJECT")"
 
 SANS="-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"
@@ -179,17 +198,42 @@ else
   FOCUS_CAPTION="pin a card as Today's focus on the Board tab to change it"
 fi
 
+# --- mode-specific header + overnight narrative card ------------------------
+if [[ "$MODE" == morning ]]; then
+  HEADER_TITLE="Morning digest"
+  # The overnight LLM narrative: latest completed night-digest summarise job,
+  # queued by yesterday evening's run and generated on the game-free GPU.
+  NARRATIVE="$(psql_val "
+    SELECT left(result->>'summary', 6000)
+    FROM gpu_jobs
+    WHERE kind='summarise'
+      AND payload->>'conversation_id' LIKE 'night-digest-%'
+      AND status='done' AND result ? 'summary' AND (result->>'summary') <> ''
+      AND created_at > now() - interval '18 hours'
+    ORDER BY created_at DESC LIMIT 1;" 2>/dev/null || true)"
+  if [[ -n "$NARRATIVE" ]]; then
+    NARRATIVE_H="$(printf '%s' "$NARRATIVE" | esc)"
+    NARRATIVE_CARD="<div style=\"margin:16px 22px 4px;background:#12261a;border-left:3px solid ${GREEN};border-radius:6px;padding:13px 16px\"><div style=\"font-size:10.5px;letter-spacing:.08em;color:${GREEN};text-transform:uppercase;font-weight:700\">🌙 Overnight narrative</div><pre style=\"${PRE};margin-top:8px\">${NARRATIVE_H}</pre></div>"
+  else
+    NARRATIVE_CARD="<div style=\"margin:16px 22px 4px;background:#0d1117;border:1px dashed #30363d;border-radius:6px;padding:11px 16px;color:#8b949e;font-size:12px\">🌙 Overnight narrative not ready — the win10 GPU scheduler hasn't finished the night-digest job (busy or still queued). It fills in once the summarise job completes.</div>"
+  fi
+else
+  HEADER_TITLE="Evening digest"
+  NARRATIVE_CARD=""   # evening queues the narrative; it lands in the morning email
+fi
+
 read -r -d '' HTML <<HTMLDOC || true
 <!doctype html><html><body style="margin:0;background:#010409;padding:20px;font-family:${SANS}">
 <div style="max-width:720px;margin:0 auto;background:#161b22;border:1px solid #30363d;border-radius:12px;overflow:hidden">
   <div style="background:#1f6feb;padding:18px 22px">
     <div style="font-size:11px;letter-spacing:.1em;color:#cfe0ff;text-transform:uppercase">HOME-OPS · ${TODAY}</div>
-    <div style="font-size:22px;font-weight:700;color:#ffffff;margin-top:3px">Morning digest</div>
+    <div style="font-size:22px;font-weight:700;color:#ffffff;margin-top:3px">${HEADER_TITLE}</div>
     <div style="font-size:12px;color:#cfe0ff;margin-top:6px;font-family:${MONO}">${STATUS_LINE}</div>
   </div>
   <div style="padding:14px 19px 0">
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr>${TILES}</tr></table>
   </div>
+  ${NARRATIVE_CARD}
   <div style="margin:16px 22px 4px;background:#0d2136;border-left:3px solid #1f6feb;border-radius:6px;padding:13px 16px">
     <div style="font-size:10.5px;letter-spacing:.08em;color:${BLUE};text-transform:uppercase;font-weight:700">🎯 Today's focus</div>
     <div style="font-size:15px;color:#e6edf3;font-weight:600;margin:7px 0 4px">${FOCUS_H}</div>
@@ -201,7 +245,7 @@ read -r -d '' HTML <<HTMLDOC || true
   <div style="${CARD}"><div style="${LBL}">Stack status</div><pre style="${PRE};line-height:1.45">${BODY_H}</pre></div>
   <div style="${CARD}"><div style="${LBL}">Commits · 24h</div><pre style="${PRE}">${COMMITS_H}</pre></div>
   <div style="background:#0d1117;color:#6e7681;padding:13px 22px;font-size:11px;border-top:1px solid #30363d">
-    Generated by <span style="font-family:${MONO}">ops/elitedesk/daily-digest.sh</span> · manage tomorrow on the Board tab
+    Generated by <span style="font-family:${MONO}">daily-digest.sh --mode ${MODE}</span> · manage tomorrow on the Board tab
   </div>
 </div></body></html>
 HTMLDOC
@@ -220,6 +264,8 @@ MSG
 if [[ "$DRY_RUN" -eq 1 ]]; then
   printf '%s\n' "$MESSAGE"
   printf '\n--- dry run: not sent (transport=%s) ---\n' "$DIGEST_TRANSPORT" >&2
+  [[ "$MODE" == evening ]] && \
+    printf '--- dry run: would queue_night_digest() for the overnight narrative ---\n' >&2
   exit 0
 fi
 
@@ -236,3 +282,15 @@ case "$DIGEST_TRANSPORT" in
     printf 'digest sent to %s\n' "$DIGEST_TO"
     ;;
 esac
+
+# Evening run kicks off the overnight LLM narrative now that the GPU is free of
+# games; the win10 scheduler runs it overnight and the morning digest reads it.
+# Idempotent per day (queue_night_digest skips if already queued).
+if [[ "$MODE" == evening ]]; then
+  NIGHT_ID="$(psql_val "SELECT queue_night_digest();" 2>/dev/null || true)"
+  if [[ -n "$NIGHT_ID" ]]; then
+    printf 'queued overnight narrative job id=%s\n' "$NIGHT_ID"
+  else
+    printf 'overnight narrative already queued for today (skipped)\n'
+  fi
+fi
