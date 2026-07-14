@@ -206,5 +206,82 @@ class TestParseProjectFile(unittest.TestCase):
         self.assertEqual(rec['status'], 'dormant')
 
 
+class BoardRenderTests(unittest.TestCase):
+    """The DB→vault render + reconciliation helpers for the Board tab."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.mod = _load_planner_sync()
+
+    def _tasks(self):
+        # Deliberately out of position order to prove sorting.
+        return [
+            {'id': 3, 'column_key': 'next', 'text': 'ship it', 'done': False, 'position': 0},
+            {'id': 1, 'column_key': 'now', 'text': 'second now', 'done': False, 'position': 1},
+            {'id': 2, 'column_key': 'now', 'text': 'first now', 'done': True, 'position': 0},
+        ]
+
+    def test_render_orders_by_position_and_maps_done(self):
+        r = self.mod.render_sections_md(self._tasks())
+        self.assertEqual(r['Now'], ['- [x] first now', '- [ ] second now'])
+        self.assertEqual(r['Next'], ['- [ ] ship it'])
+        self.assertEqual(r['Later'], [])
+
+    def test_render_collapses_newlines(self):
+        r = self.mod.render_sections_md([
+            {'id': 1, 'column_key': 'now', 'text': 'a\nb', 'done': False, 'position': 0},
+        ])
+        self.assertEqual(r['Now'], ['- [ ] a b'])
+
+    def test_replace_preserves_non_managed_sections(self):
+        md = (
+            '---\nproject: home-ops\n---\n'
+            '# home-ops\n\n'
+            '## Now\n\n- [ ] old now\n\n'
+            '## Next\n\n- [ ] old next\n\n'
+            '## Later\n\n- [ ] old later\n\n'
+            '## Pain points\n\nThe pain is real.\n\n'
+            '## Notes\n\nkeep me.\n'
+        )
+        rendered = {'Now': ['- [x] new now'], 'Next': [], 'Later': ['- [ ] new later']}
+        out = self.mod.replace_managed_sections(md, rendered)
+        self.assertIn('- [x] new now', out)
+        self.assertIn('- [ ] new later', out)
+        self.assertNotIn('old now', out)
+        self.assertNotIn('old next', out)
+        # Non-managed content and frontmatter survive verbatim.
+        self.assertIn('project: home-ops', out)
+        self.assertIn('The pain is real.', out)
+        self.assertIn('keep me.', out)
+        self.assertIn('# home-ops', out)
+
+    def test_replace_is_idempotent(self):
+        """Rendering the same tasks twice must not drift (loop-safety)."""
+        md = '# x\n\n## Now\n\n- [ ] a\n\n## Next\n\n## Later\n'
+        rendered = self.mod.render_sections_md([
+            {'id': 1, 'column_key': 'now', 'text': 'a', 'done': False, 'position': 0},
+        ])
+        once = self.mod.replace_managed_sections(md, rendered)
+        twice = self.mod.replace_managed_sections(once, rendered)
+        self.assertEqual(once, twice)
+
+    def test_round_trip_parse_matches(self):
+        """render → replace → parse_section_tasks recovers the same tasks."""
+        tasks = self._tasks()
+        rendered = self.mod.render_sections_md(tasks)
+        md = self.mod.replace_managed_sections('# x\n\n## Now\n\n## Next\n\n## Later\n', rendered)
+        sections = self.mod._split_sections(md)
+        now = self.mod._parse_section_tasks(sections['Now'])
+        self.assertEqual(now, [('first now', True), ('second now', False)])
+        self.assertEqual(self.mod._parse_section_tasks(sections['Next']), [('ship it', False)])
+
+    def test_managed_hash_ignores_other_sections(self):
+        a = '# x\n## Now\n- [ ] a\n## Notes\n\nhello\n'
+        b = '# x\n## Now\n- [ ] a\n## Notes\n\nDIFFERENT notes\n'
+        self.assertEqual(self.mod._managed_hash(a), self.mod._managed_hash(b))
+        c = '# x\n## Now\n- [x] a\n## Notes\n\nhello\n'
+        self.assertNotEqual(self.mod._managed_hash(a), self.mod._managed_hash(c))
+
+
 if __name__ == '__main__':
     unittest.main()

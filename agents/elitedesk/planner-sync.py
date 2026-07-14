@@ -19,6 +19,7 @@ Env:
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -48,6 +49,9 @@ shutdown = Shutdown()
 INGEST_BASE = ic.events_url.replace('/api/ingest', '').rstrip('/')
 SYNC_URL = INGEST_BASE + '/api/projects/sync'
 TOGGLES_URL = INGEST_BASE + '/api/task_toggles'
+BOARD_URL = INGEST_BASE + '/api/board'
+BOARD_IMPORT_URL = INGEST_BASE + '/api/board/import'
+BOARD_SLUG = os.environ.get('BOARD_SLUG', 'home-ops')
 
 
 def post_log(level: str, message: str, data: dict[str, Any] | None = None) -> None:
@@ -315,6 +319,184 @@ def toggles_loop() -> None:
             post_log('error', f'toggles tick raised: {type(e).__name__}', {'err': str(e)[:500]})
 
 
+# ── board sync (DB-authoritative board_tasks ↔ vault markdown) ────────
+#
+# The Board tab writes board_tasks (Postgres, authoritative). Each vault-sync
+# tick we render those rows back into the Now/Next/Later sections of
+# projects/<BOARD_SLUG>.md and push, so Obsidian + the digest stay consistent.
+# Obsidian-only edits (board untouched) are imported back into the board.
+# Reconciliation is watermark + managed-section-hash based; see board_sync_once.
+
+_MANAGED = (('Now', 'now'), ('Next', 'next'), ('Later', 'later'))
+_board_last: dict[str, Any] = {'watermark': None, 'hash': None}
+
+
+def _hash(text: str) -> str:
+    return hashlib.md5(text.encode('utf-8')).hexdigest()
+
+
+def _parse_section_tasks(md: str | None) -> list[tuple[str, bool]]:
+    """Extract [(text, done)] from a Now/Next/Later section's markdown."""
+    out: list[tuple[str, bool]] = []
+    for line in (md or '').split('\n'):
+        m = _TOGGLE_LINE_RE.match(line)
+        if m:
+            out.append((m.group(4).strip(), m.group(2).lower() == 'x'))
+    return out
+
+
+def render_sections_md(tasks: list[dict[str, Any]]) -> dict[str, list[str]]:
+    """DB rows → { 'Now': ['- [ ] a', ...], 'Next': [...], 'Later': [...] }.
+    Ordered by position; newlines in a task collapse to spaces so each card
+    stays a single checkbox line."""
+    rendered: dict[str, list[str]] = {disp: [] for disp, _ in _MANAGED}
+    by_key = {key: disp for disp, key in _MANAGED}
+    ordered = sorted(tasks, key=lambda t: (t.get('position') or 0, t.get('id') or 0))
+    for t in ordered:
+        disp = by_key.get(t.get('column_key'))
+        if disp is None:
+            continue
+        marker = 'x' if t.get('done') else ' '
+        text = ' '.join(str(t.get('text') or '').split('\n')).strip()
+        rendered[disp].append(f'- [{marker}] {text}')
+    return rendered
+
+
+def _header_canonical(line: str) -> str | None:
+    m = re.match(r'^##\s+(.+?)\s*$', line)
+    if not m:
+        return None
+    raw = m.group(1).strip()
+    for disp, _ in _MANAGED:
+        if raw == disp or raw.startswith(disp + ' ') or raw.startswith(disp + ' —'):
+            return disp
+    return None
+
+
+def replace_managed_sections(md_text: str, rendered: dict[str, list[str]]) -> str:
+    """Rewrite ONLY the Now/Next/Later section bodies from `rendered`, leaving
+    frontmatter, title, Pain points, Notes and anything else untouched."""
+    lines = md_text.split('\n')
+    out: list[str] = []
+    seen: set[str] = set()
+    i, n = 0, len(lines)
+    while i < n:
+        line = lines[i]
+        canon = _header_canonical(line)
+        if canon and canon not in seen and canon in rendered:
+            seen.add(canon)
+            out.append(line)          # keep the header verbatim
+            out.append('')
+            out.extend(rendered[canon])
+            out.append('')
+            i += 1
+            while i < n and not re.match(r'^#{1,6}\s', lines[i]):
+                i += 1                # drop the old body up to the next header
+            continue
+        out.append(line)
+        i += 1
+    return '\n'.join(out)
+
+
+def _managed_hash(md_text: str) -> str:
+    s = _split_sections(md_text)
+    return _hash('\n----\n'.join(s.get(disp, '') for disp, _ in _MANAGED))
+
+
+def _board_get(slug: str) -> dict[str, Any] | None:
+    req = urllib.request.Request(
+        f'{BOARD_URL}?slug={slug}', headers={'X-Ingest-Token': ic.token})
+    try:
+        with urllib.request.urlopen(req, timeout=8) as r:
+            return json.loads(r.read())
+    except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError) as e:
+        post_log('warn', f'board fetch failed: {type(e).__name__}', {'err': str(e)[:300]})
+        return None
+
+
+def _board_import(slug: str, parsed: dict[str, Any], focus_text: str | None) -> dict[str, Any] | None:
+    tasks: list[dict[str, Any]] = []
+    for disp, key in _MANAGED:
+        for text, done in _parse_section_tasks(parsed.get(f'{key}_md')):
+            tasks.append({'column': key, 'text': text, 'done': done})
+    status, body = ic.request(
+        BOARD_IMPORT_URL, {'slug': slug, 'tasks': tasks, 'focusText': focus_text}, timeout=10)
+    if status == 200:
+        return body
+    post_log('warn', 'board import failed', {'status': status})
+    return None
+
+
+def _write_commit_push(md_path: Path, new_text: str, msg: str) -> bool:
+    pr = _run_git('pull', '--ff-only')
+    if pr.returncode != 0:
+        post_log('warn', 'board-sync pre-push pull failed', {'stderr': pr.stderr.strip()[-300:]})
+        return False
+    md_path.write_text(new_text, encoding='utf-8')
+    if _run_git('add', str(md_path.relative_to(PLANNER_DIR))).returncode != 0:
+        return False
+    commit = _run_git('-c', 'user.name=planner-sync', '-c', 'user.email=planner-sync@home-ops',
+                      'commit', '-m', msg)
+    if commit.returncode != 0:
+        post_log('warn', 'board-sync commit failed', {'stderr': commit.stderr.strip()[-300:]})
+        return False
+    push = _run_git('push')
+    if push.returncode != 0:
+        post_log('warn', 'board-sync push conflict', {'stderr': push.stderr.strip()[-300:]})
+        return False
+    return True
+
+
+def board_sync_once() -> None:
+    """Reconcile board_tasks (authoritative) with the vault markdown.
+      board changed  → render DB→vault and push (DB wins).
+      vault changed, board untouched → import Obsidian edits into the board.
+      first tick with an empty board → seed the board from the vault.
+    Loop-safe: after each write we store the managed-section hash, so our own
+    commit is not seen as an external edit next tick."""
+    md_path = PLANNER_DIR / 'projects' / f'{BOARD_SLUG}.md'
+    if not md_path.exists():
+        return
+    board = _board_get(BOARD_SLUG)
+    if board is None:
+        return
+    tasks = board.get('tasks') or []
+    watermark = board.get('updatedAt')
+    try:
+        current = md_path.read_text(encoding='utf-8')
+    except (OSError, UnicodeDecodeError):
+        return
+
+    # Seed an empty board from the vault on first run.
+    if not tasks and _board_last['watermark'] is None:
+        parsed = parse_project_file(md_path)
+        res = _board_import(BOARD_SLUG, parsed or {}, None) if parsed else None
+        if res:
+            _board_last['watermark'] = res.get('updatedAt')
+            _board_last['hash'] = _managed_hash(current)
+        return
+
+    rendered = render_sections_md(tasks)
+    new_md = replace_managed_sections(current, rendered)
+    first = _board_last['watermark'] is None
+    board_changed = (not first) and (watermark != _board_last['watermark'])
+
+    if first or board_changed:
+        # DB is authoritative — author the vault (write only if it differs).
+        if new_md != current and not _write_commit_push(md_path, new_md, f'board sync: {BOARD_SLUG}'):
+            return  # retry next tick; don't advance the baseline
+        _board_last['watermark'] = watermark
+        _board_last['hash'] = _managed_hash(new_md)
+    elif _managed_hash(current) != _board_last['hash']:
+        # Board untouched but the vault's managed sections changed in Obsidian.
+        focus_text = next((t['text'] for t in tasks if t.get('is_focus')), None)
+        parsed = parse_project_file(md_path)
+        res = _board_import(BOARD_SLUG, parsed or {}, focus_text) if parsed else None
+        if res:
+            _board_last['watermark'] = res.get('updatedAt')
+            _board_last['hash'] = _managed_hash(current)
+
+
 # ── main loop ─────────────────────────────────────────────────────────
 
 def sync_once() -> None:
@@ -324,6 +506,13 @@ def sync_once() -> None:
         # We still try to parse with whatever's on disk — partial outage on
         # the git remote shouldn't blank out the projects table.
         pass
+
+    # Board tab: reconcile board_tasks ↔ vault. Runs before the parse below so
+    # the projects table reflects any DB→vault render from this same tick.
+    try:
+        board_sync_once()
+    except (OSError, ValueError, subprocess.SubprocessError) as e:
+        post_log('error', f'board-sync raised: {type(e).__name__}', {'err': str(e)[:500]})
 
     projects_dir = PLANNER_DIR / 'projects'
     if not projects_dir.is_dir():

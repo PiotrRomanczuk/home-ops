@@ -119,6 +119,7 @@ const TABS = [
   { id: 'logs',     label: 'Logs',     key: '4', ico: icoLogs },
   { id: 'hosts',    label: 'Hosts',    key: '5', ico: icoHosts },
   { id: 'evals',    label: 'Evals',    key: '6', ico: icoEvals },
+  { id: 'board',    label: 'Board',    key: '7', ico: icoBoard },
 ];
 function icon(p) { return `<svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`; }
 function icoStatus() { return icon('<circle cx="8" cy="8" r="5.5"/><path d="M5 8.3l2 2 4-4.5"/>'); }
@@ -127,6 +128,7 @@ function icoProj()  { return icon('<rect x="2.5" y="2.5" width="4.5" height="4.5
 function icoLogs()  { return icon('<path d="M3 4h10M3 7h10M3 10h7M3 13h4"/>'); }
 function icoHosts() { return icon('<rect x="2.5" y="3" width="11" height="3.2"/><rect x="2.5" y="8.5" width="11" height="3.2"/><circle cx="5" cy="4.6" r="0.4" fill="currentColor"/><circle cx="5" cy="10.1" r="0.4" fill="currentColor"/>'); }
 function icoEvals() { return icon('<rect x="2.5" y="2.5" width="3.4" height="7"/><rect x="6.4" y="2.5" width="3.4" height="10.5"/><rect x="10.3" y="2.5" width="3.4" height="5"/>'); }
+function icoBoard() { return icon('<rect x="2.5" y="2.5" width="3.2" height="11"/><rect x="6.4" y="2.5" width="3.2" height="7"/><rect x="10.3" y="2.5" width="3.2" height="9"/>'); }
 
 function renderChrome() {
   const st = getState();
@@ -137,6 +139,8 @@ function renderChrome() {
     hosts: DB.HOSTS.filter(x => x.hd !== 'good').length,
     // Attention badge: cards in rotation whose files eval-tick has not seen.
     evals: (window.Evals?.items || []).filter(t => (t.stage === 'testing' || t.stage === 'active') && !t.has_files).length,
+    // Open (not-done) tasks in the Now column.
+    board: (window.Board?.items || []).filter(t => t.column_key === 'now' && !t.done).length,
   };
   const tabs = TABS.map(t => h('button', {
     class: 'tab' + (st.tab === t.id ? ' on' : ''),

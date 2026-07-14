@@ -1,0 +1,96 @@
+/* ============================================================
+   board.css — Board tab (interactive kanban). Three columns
+   (Now/Next/Later) with SortableJS drag-and-drop. Reuses the
+   design tokens in styles.css; shares the visual language of
+   the Evals board.
+   ============================================================ */
+
+.board-view { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+
+.bfocus-chip {
+  font-size: 11px; color: var(--accent); border: 1px solid var(--accent-line);
+  background: var(--accent-dim); border-radius: 3px; padding: 1px 7px;
+  max-width: 46ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.bboard {
+  display: flex; gap: 12px; align-items: flex-start;
+  padding: 10px 14px 16px; overflow-x: auto; flex: 1; min-height: 0;
+}
+.bcol {
+  flex: 1 1 0; min-width: 240px; max-width: 420px;
+  display: flex; flex-direction: column;
+  background: rgba(255, 255, 255, 0.015);
+  border: 1px solid var(--border); border-radius: 6px; padding: 8px;
+  min-height: 0;
+}
+.bcol-now { border-color: rgba(63, 185, 80, 0.35); }
+.bcol-hd {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--fg-muted); padding: 1px 2px 6px;
+}
+.bcol-now .bcol-hd .lbl { color: var(--good); }
+.bcol-list { display: flex; flex-direction: column; gap: 7px; flex: 1; min-height: 40px; }
+.bcol-empty {
+  text-align: center; color: var(--fg-faint); border: 1px dashed var(--border);
+  border-radius: 5px; padding: 14px 0; font-size: 11px;
+}
+
+/* ---------- card ---------- */
+.bcard {
+  border: 1px solid var(--border); border-radius: 5px; padding: 6px 8px 5px;
+  background: var(--bg); display: flex; flex-direction: column; gap: 5px;
+  cursor: grab;
+}
+.bcard:active { cursor: grabbing; }
+.bcard:hover { border-color: var(--border-strong); }
+.bcard.focus { border-left: 2px solid var(--accent); }
+.bcard.pending { opacity: 0.55; }
+.bcard.err { border-color: var(--stale); }
+.bcard-ghost { opacity: 0.4; background: var(--accent-dim); }
+.bcard-chosen { border-color: var(--accent); }
+
+.bcard-top { display: flex; align-items: center; gap: 5px; }
+.btext { font-size: 12.5px; line-height: 1.4; white-space: pre-wrap; word-break: break-word; cursor: text; }
+.btext.done { text-decoration: line-through; color: var(--fg-faint); }
+
+.bstar, .bcheck, .bdel {
+  border: 1px solid var(--border); background: none; color: var(--fg-muted);
+  border-radius: 4px; width: 20px; height: 18px; line-height: 15px;
+  cursor: pointer; font-size: 12px; padding: 0; flex: none;
+}
+.bstar.on { color: var(--st-warn); border-color: var(--st-warn); }
+.bcheck.on { color: var(--good); border-color: var(--good); }
+.bstar:hover, .bcheck:hover { border-color: var(--accent); color: var(--accent); }
+.bdel:hover { border-color: var(--stale); color: var(--stale); }
+
+.bcard-foot { display: flex; align-items: center; }
+.bmove {
+  border: 1px solid var(--border); background: none; color: var(--fg-muted);
+  border-radius: 4px; width: 24px; height: 17px; line-height: 14px;
+  cursor: pointer; font-size: 12px; padding: 0;
+}
+.bmove:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
+.bmove:disabled { opacity: 0.25; cursor: default; }
+
+.bedit {
+  width: 100%; box-sizing: border-box; resize: vertical;
+  background: var(--bg-inset); border: 1px solid var(--accent); border-radius: 4px;
+  color: var(--fg); font: inherit; font-size: 12.5px; padding: 4px 6px;
+}
+
+/* ---------- add-card ---------- */
+.bnew { display: flex; }
+.bnew-in {
+  width: 100%; box-sizing: border-box;
+  background: var(--bg-inset); border: 1px dashed var(--border); border-radius: 4px;
+  color: var(--fg); font: inherit; font-size: 12px; padding: 5px 7px;
+}
+.bnew-in.err { border-color: var(--stale); border-style: solid; }
+
+/* ---------- mobile: stack columns ---------- */
+@media (max-width: 720px) {
+  .bboard { flex-direction: column; overflow-x: visible; overflow-y: auto; }
+  .bcol { flex: none; width: auto; max-width: none; }
+}
