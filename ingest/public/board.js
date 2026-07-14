@@ -48,19 +48,32 @@ function boardCard(t) {
 
   let body;
   if (t._editing) {
+    // One-shot: Enter and the resulting blur both fire — guard so we only
+    // commit/cancel (and render) once, else the second render() throws on an
+    // already-removed node.
+    let closed = false;
+    const commit = () => {
+      if (closed) return;
+      closed = true;
+      const v = ta.value.trim();
+      delete t._editing;
+      if (v && v !== t.text) Board.update(t, { text: v });
+      else render();
+    };
+    const cancel = () => {
+      if (closed) return;
+      closed = true;
+      delete t._editing;
+      render();
+    };
     const ta = h('textarea', {
       class: 'bedit no-drag', rows: 2, value: t.text,
       onkeydown: (e) => {
         if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commit(); }
-        else if (e.key === 'Escape') { delete t._editing; render(); }
+        else if (e.key === 'Escape') { e.preventDefault(); cancel(); }
       },
       onblur: commit,
     });
-    function commit() {
-      const v = ta.value.trim();
-      delete t._editing;
-      if (v && v !== t.text) Board.update(t, { text: v }); else render();
-    }
     body = ta;
     requestAnimationFrame(() => { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); });
   } else {
@@ -156,14 +169,18 @@ VIEWS.board = function (st, main) {
         chosenClass: 'bcard-chosen',
         emptyInsertThreshold: 10,
         onEnd: (evt) => {
+          // Capture the drop result synchronously, then defer the move: our
+          // move() calls render(), which tears down this very Sortable — doing
+          // that inside onEnd makes SortableJS revert the drop.
           const toCol = evt.to.dataset.column;
           const fromCol = evt.from.dataset.column;
-          const id = Number(evt.item.dataset.id);
-          const item = Board.byId(id);
-          if (!item) { render(); return; }
+          const id = evt.item.dataset.id;
           const order = boardOrderOf(evt.to);
           const fromOrder = fromCol !== toCol ? boardOrderOf(evt.from) : null;
-          Board.move(item, toCol, order, fromCol, fromOrder);
+          setTimeout(() => {
+            const item = Board.byId(id);
+            if (item) Board.move(item, toCol, order, fromCol, fromOrder);
+          }, 0);
         },
       }));
     }
