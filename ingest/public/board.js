@@ -148,6 +148,10 @@ VIEWS.board = function (st, main) {
         draggable: '.bcard',
         filter: '.no-drag',
         preventOnFilter: false,
+        // Pointer-based dragging (not native HTML5 DnD): reliable on touch
+        // for morning phone use, and consistent across browsers.
+        forceFallback: true,
+        fallbackTolerance: 4,
         ghostClass: 'bcard-ghost',
         chosenClass: 'bcard-chosen',
         emptyInsertThreshold: 10,
