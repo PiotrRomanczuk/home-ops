@@ -35,6 +35,9 @@ function stHostRow(row) {
     h('div', { class: 'st-host-hd' },
       h('span', { class: 'hd ' + hd }),
       h('span', { class: 'st-hn' }, row.host),
+      row.data && row.data.is_gaming
+        ? h('span', { class: 'st-gaming', title: 'a game is running — GPU jobs pause' }, '🎮 ' + (row.data.game || 'gaming'))
+        : null,
       h('span', { class: 'grow' }),
       h('span', { class: 'st-lag num', title: 'last log event / last metric sample' },
         `ev ${fmtLag(evLag)} · m ${fmtLag(mLag)}`)),
