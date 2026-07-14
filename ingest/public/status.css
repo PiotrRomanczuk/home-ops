@@ -49,6 +49,19 @@
 
 .st-meta { font-size: 10px; color: var(--fg-muted); text-align: center; padding-top: 2px; }
 
+.st-gaming {
+  margin-left: 8px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #d9a45b;
+  background: rgba(217, 164, 91, 0.12);
+  border: 1px solid rgba(217, 164, 91, 0.4);
+  border-radius: 3px;
+  padding: 1px 6px;
+  white-space: nowrap;
+}
+
 @media (min-width: 720px) {
   .st-bars { grid-template-columns: 1fr 1fr 1fr 1fr; }
 }

@@ -14,6 +14,9 @@ Env:
   METRIC_TOP_N     top-N processes (default 10)
   GPU_PS1_PATH     path to sample-gpu.ps1 (default: same dir as this script)
   OLLAMA_URL       default http://localhost:11434
+  GAMES_FILE       newline-separated game tokens; default the scheduler's
+                   C:\\ProgramData\\GpuScheduler\\games.txt (optional — built-in
+                   defaults apply even if the file is absent)
 """
 from __future__ import annotations
 
@@ -38,9 +41,55 @@ METRIC_DISK_PATH = os.environ.get('METRIC_DISK_PATH', 'C:\\')
 METRIC_TOP_N = int(os.environ.get('METRIC_TOP_N', '10'))
 GPU_PS1_PATH = Path(os.environ.get('GPU_PS1_PATH') or Path(__file__).resolve().parent / 'sample-gpu.ps1')
 OLLAMA_URL = os.environ.get('OLLAMA_URL', 'http://localhost:11434').rstrip('/')
+GAMES_FILE = Path(os.environ.get('GAMES_FILE') or r'C:\ProgramData\GpuScheduler\games.txt')
+
+# Lowercase substring tokens that mark a foreground game. A process is treated
+# as a game if any token is a substring of its executable name. Merged with
+# GAMES_FILE lines when that file exists; kept as a fallback so detection works
+# before the scheduler's games.txt is present. Launchers (steam/battle.net) are
+# deliberately excluded — running != playing.
+DEFAULT_GAMES = {
+    'diablo iv', 'diablo', 'cyberpunk', 'elden ring', 'eldenring', 'witcher3',
+    "baldur's gate", 'bg3', 'starfield', 'helldivers', 'cs2.exe', 'valorant',
+    'dota2', 'rocketleague', 'hogwartslegacy', 'poe', 'pathofexile',
+}
 
 ic = IngestClient.from_env(host=HOST_NAME)
 shutdown = Shutdown()
+
+_games: set[str] = set(DEFAULT_GAMES)
+_games_mtime: float = -1.0
+
+
+def refresh_games() -> None:
+    """Reload GAMES_FILE into the token set if it changed. Defaults always apply."""
+    global _games_mtime
+    try:
+        mtime = GAMES_FILE.stat().st_mtime
+    except OSError:
+        return  # no file — keep whatever we have (defaults at minimum)
+    if mtime == _games_mtime:
+        return
+    try:
+        text = GAMES_FILE.read_text(encoding='utf-8', errors='replace')
+    except OSError:
+        return
+    extra = {l.strip().lower() for l in text.splitlines()
+             if l.strip() and not l.lstrip().startswith('#')}
+    _games.clear()
+    _games.update(DEFAULT_GAMES)
+    _games.update(extra)
+    _games_mtime = mtime
+
+
+def detect_game(names: list[str]) -> str | None:
+    """Return the first running process name matching a known game token, else None."""
+    for name in names:
+        low = name.lower()
+        for tok in _games:
+            if tok in low:
+                return name
+    return None
 
 
 def post_log(level: str, message: str, data: dict[str, Any] | None = None) -> None:
@@ -91,6 +140,7 @@ def metric_sampler_loop() -> None:
     psutil.cpu_percent(interval=None)
     last_net = psutil.net_io_counters()
     last_net_ts = time.monotonic()
+    last_gaming: str | None = None
 
     while not shutdown.wait(METRIC_INTERVAL):
         try:
@@ -104,19 +154,30 @@ def metric_sampler_loop() -> None:
             net_tx = (net.bytes_sent - last_net.bytes_sent) / elapsed / 1024
             last_net, last_net_ts = net, now
 
-            procs_cpu, procs_mem = [], []
+            procs_cpu, procs_mem, all_names = [], [], []
             for p in psutil.process_iter(['name', 'pid', 'cpu_percent', 'memory_info']):
                 try:
                     i = p.info
+                    name = i.get('name') or '?'
+                    all_names.append(name)
                     if (i.get('cpu_percent') or 0) > 0:
-                        procs_cpu.append({'name': i.get('name') or '?', 'pid': i['pid'], 'pct': round(i['cpu_percent'], 1)})
+                        procs_cpu.append({'name': name, 'pid': i['pid'], 'pct': round(i['cpu_percent'], 1)})
                     rss = i['memory_info'].rss if i.get('memory_info') else 0
                     if rss > 0:
-                        procs_mem.append({'name': i.get('name') or '?', 'pid': i['pid'], 'rss_mb': rss // (1024 * 1024)})
+                        procs_mem.append({'name': name, 'pid': i['pid'], 'rss_mb': rss // (1024 * 1024)})
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                     continue
             top_cpu = sorted(procs_cpu, key=lambda x: x['pct'], reverse=True)[:METRIC_TOP_N]
             top_mem = sorted(procs_mem, key=lambda x: x['rss_mb'], reverse=True)[:METRIC_TOP_N]
+
+            refresh_games()
+            game = detect_game(all_names)
+            if game != last_gaming:
+                if game:
+                    post_log('info', f'gaming started: {game}', {'game': game, 'gaming': True})
+                else:
+                    post_log('info', f'gaming ended: {last_gaming}', {'game': last_gaming, 'gaming': False})
+                last_gaming = game
 
             gpu = sample_gpu()
             ollama = sample_ollama()
@@ -132,7 +193,8 @@ def metric_sampler_loop() -> None:
                 'disk_pct': round(disk.percent, 1),
                 'net_rx_kbps': round(net_rx, 1),
                 'net_tx_kbps': round(net_tx, 1),
-                'data': {'top_cpu': top_cpu, 'top_mem': top_mem, 'gpu_top_mem': gpu.get('top_gpu_mem', []), 'ollama': ollama},
+                'data': {'top_cpu': top_cpu, 'top_mem': top_mem, 'gpu_top_mem': gpu.get('top_gpu_mem', []),
+                         'ollama': ollama, 'is_gaming': game is not None, 'game': game},
             }
             if gpu:
                 metric['gpu_pct'] = gpu.get('gpu_pct')
