@@ -157,13 +157,16 @@ export function registerProjectsRoutes(app: Hono): void {
     const idx = Number(c.req.param('idx'));
     if (!SECTIONS.has(section)) return c.json({ error: 'invalid section' }, 400);
     if (!Number.isInteger(idx) || idx < 0 || idx > 999) return c.json({ error: 'invalid idx' }, 400);
-    const body = (await c.req.json().catch(() => ({}))) as { done?: boolean };
+    const body = (await c.req.json().catch(() => ({}))) as { done?: boolean; text?: string };
     if (typeof body.done !== 'boolean') return c.json({ error: 'done (boolean) required' }, 400);
+    // Optional text anchor — planner-sync matches on it first so the toggle
+    // survives the list shifting under the idx. Falls back to idx if absent.
+    const text = typeof body.text === 'string' ? body.text.trim().slice(0, 2000) || null : null;
     const r = await pool.query(
-      `INSERT INTO public.task_toggles (slug, section, idx, done)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO public.task_toggles (slug, section, idx, done, text)
+       VALUES ($1, $2, $3, $4, $5)
        RETURNING id, status, created_at`,
-      [slug, section, idx, body.done],
+      [slug, section, idx, body.done, text],
     );
     return c.json({ toggle: r.rows[0] });
   });
@@ -177,7 +180,7 @@ export function registerProjectsRoutes(app: Hono): void {
     const status = c.req.query('status') ?? 'queued';
     const limit = Math.min(Math.max(Number(c.req.query('limit') ?? '20'), 1), 100);
     const r = await pool.query(
-      `SELECT id, created_at, slug, section, idx, done, status, error
+      `SELECT id, created_at, slug, section, idx, done, text, status, error
          FROM public.task_toggles
         WHERE status = $1
         ORDER BY created_at

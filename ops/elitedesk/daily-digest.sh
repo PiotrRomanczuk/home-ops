@@ -105,11 +105,16 @@ TODAY="$(date +%Y-%m-%d)"
 FOCUS="$(psql_val "SELECT regexp_replace(text, '\*\*', '', 'g')
   FROM board_tasks WHERE slug='home-ops' AND is_focus LIMIT 1;" 2>/dev/null || true)"
 if [[ -z "$FOCUS" ]]; then
+  # First UNCHECKED item — done '[x]' lines are kept in the vault as a log,
+  # so the literal first line may be a completed task.
   FOCUS="$(psql_val "
     SELECT regexp_replace(
-             regexp_replace(split_part(next_md, E'\n', 1), '^- \[[ xX]\] ', ''),
+             regexp_replace(t.line, '^\s*[-*]\s+\[ \]\s+', ''),
              '\*\*', '', 'g')
-    FROM projects WHERE slug = 'home-ops';" 2>/dev/null || true)"
+    FROM projects p,
+         unnest(string_to_array(p.next_md, E'\n')) WITH ORDINALITY AS t(line, ord)
+    WHERE p.slug = 'home-ops' AND t.line ~ '^\s*[-*]\s+\[ \]'
+    ORDER BY t.ord LIMIT 1;" 2>/dev/null || true)"
 fi
 [[ -z "$FOCUS" ]] && FOCUS="(no focus pinned — pin one on the Board tab)"
 

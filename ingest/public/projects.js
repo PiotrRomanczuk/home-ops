@@ -63,7 +63,9 @@ async function toggleTask(slug, section, idx, item) {
   item._pending = true;
   render();
   try {
-    await window.api('POST', `/api/projects/${encodeURIComponent(slug)}/tasks/${section}/${idx}/toggle`, { done: desired });
+    // text anchors the toggle server-side: planner-sync flips the matching
+    // line even if items shifted under this idx since render.
+    await window.api('POST', `/api/projects/${encodeURIComponent(slug)}/tasks/${section}/${idx}/toggle`, { done: desired, text: item[0] });
     item._pending = false;
     // The worker will write back and the next vault-sync tick (≤60s)
     // refreshes the parsed Now/Next/Later. Leave the optimistic flip in
