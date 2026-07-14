@@ -135,8 +135,10 @@ STAT_FATAL="$(psql_val "SELECT count(*) FROM host_logs WHERE level='fatal' AND t
 STAT_EVALAGE="$(psql_val "SELECT coalesce(extract(day from now()-max(scored_at))::int::text || 'd', '—') FROM eval_scores;" 2>/dev/null || echo '—')"
 STAT_GPUQ="$(psql_val "SELECT count(*) FROM gpu_jobs WHERE status='queued';" 2>/dev/null || echo 0)"
 
-# Colour tokens (GitHub-dark palette)
-GREEN='#3fb950'; RED='#f85149'; AMBER='#d29922'; ORANGE='#ff9d4d'; BLUE='#58a6ff'
+# Colour tokens (terminal / CRT palette — matches the imported HOME-OPS design)
+BG='#070b0a'; PANEL='#0a0f0c'; LINE='#16221d'; GREENLINE='#2a4a2f'
+GREEN='#43d17f'; RED='#ff5c5c'; AMBER='#e3b341'; TEAL='#4fd6c8'
+FG='#cfe3da'; BRIGHT='#eafff5'; MUTED='#8fb8a9'; DIM='#6e8479'; FAINT='#5c7168'; FAINTER='#4a5f56'
 c_hosts=$([[ "$STAT_HOSTS_OK" == "$STAT_HOSTS_TOTAL" && "$STAT_HOSTS_TOTAL" -gt 0 ]] && echo "$GREEN" || echo "$RED")
 c_err=$([[ "${STAT_ERRORS:-0}" -gt 0 ]] && echo "$AMBER" || echo "$GREEN")
 c_fatal=$([[ "${STAT_FATAL:-0}" -gt 0 ]] && echo "$RED" || echo "$GREEN")
@@ -149,19 +151,19 @@ esc() { sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'; }
 # Colourise severity / health keywords and section rules inside the status block.
 colourise() {
   sed -E \
-    -e "s@(── [^─]* ─+)@<span style=\"color:${BLUE};font-weight:700\">\1</span>@g" \
+    -e "s@(── [^─]* ─+)@<span style=\"color:${FAINTER};letter-spacing:2px\">\1</span>@g" \
     -e "s@⚠ SILENT@<span style=\"color:${RED};font-weight:700\">⚠ SILENT</span>@g" \
     -e "s@\bfatal\b@<span style=\"color:${RED};font-weight:600\">fatal</span>@g" \
-    -e "s@\berror\b@<span style=\"color:${ORANGE}\">error</span>@g" \
-    -e "s@\bwarn\b@<span style=\"color:${AMBER}\">warn</span>@g" \
+    -e "s@\berror\b@<span style=\"color:${AMBER}\">error</span>@g" \
+    -e "s@\bwarn\b@<span style=\"color:${DIM}\">warn</span>@g" \
     -e "s@\bok\b@<span style=\"color:${GREEN}\">ok</span>@g"
 }
 # Turn markdown checkboxes/bold/code into tidy styling for the Next/Now lists.
 listfmt() {
   sed -E -e "s@- \[[xX]\]@<span style=\"color:${GREEN}\">✓</span>@g" \
-         -e "s@- \[ \]@<span style=\"color:#6e7681\">•</span>@g" \
-         -e "s@\*\*([^*]+)\*\*@<b style=\"color:#e6edf3\">\1</b>@g" \
-         -e "s@\`([^\`]+)\`@<span style=\"color:#79c0ff\">\1</span>@g"
+         -e "s@- \[ \]@<span style=\"color:${FAINTER}\">□</span>@g" \
+         -e "s@\*\*([^*]+)\*\*@<b style=\"color:${BRIGHT}\">\1</b>@g" \
+         -e "s@\`([^\`]+)\`@<span style=\"color:${TEAL}\">\1</span>@g"
 }
 
 BODY_H="$(printf '%s' "$BODY"       | esc | colourise)"
@@ -178,21 +180,23 @@ else
 fi
 SUBJECT="$(printf '%.140s' "$SUBJECT")"
 
-SANS="-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"
-MONO="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace"
+# Terminal aesthetic: the whole email is monospace. JetBrains Mono if the client
+# has it, else the platform mono stack (webfonts don't load in most mail clients).
+MONO="'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace"
+NOWTIME="$(date +%H:%M)"
 
-# One reusable stat tile: $1 value, $2 label, $3 colour.
-tile() { printf '<td width="20%%" valign="top" style="padding:3px"><div style="background:#0d1117;border:1px solid #21262d;border-radius:8px;padding:11px 4px;text-align:center"><div style="font-size:20px;font-weight:700;color:%s;font-family:%s">%s</div><div style="font-size:9px;letter-spacing:.04em;color:#8b949e;margin-top:3px;text-transform:uppercase">%s</div></div></td>' "$3" "$MONO" "$1" "$2"; }
-TILES="$(tile "${STAT_HOSTS_OK}/${STAT_HOSTS_TOTAL}" "hosts up" "$c_hosts")$(tile "${STAT_ERRORS:-0}" "errors 24h" "$c_err")$(tile "${STAT_FATAL:-0}" "fatal 24h" "$c_fatal")$(tile "${STAT_EVALAGE}" "eval age" "$c_eval")$(tile "${STAT_GPUQ:-0}" "gpu queued" "$BLUE")"
+# One reusable KPI tile: $1 value, $2 label, $3 colour (number + left accent stripe).
+tile() { printf '<td width="20%%" valign="top" style="padding:4px"><div style="background:%s;border:1px solid %s;border-left:3px solid %s;border-radius:5px;padding:12px 13px"><div style="font-size:25px;font-weight:700;color:%s;font-family:%s;line-height:1">%s</div><div style="font-size:9.5px;letter-spacing:.09em;color:%s;margin-top:8px;text-transform:uppercase">%s</div></div></td>' "$PANEL" "$LINE" "$3" "$3" "$MONO" "$1" "$DIM" "$2"; }
+TILES="$(tile "${STAT_HOSTS_OK}/${STAT_HOSTS_TOTAL}" "hosts up" "$c_hosts")$(tile "${STAT_ERRORS:-0}" "errors 24h" "$c_err")$(tile "${STAT_FATAL:-0}" "fatal 24h" "$c_fatal")$(tile "${STAT_EVALAGE}" "eval age" "$c_eval")$(tile "${STAT_GPUQ:-0}" "gpu queued" "$DIM")"
 
-PRE="margin:0;color:#c9d1d9;font-size:12.5px;line-height:1.5;white-space:pre-wrap;font-family:${MONO}"
-LBL="font-size:10.5px;letter-spacing:.08em;color:${BLUE};text-transform:uppercase;font-weight:700;margin-bottom:8px"
-CARD="margin:14px 22px;background:#0d1117;border:1px solid #21262d;border-radius:8px;padding:13px 15px"
+PRE="margin:0;color:#a7c4b8;font-size:12.5px;line-height:1.5;white-space:pre-wrap;font-family:${MONO}"
+LBL="font-size:11px;letter-spacing:.1em;color:${DIM};text-transform:uppercase;font-weight:600;margin-bottom:10px"
+CARD="margin:14px 20px;background:${PANEL};border:1px solid ${LINE};border-radius:6px;padding:14px 16px"
 
 # "Open board" button + caption, only when a console URL is configured.
 if [[ -n "$DIGEST_BOARD_URL" ]]; then
-  BOARD_BTN="<a href=\"${DIGEST_BOARD_URL}\" style=\"display:inline-block;margin-top:9px;background:#1f6feb;color:#fff;text-decoration:none;font-size:12px;font-weight:600;padding:6px 13px;border-radius:6px\">Open board →</a>"
-  FOCUS_CAPTION="pinned on the Board tab — drag cards or pin a new focus to change it"
+  BOARD_BTN="<div style=\"margin-top:12px\"><a href=\"${DIGEST_BOARD_URL}\" style=\"color:${TEAL};font-size:12.5px\">Open board →</a></div>"
+  FOCUS_CAPTION="pinned on Board — drag cards or pin a new focus to change it"
 else
   BOARD_BTN=""
   FOCUS_CAPTION="pin a card as Today's focus on the Board tab to change it"
@@ -213,39 +217,68 @@ if [[ "$MODE" == morning ]]; then
     ORDER BY created_at DESC LIMIT 1;" 2>/dev/null || true)"
   if [[ -n "$NARRATIVE" ]]; then
     NARRATIVE_H="$(printf '%s' "$NARRATIVE" | esc)"
-    NARRATIVE_CARD="<div style=\"margin:16px 22px 4px;background:#12261a;border-left:3px solid ${GREEN};border-radius:6px;padding:13px 16px\"><div style=\"font-size:10.5px;letter-spacing:.08em;color:${GREEN};text-transform:uppercase;font-weight:700\">🌙 Overnight narrative</div><pre style=\"${PRE};margin-top:8px\">${NARRATIVE_H}</pre></div>"
+    NARRATIVE_CARD="<div style=\"margin:14px 20px 4px;background:#0c150f;border:1px solid ${GREENLINE};border-radius:6px;padding:14px 16px\"><div style=\"font-size:11px;letter-spacing:.1em;color:${GREEN};text-transform:uppercase;font-weight:700\">🌙 Overnight narrative</div><pre style=\"${PRE};margin-top:8px\">${NARRATIVE_H}</pre></div>"
   else
-    NARRATIVE_CARD="<div style=\"margin:16px 22px 4px;background:#0d1117;border:1px dashed #30363d;border-radius:6px;padding:11px 16px;color:#8b949e;font-size:12px\">🌙 Overnight narrative not ready — the win10 GPU scheduler hasn't finished the night-digest job (busy or still queued). It fills in once the summarise job completes.</div>"
+    NARRATIVE_CARD="<div style=\"margin:14px 20px 4px;background:${PANEL};border:1px dashed ${LINE};border-radius:6px;padding:12px 16px;color:${DIM};font-size:12px\">🌙 Overnight narrative not ready — the win10 GPU scheduler hasn't finished the night-digest job (busy or still queued). It fills in once the summarise job completes.</div>"
   fi
 else
   HEADER_TITLE="Evening digest"
   NARRATIVE_CARD=""   # evening queues the narrative; it lands in the morning email
 fi
+# Uppercase badge for the masthead (MORNING DIGEST / EVENING DIGEST).
+BADGE="$(printf '%s' "$HEADER_TITLE" | tr '[:lower:]' '[:upper:]')"
 
 read -r -d '' HTML <<HTMLDOC || true
-<!doctype html><html><body style="margin:0;background:#010409;padding:20px;font-family:${SANS}">
-<div style="max-width:720px;margin:0 auto;background:#161b22;border:1px solid #30363d;border-radius:12px;overflow:hidden">
-  <div style="background:#1f6feb;padding:18px 22px">
-    <div style="font-size:11px;letter-spacing:.1em;color:#cfe0ff;text-transform:uppercase">HOME-OPS · ${TODAY}</div>
-    <div style="font-size:22px;font-weight:700;color:#ffffff;margin-top:3px">${HEADER_TITLE}</div>
-    <div style="font-size:12px;color:#cfe0ff;margin-top:6px;font-family:${MONO}">${STATUS_LINE}</div>
+<!doctype html><html><body style="margin:0;background:#040706;padding:20px;font-family:${MONO};color:${FG}">
+<div style="max-width:720px;margin:0 auto;background:${BG};border:1px solid ${LINE};border-radius:8px;overflow:hidden">
+
+  <!-- chrome bar -->
+  <div style="padding:12px 18px;border-bottom:1px solid ${LINE}">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr>
+      <td style="font-size:12.5px">
+        <span style="display:inline-block;width:11px;height:11px;border-radius:50%;background:#ff5f57;vertical-align:middle"></span>
+        <span style="display:inline-block;width:11px;height:11px;border-radius:50%;background:#febc2e;vertical-align:middle;margin-left:6px"></span>
+        <span style="display:inline-block;width:11px;height:11px;border-radius:50%;background:#28c840;vertical-align:middle;margin-left:6px"></span>
+        <span style="color:${FAINT};margin-left:12px">operator@home-ops:~\$</span>
+        <span style="color:${MUTED};margin-left:8px">./digest --mode ${MODE}</span>
+      </td>
+      <td align="right" style="font-size:12.5px;color:${GREEN};white-space:nowrap">● connected <span style="color:${FAINT}">${NOWTIME}</span></td>
+    </tr></table>
   </div>
-  <div style="padding:14px 19px 0">
+
+  <!-- masthead -->
+  <div style="padding:22px 18px;border-bottom:1px solid ${LINE}">
+    <span style="font-size:24px;font-weight:700;letter-spacing:2px;color:${BRIGHT}">HOME-OPS</span>
+    <span style="font-size:13px;color:${FAINT};margin-left:12px">${TODAY}</span>
+    <span style="font-size:12px;color:${AMBER};border:1px solid #4a3c17;background:#1a1508;padding:2px 9px;border-radius:3px;letter-spacing:1px;margin-left:10px">${BADGE}</span>
+    <span style="display:inline-block;width:8px;height:15px;background:${GREEN};vertical-align:middle;margin-left:8px"></span>
+    <div style="margin-top:12px;color:${MUTED};font-size:13px">${STATUS_LINE}</div>
+  </div>
+
+  <!-- KPI tiles -->
+  <div style="padding:16px 15px 2px">
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr>${TILES}</tr></table>
   </div>
+
   ${NARRATIVE_CARD}
-  <div style="margin:16px 22px 4px;background:#0d2136;border-left:3px solid #1f6feb;border-radius:6px;padding:13px 16px">
-    <div style="font-size:10.5px;letter-spacing:.08em;color:${BLUE};text-transform:uppercase;font-weight:700">🎯 Today's focus</div>
-    <div style="font-size:15px;color:#e6edf3;font-weight:600;margin:7px 0 4px">${FOCUS_H}</div>
-    <div style="font-size:11px;color:#8b949e">${FOCUS_CAPTION}</div>
+
+  <!-- today's focus -->
+  <div style="margin:14px 20px 4px;background:#0d1a11;border:1px solid ${GREENLINE};border-radius:6px;padding:14px 16px">
+    <div style="font-size:11px;letter-spacing:.1em;color:${GREEN};text-transform:uppercase;font-weight:700">▸ Today's focus</div>
+    <div style="font-size:15px;color:${BRIGHT};font-weight:600;margin:8px 0 4px">${FOCUS_H}</div>
+    <div style="font-size:11px;color:${DIM}">${FOCUS_CAPTION}</div>
     ${BOARD_BTN}
   </div>
+
   <div style="${CARD}"><div style="${LBL}">Next · planned</div><pre style="${PRE}">${NEXT_H}</pre></div>
   <div style="${CARD}"><div style="${LBL}">Now · in progress</div><pre style="${PRE}">${NOW_H}</pre></div>
   <div style="${CARD}"><div style="${LBL}">Stack status</div><pre style="${PRE};line-height:1.45">${BODY_H}</pre></div>
   <div style="${CARD}"><div style="${LBL}">Commits · 24h</div><pre style="${PRE}">${COMMITS_H}</pre></div>
-  <div style="background:#0d1117;color:#6e7681;padding:13px 22px;font-size:11px;border-top:1px solid #30363d">
-    Generated by <span style="font-family:${MONO}">daily-digest.sh --mode ${MODE}</span> · manage tomorrow on the Board tab
+
+  <!-- footer -->
+  <div style="padding:14px 20px;border-top:1px solid ${LINE};color:${FAINTER};font-size:11.5px">
+    <span style="color:${FAINTER}">\$</span> Generated by <span style="color:${MUTED}">daily-digest.sh --mode ${MODE}</span> · manage tomorrow on the Board tab
+    <span style="display:inline-block;width:7px;height:13px;background:${FAINTER};vertical-align:middle;margin-left:4px"></span>
   </div>
 </div></body></html>
 HTMLDOC
