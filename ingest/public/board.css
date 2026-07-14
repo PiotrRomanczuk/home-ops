@@ -14,11 +14,12 @@
 }
 
 .bboard {
-  display: flex; gap: 12px; align-items: flex-start;
+  display: flex; gap: 12px; align-items: stretch;
   padding: 10px 14px 16px; overflow-x: auto; flex: 1; min-height: 0;
 }
 .bcol {
-  flex: 1 1 0; min-width: 240px; max-width: 420px;
+  /* Three equal columns that stretch to fill the screen width. */
+  flex: 1 1 0; min-width: 220px;
   display: flex; flex-direction: column;
   background: rgba(255, 255, 255, 0.015);
   border: 1px solid var(--border); border-radius: 6px; padding: 8px;
