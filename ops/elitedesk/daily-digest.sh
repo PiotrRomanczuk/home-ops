@@ -198,6 +198,23 @@ PRE="margin:0;color:#a7c4b8;font-size:12.5px;line-height:1.5;white-space:pre-wra
 LBL="font-size:11px;letter-spacing:.1em;color:${DIM};text-transform:uppercase;font-weight:600;margin-bottom:10px"
 CARD="margin:14px 20px;background:${PANEL};border:1px solid ${LINE};border-radius:6px;padding:14px 16px"
 
+# --- Extension cards ----------------------------------------------------------
+# Any *.sql dropped into digest.d/ (not part of this repo — other local
+# automations deploy their own snippets there) runs read-only via psql and
+# becomes one extra card. Card label = filename, dashes → spaces. A failing
+# or empty snippet is skipped silently — extensions must never break the send.
+EXTRA_CARDS=""
+if [[ -d "${SCRIPT_DIR}/digest.d" ]]; then
+  for snippet in "${SCRIPT_DIR}/digest.d/"*.sql; do
+    [[ -e "$snippet" ]] || continue
+    snippet_out="$(docker exec -i "$CONTAINER" psql -U "$DB_USER" -d "$DB" -X -q -t -A < "$snippet" 2>/dev/null || true)"
+    [[ -z "$snippet_out" ]] && continue
+    snippet_name="$(basename "$snippet" .sql)"; snippet_name="${snippet_name//-/ }"
+    snippet_h="$(printf '%s' "$snippet_out" | esc | colourise)"
+    EXTRA_CARDS+="<div style=\"${CARD}\"><div style=\"${LBL}\">${snippet_name}</div><pre style=\"${PRE}\">${snippet_h}</pre></div>"
+  done
+fi
+
 # "Open board" button + caption, only when a console URL is configured.
 if [[ -n "$DIGEST_BOARD_URL" ]]; then
   BOARD_BTN="<div style=\"margin-top:12px\"><a href=\"${DIGEST_BOARD_URL}\" style=\"color:${TEAL};font-size:12.5px\">Open board →</a></div>"
@@ -279,6 +296,7 @@ read -r -d '' HTML <<HTMLDOC || true
   <div style="${CARD}"><div style="${LBL}">Now · in progress</div><pre style="${PRE}">${NOW_H}</pre></div>
   <div style="${CARD}"><div style="${LBL}">Stack status</div><pre style="${PRE};line-height:1.45">${BODY_H}</pre></div>
   <div style="${CARD}"><div style="${LBL}">Commits · 24h</div><pre style="${PRE}">${COMMITS_H}</pre></div>
+${EXTRA_CARDS}
 
   <!-- footer -->
   <div style="padding:14px 20px;border-top:1px solid ${LINE};color:${FAINTER};font-size:11.5px">
