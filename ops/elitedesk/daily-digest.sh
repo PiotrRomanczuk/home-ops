@@ -213,6 +213,16 @@ if [[ -d "${SCRIPT_DIR}/digest.d" ]]; then
     snippet_h="$(printf '%s' "$snippet_out" | esc | colourise)"
     EXTRA_CARDS+="<div style=\"${CARD}\"><div style=\"${LBL}\">${snippet_name}</div><pre style=\"${PRE}\">${snippet_h}</pre></div>"
   done
+  # Same contract, pre-rendered text instead of a live query — e.g. a headless
+  # Claude summary written by another local automation before this runs.
+  for snippet in "${SCRIPT_DIR}/digest.d/"*.txt; do
+    [[ -e "$snippet" ]] || continue
+    snippet_out="$(cat "$snippet" 2>/dev/null || true)"
+    [[ -z "$snippet_out" ]] && continue
+    snippet_name="$(basename "$snippet" .txt)"; snippet_name="${snippet_name//-/ }"
+    snippet_h="$(printf '%s' "$snippet_out" | esc | colourise)"
+    EXTRA_CARDS+="<div style=\"${CARD}\"><div style=\"${LBL}\">${snippet_name}</div><pre style=\"${PRE}\">${snippet_h}</pre></div>"
+  done
 fi
 
 # "Open board" button + caption, only when a console URL is configured.
