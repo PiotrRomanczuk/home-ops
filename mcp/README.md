@@ -24,6 +24,7 @@ The killer flow:
 - **Stack health**: "any errors from elitedesk in the last hour?" — Claude calls `query_logs(host='elitedesk', level_min='error', since_min=60)`.
 - **Queue introspection**: "what's currently running on win10?" — Claude calls `list_recent_jobs(status='running')` + `get_host_metrics(host='win10')`.
 - **VRAM awareness**: "what models are loaded right now?" — Claude calls `models_loaded()` before suggesting a model.
+- **Eval board management**: "add an eval idea for LRU cache, then pause parse-duration" — Claude calls `create_eval_task('lru-cache', notes='…')` + `set_eval_task_stage('parse-duration', 'paused')`. "How is qwen3:8b doing on rle-encode?" — `get_eval_task_scores('rle-encode')`.
 
 ## Tools exposed
 
@@ -38,6 +39,11 @@ The killer flow:
 | `get_project`          | full project state with Now/Next/Later raw markdown                     |
 | `get_host_metrics`     | latest metric sample(s) — incl. process attribution in `data` jsonb     |
 | `models_loaded`        | what's resident in win10 VRAM right now                                 |
+| `list_eval_tasks`      | Evals board — lifecycle cards + pass-rate stats per eval task           |
+| `create_eval_task`     | add an 'idea' card (files stay manual; card tracks intent)              |
+| `set_eval_task_stage`  | move a card — **gates the 6h tick** (testing/active run, paused don't)  |
+| `update_eval_task`     | edit a card's notes / per-task timeout override                         |
+| `get_eval_task_scores` | recent per-run results for one task (pass/fail, iterations, latency)    |
 
 All tools wrap the existing HTTP API at `home-ops-ingest-1`. No new server-side
 endpoints; this is purely an MCP-to-REST adapter.
