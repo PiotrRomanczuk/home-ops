@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Manual Test — Scores tab (strummy_eval scoreboard)</title>
+<style>
+  body { font-family: ui-monospace, 'JetBrains Mono', monospace; background:#0e1116; color:#d0d7de; max-width:860px; margin:2rem auto; padding:0 1rem; line-height:1.5; font-size:14px; }
+  h1 { font-size:1.3rem; color:#58a6ff; } h2 { font-size:1.05rem; color:#58a6ff; margin-top:1.6rem; }
+  code, pre { background:#161b22; border:1px solid #30363d; border-radius:4px; padding:.1rem .35rem; }
+  pre { padding:.6rem .8rem; overflow-x:auto; }
+  table { border-collapse:collapse; width:100%; margin:.6rem 0; }
+  th, td { border:1px solid #30363d; padding:.35rem .6rem; text-align:left; vertical-align:top; }
+  th { background:#161b22; }
+  .ok { color:#3fb950; } .warn { color:#d29922; }
+  .meta { color:#8b949e; font-size:12px; }
+</style>
+</head>
+<body>
+<h1>Scores tab — strummy_eval reconstruction scoreboard</h1>
+<p class="meta">Date: 2026-07-16 · Branch: <code>feature/eval-scores-tab</code> (PR #44) · Original commit 2026-07-03, rebased onto main 2026-07-16</p>
+
+<h2>What was done</h2>
+<p>A new read-only <strong>Scores</strong> console tab (key <code>8</code>) that visualizes results from the strummy_eval reconstruction harness — the local-LLM benchmark that rebuilt real Strummy modules to green against their own Jest tests. It is the results counterpart to the <em>Evals</em> board (which manages task lifecycle):</p>
+<ul>
+  <li><strong>Summary strip</strong> — overall pass-rate, run count, models covered.</li>
+  <li><strong>Model × task matrix</strong> — pass-rate, tok/s, iterations-to-green per cell.</li>
+  <li><strong>Recent runs list</strong> — newest runs with per-run outcome.</li>
+</ul>
+<p>Backend: one new guarded route <code>GET /api/eval_scores</code> (<code>ingest/src/routes/eval-scores.ts</code>). If the <code>strummy_eval_*</code> tables are absent it returns <code>{"available": false}</code> instead of 500 — the tab then renders an empty-state note. Frontend: <code>eval-scores{-api}.js/.css</code> + one TABS entry. Additive only; no existing behavior changed.</p>
+<p class="warn">Context: the recurring eval cron was closed 2026-07-16 (electric bill). This tab shows the <em>historical</em> data already in Postgres and works for any future on-demand runs; it triggers no GPU work itself.</p>
+
+<h2>Rebase notes (2026-07-16)</h2>
+<p>Branch was 2 weeks behind main; conflicts were mechanical unions in three files (<code>server.ts</code> route registration, <code>app.js</code> TABS/icons — Scores moved from key 7 to 8 because the Board tab took 7 — and <code>index.html</code> asset tags). No logic changes.</p>
+
+<h2>How to test manually</h2>
+<table>
+  <tr><th>#</th><th>Step</th><th>Expected</th></tr>
+  <tr><td>1</td><td>Deploy branch or run ingest locally (<code>npm start</code> in <code>ingest/</code>), open <code>http://192.168.1.75:64421</code></td><td>Console loads; tab bar shows <strong>Scores</strong> after Board</td></tr>
+  <tr><td>2</td><td>Press <code>8</code> or click Scores</td><td>Summary strip + model×task matrix render from live <code>strummy_eval_*</code> data (historical runs from 2026-07-02..07)</td></tr>
+  <tr><td>3</td><td><code>curl -s :64421/api/eval_scores -H "X-Ingest-Token: $TOK"</code></td><td>JSON with <code>available: true</code>, summary + matrix + runs arrays; no <code>data</code>-named fields</td></tr>
+  <tr><td>4</td><td>On a DB without the harness tables (e.g. fresh compose)</td><td>Route returns <code>{"available": false}</code>, tab shows empty state, no 500</td></tr>
+  <tr><td>5</td><td>Check other tabs (Status, Board, Evals)</td><td>Unchanged — keys 1–7 still map to their tabs</td></tr>
+</table>
+
+<h2>Gates at rebase time</h2>
+<pre>tsc --noEmit        <span class="ok">clean</span>
+biome check src     <span class="ok">clean (18 files)</span>
+vitest run          <span class="ok">12 passed</span>, 14 skipped (DB-backed tests skip without Postgres — by design)</pre>
+</body>
+</html>
