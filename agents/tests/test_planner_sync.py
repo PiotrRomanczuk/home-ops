@@ -322,5 +322,37 @@ class TestProjectFiles(unittest.TestCase):
         self.assertIsNone(self.mod._find_project_file(self.root, 'song-detail'))
 
 
+class TestLoadState(unittest.TestCase):
+    """Back-compat parsing for the board-sync watermark/hash state file: the
+    pre-multi-project format was a flat {'watermark','hash'} for BOARD_SLUG
+    only. A wrong parse here means the first tick after a redeploy takes the
+    "DB is authoritative" branch and overwrites Obsidian edits made while
+    the agent was down — see board_sync_once's docstring."""
+
+    def setUp(self):
+        self.mod = _load_planner_sync()
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.mod.STATE_FILE = Path(self.tmp.name) / 'state.json'
+
+    def test_missing_file_returns_empty(self):
+        self.assertEqual(self.mod._load_state(), {})
+
+    def test_old_flat_format_adopted_as_board_slug(self):
+        self.mod.STATE_FILE.write_text('{"watermark": "2026-01-01T00:00:00Z", "hash": "abc"}')
+        state = self.mod._load_state()
+        self.assertEqual(state, {self.mod.BOARD_SLUG: {'watermark': '2026-01-01T00:00:00Z', 'hash': 'abc'}})
+
+    def test_new_nested_format_passthrough(self):
+        self.mod.STATE_FILE.write_text(
+            '{"home-ops": {"watermark": "w1", "hash": "h1"}, '
+            '"job-search": {"watermark": "w2", "hash": "h2"}}')
+        state = self.mod._load_state()
+        self.assertEqual(state, {
+            'home-ops': {'watermark': 'w1', 'hash': 'h1'},
+            'job-search': {'watermark': 'w2', 'hash': 'h2'},
+        })
+
+
 if __name__ == '__main__':
     unittest.main()

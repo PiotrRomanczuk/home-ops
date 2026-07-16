@@ -7,6 +7,11 @@
 
 .board-view { display: flex; flex-direction: column; height: 100%; min-height: 0; }
 
+.board-slug-pick {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 4px;
+  color: var(--fg); font: inherit; font-size: 12px; padding: 2px 6px;
+}
+
 .bfocus-chip {
   font-size: 11px; color: var(--accent); border: 1px solid var(--accent-line);
   background: var(--accent-dim); border-radius: 3px; padding: 1px 7px;

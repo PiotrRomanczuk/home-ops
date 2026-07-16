@@ -116,17 +116,32 @@ function boardAddForm(col, listEl) {
   requestAnimationFrame(() => input.focus());
 }
 
+/* ---------- project switcher ---------- */
+function boardSlugPicker() {
+  if (!window.Projects) return null;
+  if (!Projects.loaded && !Projects.loading) Projects.loadAll();
+  const known = Projects.items.map((p) => p.slug).sort();
+  const opts = known.includes(Board.slug) ? known : [Board.slug, ...known];
+  return h('select', {
+    class: 'board-slug-pick',
+    title: 'switch project board',
+    onchange: (e) => setState({ board_slug: e.target.value === BOARD_SLUG ? null : e.target.value }),
+  }, ...opts.map((s) => h('option', { value: s, selected: s === Board.slug }, s)));
+}
+
 /* ---------- board view ---------- */
 VIEWS.board = function (st, main) {
   boardTeardown();
+  Board.setSlug(st.board_slug);
   if (!Board.loaded && !Board.loading) Board.loadAll();
   Board.startPoll();
 
   const focus = Board.items.find((t) => t.is_focus);
   const wrap = h('div', { class: 'board-view' });
   wrap.append(h('div', { class: 'sec-bar' },
-    h('span', { class: 'lbl' }, 'home-ops board ',
-      h('span', { class: 'faint num', style: { fontWeight: 400 } }, Board.items.length)),
+    h('span', { class: 'lbl' }, 'board '),
+    boardSlugPicker(),
+    h('span', { class: 'faint num', style: { fontWeight: 400 } }, Board.items.length),
     focus ? h('span', { class: 'bfocus-chip', title: 'morning digest Today’s focus' }, '★ ' + focus.text) : null,
     Board.err ? h('span', { class: 'lv error', style: { fontSize: '11px' } }, '✕ ' + Board.err) : null,
     h('span', { class: 'grow' }),
