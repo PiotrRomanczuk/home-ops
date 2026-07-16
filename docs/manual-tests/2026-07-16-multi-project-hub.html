@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Manual test report — multi-project hub foundation (2026-07-16)</title>
+<style>
+  :root {
+    --bg: #0b0e0c; --panel: #10140f; --line: #1e2620; --fg: #d7e8dc; --fg-muted: #93a99b;
+    --fg-faint: #62786a; --accent: #4fd6a0; --amber: #e0b34a; --red: #e0685a; --mono: ui-monospace, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --bg: #f6f8f6; --panel: #ffffff; --line: #dbe4dd; --fg: #1c261f; --fg-muted: #4c5c50;
+      --fg-faint: #7c8e80; --accent: #1c8a5f; --amber: #9a6c0d; --red: #b8382a; }
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--fg); font-family: var(--mono); line-height: 1.55; margin: 0; padding: 32px 20px 80px; }
+  .wrap { max-width: 880px; margin: 0 auto; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .meta { color: var(--fg-faint); font-size: 12.5px; margin-bottom: 28px; }
+  h2 { font-size: 15px; color: var(--accent); border-bottom: 1px solid var(--line); padding-bottom: 6px; margin: 34px 0 14px; letter-spacing: .02em; }
+  h3 { font-size: 13.5px; margin: 22px 0 8px; color: var(--fg); }
+  p { margin: 0 0 12px; font-size: 13.5px; }
+  ul, ol { margin: 0 0 14px; padding-left: 22px; font-size: 13.5px; }
+  li { margin-bottom: 6px; }
+  code { background: var(--panel); border: 1px solid var(--line); border-radius: 3px; padding: 1px 5px; font-size: 12.5px; }
+  pre { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px; overflow-x: auto; font-size: 12.5px; margin: 0 0 14px; }
+  pre code { background: none; border: none; padding: 0; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px 18px; margin-bottom: 16px; }
+  .badge { display: inline-block; font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; padding: 2px 8px; border-radius: 3px; font-weight: 600; }
+  .badge.done { color: var(--accent); border: 1px solid var(--accent); }
+  .badge.risk { color: var(--red); border: 1px solid var(--red); }
+  .badge.note { color: var(--amber); border: 1px solid var(--amber); }
+  .expect { border-left: 3px solid var(--accent); padding: 8px 12px; background: rgba(79,214,160,0.06); border-radius: 0 4px 4px 0; margin: 8px 0 14px; font-size: 13px; }
+  .expect b { color: var(--accent); }
+  .warn { border-left: 3px solid var(--amber); padding: 8px 12px; background: rgba(224,179,74,0.08); border-radius: 0 4px 4px 0; margin: 8px 0 14px; font-size: 13px; }
+  .warn b { color: var(--amber); }
+  .files { font-size: 12.5px; color: var(--fg-muted); }
+  .files code { color: var(--fg); }
+  table { border-collapse: collapse; width: 100%; font-size: 12.5px; margin: 0 0 14px; }
+  th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--line); }
+  th { color: var(--fg-faint); font-weight: 600; text-transform: uppercase; font-size: 10.5px; letter-spacing: .05em; }
+  .toc { font-size: 12.5px; }
+  .toc a { color: var(--fg-muted); text-decoration: none; }
+  .toc a:hover { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Manual test report — home-ops multi-project hub foundation</h1>
+  <div class="meta">2026-07-16 · branch <code>feature/multi-project-hub</code> · not yet committed</div>
+
+  <div class="card toc">
+    <b>Contents:</b>
+    <ol>
+      <li><a href="#what">What was actually done</a></li>
+      <li><a href="#setup">Test setup (local, disposable stack)</a></li>
+      <li><a href="#t1">Test 1 — slug-collision guard</a></li>
+      <li><a href="#t2">Test 2 — Projects tab surfaces deployed/health/stack</a></li>
+      <li><a href="#t3">Test 3 — Board tab slug switcher</a></li>
+      <li><a href="#t4">Test 4 — multi-slug board→vault reconciliation (full loop)</a></li>
+      <li><a href="#edge">Edge cases worth checking</a></li>
+      <li><a href="#automated">What's already covered by automated tests</a></li>
+    </ol>
+  </div>
+
+  <h2 id="what">1. What was actually done</h2>
+  <p>
+    This is the first step toward using home-ops as a hub for every project, not just one.
+    Previously, the vault-sync agent (<code>planner-sync.py</code>) already discovered every
+    project's Obsidian file and synced its Now/Next/Later into Postgres — but two pieces were
+    still hardcoded to a single project (<code>home-ops</code>), and one real bug meant duplicate
+    project files could silently overwrite each other with no warning. Four changes fix that:
+  </p>
+  <table>
+    <tr><th>Change</th><th>Behavior now</th><th>Files</th></tr>
+    <tr>
+      <td>Slug-collision guard</td>
+      <td>If two vault files declare the same <code>project:</code> slug, the sync worker keeps
+        the first one (deterministic, alphabetical) and logs a clear <code>warn</code> event
+        instead of one silently clobbering the other with zero trace.</td>
+      <td class="files"><code>agents/elitedesk/planner-sync.py</code></td>
+    </tr>
+    <tr>
+      <td>Multi-slug Board sync</td>
+      <td>The Board tab's DB↔vault reconciliation loop (<code>board_sync_once</code>) used to run
+        for exactly one project (<code>BOARD_SLUG</code> env var). It now reconciles every slug
+        that has at least one <code>board_tasks</code> row, discovered via a new
+        <code>GET /api/board/slugs</code> route, with per-slug watermark/hash state
+        (backward-compatible with the old single-project state file).</td>
+      <td class="files"><code>agents/elitedesk/planner-sync.py</code>,
+        <code>ingest/src/routes/board.ts</code></td>
+    </tr>
+    <tr>
+      <td>Projects tab shows deployed/health/stack</td>
+      <td>The vault's <code>deployed</code>, <code>health</code>, and <code>stack</code>
+        frontmatter fields were already syncing into Postgres (<code>raw_frontmatter</code> jsonb)
+        and already being fetched into the browser — but nothing ever rendered them. Now the grid
+        card, compact list row, and drill page all show them (e.g. a small "🟢 strummy.vercel.app"
+        line, and a stack summary on the drill page).</td>
+      <td class="files"><code>ingest/public/projects.js</code>, <code>projects.css</code></td>
+    </tr>
+    <tr>
+      <td>Board tab slug switcher</td>
+      <td>The Board tab was hardcoded to always show the <code>home-ops</code> board. It now has a
+        dropdown (populated from known project slugs) and reads/writes the slug via the URL
+        fragment (<code>#tab=board&amp;board_slug=job-search</code>), so any project's board can be
+        opened and used independently.</td>
+      <td class="files"><code>ingest/public/board.js</code>, <code>board-api.js</code>,
+        <code>board.css</code></td>
+    </tr>
+  </table>
+  <p>
+    Not part of this change (separate vault-only work, no code): archived 2 stale duplicate
+    project files and added 3 missing project stubs so all 15 CLAUDE.md-listed projects have a
+    vault entry. One duplicate (<code>home-ops</code>) is still unresolved pending a decision on
+    how to merge its content — see the conversation, not this report.
+  </p>
+
+  <h2 id="setup">2. Test setup — local, disposable stack</h2>
+  <div class="warn"><b>Important:</b> all commands below target a <b>local</b> Postgres/ingest
+    stack started via <code>docker compose</code> in this repo, never elitedesk/production.
+    Test 1's seed step calls <code>POST /api/projects/sync</code>, which <b>deletes any project
+    slug not in the payload</b> — fine against an empty local dev database, destructive against
+    the real one.</div>
+  <pre><code># from the repo root
+./scripts/generate-env.sh        # bootstraps .env (POSTGRES_PASSWORD, INGEST_TOKEN, prompts LOGS_PASSWORD)
+docker compose up -d --build     # postgres (fresh volume auto-applies postgres/migrations/*.sql) + ingest on :64421
+
+curl -s http://127.0.0.1:64421/api/health   # expect {"ok":true,...}
+
+export INGEST_TOKEN=$(grep '^INGEST_TOKEN=' .env | cut -d= -f2)</code></pre>
+
+  <h2 id="t1">3. Test 1 — slug-collision guard</h2>
+  <p>Simulates two vault files (e.g. <code>projects/home-ops.md</code> and
+    <code>projects/Private/home-ops.md</code>) both declaring <code>project: dup-test</code>.</p>
+  <pre><code>mkdir -p /tmp/hub-test-vault/.git /tmp/hub-test-vault/projects/Private
+
+cat > /tmp/hub-test-vault/projects/dup-test.md &lt;&lt;'EOF'
+---
+project: dup-test
+status: hot
+---
+# dup-test (top-level copy)
+## Now
+- [ ] top-level task
+EOF
+
+cat > /tmp/hub-test-vault/projects/Private/dup-test.md &lt;&lt;'EOF'
+---
+project: dup-test
+status: warm
+---
+# dup-test (Private copy — should be ignored)
+## Now
+- [ ] private task
+EOF
+
+cd agents/elitedesk
+PLANNER_DIR=/tmp/hub-test-vault \
+INGEST_URL=http://127.0.0.1:64421/api/ingest \
+INGEST_TOKEN=$INGEST_TOKEN \
+SYNC_INTERVAL=999999 \
+timeout 5 python3 planner-sync.py || true
+cd -</code></pre>
+  <p>Then check the warning landed in <code>host_logs</code>:</p>
+  <pre><code>curl -s "http://127.0.0.1:64421/api/logs?grep=duplicate+project+slug&amp;since_min=5" \
+  -H "X-Ingest-Token: $INGEST_TOKEN" | python3 -m json.tool
+
+curl -s "http://127.0.0.1:64421/api/projects/dup-test" \
+  -H "X-Ingest-Token: $INGEST_TOKEN" | python3 -m json.tool</code></pre>
+  <div class="expect"><b>Expected:</b> the logs response contains one <code>warn</code> event
+    whose message starts with <code>duplicate project slug "dup-test"</code> and whose
+    <code>data.kept</code>/<code>data.ignored</code> point at <code>dup-test.md</code> and
+    <code>Private/dup-test.md</code> respectively. The synced project row's <code>status</code> is
+    <code>hot</code> (from the kept top-level file) — not <code>warm</code>.</div>
+
+  <h2 id="t2">4. Test 2 — Projects tab surfaces deployed/health/stack</h2>
+  <p>Seed two fake projects directly (skips planner-sync entirely — exercises the same
+    <code>/api/projects/sync</code> endpoint the agent uses):</p>
+  <pre><code>curl -s -X POST http://127.0.0.1:64421/api/projects/sync \
+  -H "X-Ingest-Token: $INGEST_TOKEN" -H "Content-Type: application/json" \
+  -d '{"projects":[
+    {"slug":"demo-app","title":"Demo App","status":"hot","commits_30d":12,
+     "now_md":"- [ ] ship the thing","next_md":"- [ ] polish",
+     "raw_frontmatter":{"deployed":"demo-app.vercel.app","health":"🟢",
+       "stack":"Next.js · Tailwind · Postgres"}},
+    {"slug":"quiet-app","title":"Quiet App","status":"dormant","commits_30d":0,
+     "now_md":"","next_md":""}
+  ]}'</code></pre>
+  <p>Open <code>http://127.0.0.1:64421/#tab=projects</code> in a browser
+    (log in with the <code>LOGS_PASSWORD</code> you set, unless <code>AUTH_PUBLIC=1</code>).</p>
+  <div class="expect"><b>Expected:</b>
+    <ul>
+      <li><b>demo-app</b>'s grid card shows a small line under the title with
+        <code>🟢</code> and <code>demo-app.vercel.app</code>.</li>
+      <li><b>quiet-app</b>'s card shows no such line (no <code>deployed</code>/<code>health</code>
+        in its frontmatter) — confirms the new code doesn't render an empty row.</li>
+      <li>Switch to list view (<code>☰ list</code>) — <b>demo-app</b>'s slug is prefixed with
+        <code>🟢</code>, <b>quiet-app</b>'s isn't.</li>
+      <li>Click into <b>demo-app</b>'s drill page — the header shows the health emoji next to the
+        title, the meta row has a clickable <code>⇗ demo-app.vercel.app</code> link
+        (opens <code>https://demo-app.vercel.app</code> in a new tab), and a
+        "stack" line reads <code>Next.js · Tailwind · Postgres</code>.</li>
+    </ul>
+  </div>
+
+  <h2 id="t3">5. Test 3 — Board tab slug switcher</h2>
+  <p>With the two projects from Test 2 still seeded, open
+    <code>http://127.0.0.1:64421/#tab=board</code>.</p>
+  <div class="expect"><b>Expected:</b>
+    <ul>
+      <li>A dropdown appears next to the "board" label in the section bar, listing
+        <code>demo-app</code>, <code>quiet-app</code> (and <code>home-ops</code> — always
+        included even with zero cards, per the "always reconciled" default).</li>
+      <li>Default view (no <code>board_slug</code> in the URL) shows the
+        <code>home-ops</code> board.</li>
+      <li>Select <code>demo-app</code> — the URL becomes
+        <code>#tab=board&amp;board_slug=demo-app</code>, the board clears (empty columns,
+        "drop here" placeholders — no demo-app cards exist yet).</li>
+      <li>Click <code>+</code> under "Now" and add a card, e.g. "test card A". Switch to
+        <code>quiet-app</code> via the dropdown — the board is empty again (no bleed from
+        demo-app). Switch back to <code>demo-app</code> — "test card A" is still there.</li>
+      <li>Reload the page with <code>#tab=board&amp;board_slug=demo-app</code> directly in the
+        address bar — it lands straight on demo-app's board (state survives a hard refresh, not
+        just client-side navigation).</li>
+    </ul>
+  </div>
+
+  <h2 id="t4">6. Test 4 — multi-slug board→vault reconciliation (full loop, optional)</h2>
+  <p>Confirms the DB-authoritative board actually writes back into the right project's markdown
+    file when more than one project has cards — the part Test 3 can't show on its own since it
+    doesn't involve planner-sync. Needs a real (or fake, git-initialized) local vault clone.</p>
+  <pre><code>cd /tmp/hub-test-vault
+git init -q && git add -A && git -c user.name=t -c user.email=t@t commit -qm init
+
+cd /path/to/home-ops/agents/elitedesk
+PLANNER_DIR=/tmp/hub-test-vault \
+INGEST_URL=http://127.0.0.1:64421/api/ingest \
+INGEST_TOKEN=$INGEST_TOKEN \
+SYNC_INTERVAL=999999 \
+timeout 5 python3 planner-sync.py || true
+
+cat /tmp/hub-test-vault/projects/dup-test.md   # (from Test 1 — reuse as a second slug)
+git -C /tmp/hub-test-vault log --oneline -3</code></pre>
+  <div class="expect"><b>Expected:</b> after adding a Board-tab card for
+    <code>dup-test</code> (repeat the Test 3 steps with <code>board_slug=dup-test</code>) and
+    re-running the snippet above, <code>projects/dup-test.md</code>'s <code>## Now</code> section
+    is rewritten to include the new card, and <code>git log</code> shows a new
+    <code>board sync: dup-test</code> commit — <b>not</b> a <code>home-ops</code> commit, and
+    <code>home-ops</code>'s own board/vault file is untouched by this tick.</div>
+
+  <h2 id="edge">7. Edge cases worth checking</h2>
+  <ul>
+    <li><b>Bare vs. schemed <code>deployed</code> URL</b>: try <code>raw_frontmatter.deployed</code>
+      as both <code>"foo.vercel.app"</code> (bare domain, as most vault files use) and
+      <code>"https://foo.vercel.app"</code> — both should produce a working link on the drill page
+      (the code prefixes <code>https://</code> only when no scheme is present).</li>
+    <li><b>Redeploy after this change</b>: an existing <code>&lt;PLANNER_DIR&gt;.state.json</code>
+      from before this change is a flat <code>{"watermark":...,"hash":...}</code>. Confirm
+      <code>_load_state()</code> adopts it as the <code>BOARD_SLUG</code> project's state (not
+      lost, not misapplied to a different slug) — covered by
+      <code>agents/tests/test_planner_sync.py::TestLoadState</code>, but worth re-confirming
+      against a real old state file from elitedesk before deploying.</li>
+    <li><b><code>/api/board/slugs</code> unreachable</b>: stop the ingest container mid-tick and
+      confirm planner-sync logs a <code>warn</code> (not a crash) and falls back to reconciling
+      just <code>BOARD_SLUG</code>.</li>
+    <li><b>Empty <code>stack</code>/<code>health</code>/<code>deployed</code></b>: a project with
+      none of the three should render identically to before this change (no stray empty
+      elements/whitespace on the card or drill page).</li>
+  </ul>
+
+  <h2 id="automated">8. What's already covered by automated tests (don't re-check by hand)</h2>
+  <ul>
+    <li><code>cd ingest && npm run typecheck && npm run lint && npm test</code> — TS types, Biome,
+      Vitest, all green.</li>
+    <li><code>python3 -m unittest discover -s agents/tests -p 'test_*.py' -v</code> — 24/24,
+      including 3 new tests for <code>_load_state()</code>'s back-compat parsing
+      (<code>TestLoadState</code>).</li>
+  </ul>
+  <p>These don't cover the collision-guard's log-emission path or the live HTTP round-trips —
+    that's what Tests 1–4 above are for.</p>
+
+</div>
+</body>
+</html>
