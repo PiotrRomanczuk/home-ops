@@ -4,6 +4,7 @@ import { logger } from 'hono/logger';
 import { env } from './env.ts';
 import { registerAuthRoutes } from './routes/auth.ts';
 import { registerBoardRoutes } from './routes/board.ts';
+import { registerEvalScoresRoutes } from './routes/eval-scores.ts';
 import { registerEvalsRoutes } from './routes/evals.ts';
 import { registerHealthRoutes } from './routes/health.ts';
 import { registerIngestRoutes } from './routes/ingest.ts';
@@ -28,6 +29,7 @@ registerJobsRoutes(app);
 registerProjectsRoutes(app);
 registerEvalsRoutes(app);
 registerBoardRoutes(app);
+registerEvalScoresRoutes(app);
 registerStatusRoutes(app);
 registerAuthRoutes(app);
 
