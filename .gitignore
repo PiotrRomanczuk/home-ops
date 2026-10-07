@@ -3,6 +3,9 @@
 .env.local
 .env.*.local
 ops/elitedesk/daily-digest.env
+ops/elitedesk/seo-collect.env
+# Google service-account keys (seo-collect)
+ops/elitedesk/*-sa.json
 
 # Node
 node_modules/

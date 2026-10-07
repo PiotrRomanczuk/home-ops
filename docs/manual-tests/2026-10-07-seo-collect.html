@@ -1,0 +1,30 @@
+<!doctype html><html lang="pl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>seo-collect — test manualny</title>
+<style>body{font:16px/1.6 system-ui,sans-serif;max-width:860px;margin:0 auto;padding:24px 16px;color:#1a1a1a;background:#fafaf8}code,pre{background:#eee;border-radius:4px}code{padding:1px 5px}pre{padding:10px;overflow-x:auto}li{margin:4px 0}.meta{color:#666}table{border-collapse:collapse}td,th{border:1px solid #ddd;padding:4px 8px;text-align:left}</style></head><body>
+<h1>seo-collect — codzienne dane o widoczności w wyszukiwarce</h1>
+<p class="meta"><strong>Data</strong>: 2026-10-07 · <strong>Gałąź</strong>: <code>feat/seo-collector</code> · <strong>Zakres</strong>: home-ops (migracja 017, ingest, ops/elitedesk)</p>
+<h2>Co zostało zrobione</h2>
+<ul>
+<li><strong>Migracja 017</strong>: tabele <code>seo_gsc_daily</code> (fraza × podstrona × dzień), <code>seo_ga4_daily</code> (dzień × źródło/medium, sesje, użytkownicy, zdarzenia), <code>seo_places_daily</code> (ocena i liczba opinii — własna wizytówka i konkurenci). Klucze główne pozwalają na upsert, więc ponowne wysłanie tego samego dnia nie dubluje danych.</li>
+<li><strong>Endpoint</strong> <code>POST /api/seo/ingest</code> (<code>{kind, rows}</code>, tylko z tokenem) — waliduje wiersze, odrzucone zwraca z powodem, zapisuje porcjami po 500.</li>
+<li><strong>Skrypt</strong> <code>ops/elitedesk/seo-collect.py</code> + timer systemd o 06:00: Search Console (okno 7 dni, bo GSC ma opóźnienie), GA4 (3 dni), Places (ocena/liczba opinii). Logowanie do Google kontem serwisowym, podpis JWT przez <code>openssl</code> — bez instalowania bibliotek.</li>
+<li>Źródło bez kluczy jest pomijane z ostrzeżeniem; błąd API → kod wyjścia 1.</li>
+</ul>
+<h2>Weryfikacja wykonana 2026-10-07</h2>
+<table><tr><th>Test</th><th>Wynik</th></tr>
+<tr><td>Python: 6 testów jednostkowych (kształt wierszy GSC/GA4/Places, podpis JWT zweryfikowany kluczem publicznym przez openssl)</td><td>✅</td></tr>
+<tr><td>ingest: typecheck + biome</td><td>✅</td></tr>
+<tr><td>ingest: 6 testów integracyjnych na prawdziwym Postgresie 17 (tymczasowy kontener na uwh): upsert, jsonb, null w ocenie, odrzucanie złych wierszy, <code>kind: "toString"</code>, brak tokenu → 401</td><td>✅</td></tr>
+<tr><td>Migracja 017 uruchomiona dwukrotnie</td><td>✅ idempotentna</td></tr>
+<tr><td>Skrypt bez kluczy → lokalny ingest</td><td>✅ exit 0, 2 ostrzeżenia w <code>host_logs</code></td></tr>
+<tr><td>Skrypt z uszkodzonym kluczem</td><td>✅ exit 1, <code>failed: ["google-auth"]</code>, plik tymczasowy z kluczem usunięty</td></tr>
+</table>
+<h2>Jak przetestować po wdrożeniu</h2>
+<ol>
+<li>Na uwh: <code>cd ~/code/logs-stack && git pull && scripts/apply-migrations.sh && docker compose up -d --build ingest</code></li>
+<li>Utwórz <code>ops/elitedesk/seo-collect.env</code> z przykładu, uzupełnij <code>INGEST_TOKEN</code>, <code>SEO_SA_JSON</code>, <code>PLACES_API_KEY</code>.</li>
+<li>Uruchom ręcznie (patrz README) — oczekiwane: <code>"failed": []</code> i liczby wierszy w <code>summary</code>.</li>
+<li>Zapytania SQL z sekcji „Verify” w <code>ops/elitedesk/README.md</code> pokazują dane dla obu stron i 5 konkurentów.</li>
+<li>Edge case: usuń konto serwisowe z jednej usługi GSC → ten krok w <code>failed</code>, pozostałe dalej się zapisują.</li>
+</ol>
+</body></html>
