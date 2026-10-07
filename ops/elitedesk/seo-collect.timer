@@ -1,0 +1,13 @@
+[Unit]
+Description=Fire home-ops seo-collect daily at 06:00
+
+[Timer]
+# Before the 07:00 morning digest, so yesterday's numbers are already in.
+# GSC/GA4 lag a day or more anyway; the collector re-sends a rolling window.
+OnCalendar=*-*-* 06:00:00
+RandomizedDelaySec=300
+Persistent=true
+Unit=seo-collect.service
+
+[Install]
+WantedBy=timers.target

@@ -51,7 +51,10 @@ jobs:
             scheduler/jobs/embed.py \
             scheduler/jobs/generate.py \
             scheduler/jobs/summarise.py \
-            clients/python/home_ops_log.py
+            clients/python/home_ops_log.py \
+            ops/elitedesk/seo-collect.py \
+            ops/elitedesk/seo_google.py \
+            ops/elitedesk/seo_sources.py
 
   clients-node:
     name: clients/node (syntax)
@@ -121,6 +124,8 @@ jobs:
           python-version: '3.12'
       - name: unittest discover
         run: python3 -m unittest discover -s agents/tests -p 'test_*.py' -v
+      - name: unittest discover (ops/elitedesk)
+        run: python3 -m unittest discover -s ops/elitedesk/tests -p 'test_*.py' -v
 
   tests-state-machine:
     name: tests (cancellation state machine vs real postgres)
@@ -169,3 +174,48 @@ jobs:
           INGEST_TOKEN: ci-token
           LOGS_PASSWORD: ci-password
         run: npm test -- --run src/routes/__tests__/jobs-state-machine.test.ts
+
+  tests-seo-ingest:
+    name: tests (seo ingest upsert contract vs real postgres)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: ci-placeholder
+          POSTGRES_DB: home_ops
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d home_ops"
+          --health-interval 3s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: ingest/package-lock.json
+
+      - name: install
+        working-directory: ingest
+        run: npm ci
+
+      - name: apply seo schema (017 — applied twice to prove idempotency)
+        env:
+          PGPASSWORD: ci-placeholder
+        run: |
+          for i in 1 2; do
+            psql -h 127.0.0.1 -U postgres -d home_ops -v ON_ERROR_STOP=1 -f postgres/migrations/017_seo.sql
+          done
+
+      - name: integration tests
+        working-directory: ingest
+        env:
+          DATABASE_URL: postgresql://postgres:ci-placeholder@127.0.0.1:5432/home_ops
+          INGEST_TOKEN: ci-token
+          LOGS_PASSWORD: ci-password
+        run: npm test -- --run src/routes/__tests__/seo-ingest.test.ts

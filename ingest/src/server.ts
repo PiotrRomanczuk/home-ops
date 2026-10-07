@@ -12,6 +12,7 @@ import { registerJobsRoutes } from './routes/jobs.ts';
 import { registerLogsRoutes } from './routes/logs.ts';
 import { registerMetricsRoutes } from './routes/metrics.ts';
 import { registerProjectsRoutes } from './routes/projects.ts';
+import { registerSeoRoutes } from './routes/seo.ts';
 import { registerStatusRoutes } from './routes/status.ts';
 
 const app = new Hono();
@@ -30,6 +31,7 @@ registerProjectsRoutes(app);
 registerEvalsRoutes(app);
 registerBoardRoutes(app);
 registerEvalScoresRoutes(app);
+registerSeoRoutes(app);
 registerStatusRoutes(app);
 registerAuthRoutes(app);
 

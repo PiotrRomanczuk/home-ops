@@ -21,6 +21,11 @@ stack. They're version-controlled here; installed by symlinking into
 | `daily-digest.timer` | Fires the morning digest daily at 07:00 | `systemctl --user enable --now` |
 | `daily-digest-evening.service` | Oneshot unit — `daily-digest.sh --mode evening` | `systemctl --user link` |
 | `daily-digest-evening.timer` | Fires the evening digest daily at 21:00 | `systemctl --user enable --now` |
+| `seo-collect.py` | Daily Search Console / GA4 / Places snapshot → `POST /api/seo/ingest` | (run by the unit) |
+| `seo_google.py`, `seo_sources.py` | Service-account JWT via `openssl`; per-source fetch + row shaping | (imported) |
+| `seo-collect.sites.json` | Sites (GSC property, GA4 property, tracked events) + Places entries | edit in repo |
+| `seo-collect.service` | Oneshot unit that runs `seo-collect.py` | `systemctl --user link` |
+| `seo-collect.timer` | Fires `seo-collect.service` daily at 06:00 | `systemctl --user enable --now` |
 
 Migration `postgres/migrations/014_night_digest.sql` adds `queue_night_digest()`,
 called by the **evening** run to enqueue the overnight LLM narrative.
@@ -218,3 +223,54 @@ systemctl --user start daily-digest.service          # fire the morning digest n
 systemctl --user start daily-digest-evening.service  # fire the evening digest (queues the night job)
 journalctl --user -u daily-digest.service -u daily-digest-evening.service -n 40
 ```
+
+---
+
+# seo-collect — daily search-visibility snapshot
+
+_Added 2026-10-07._ Feeds `seo_gsc_daily`, `seo_ga4_daily` and `seo_places_daily`
+(migration `017_seo.sql`) for gitarawarszawa.pl and romanczuk.online — the raw
+material for weekly SEO reports.
+
+## One-time Google setup (done by hand — keys never go through the repo)
+
+1. Google Cloud project (e.g. `home-ops-seo`) → enable **Google Search Console API**,
+   **Google Analytics Data API** and (optionally) **Places API (New)**.
+2. Create a service account → **Keys → Add key → JSON**. Copy it to
+   `~/code/logs-stack/ops/elitedesk/seo-sa.json`, `chmod 600` (gitignored as `*-sa.json`).
+3. Add the service account's e-mail as a **Restricted** user on each Search Console
+   property and as **Viewer** on each GA4 property listed in `seo-collect.sites.json`.
+4. Optional: an API key restricted to *Places API (New)* → `PLACES_API_KEY`. Six
+   lookups/day stay inside the free monthly usage cap.
+
+## Config + test run
+
+```bash
+cd ~/code/logs-stack
+cp ops/elitedesk/seo-collect.env.example ops/elitedesk/seo-collect.env && chmod 600 ops/elitedesk/seo-collect.env
+# fill INGEST_TOKEN (same as the other agents), SEO_SA_JSON, PLACES_API_KEY
+set -a; . ops/elitedesk/seo-collect.env; set +a; python3 ops/elitedesk/seo-collect.py
+```
+
+Prints `{"summary": {...}, "failed": [...]}`. A source without credentials is skipped
+with a `warn` in `host_logs`; an API error exits 1.
+
+## Install the timer
+
+```bash
+ln -sf ~/code/logs-stack/ops/elitedesk/seo-collect.service ~/.config/systemd/user/
+ln -sf ~/code/logs-stack/ops/elitedesk/seo-collect.timer   ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now seo-collect.timer
+```
+
+## Verify
+
+```sql
+SELECT site, max(day), count(*) FROM seo_gsc_daily GROUP BY site;
+SELECT site, day, sum(sessions), jsonb_object_agg(source_medium, events) FROM seo_ga4_daily GROUP BY 1, 2 ORDER BY 2 DESC LIMIT 7;
+SELECT label, day, rating, review_count FROM seo_places_daily ORDER BY day DESC, label;
+```
+
+`gitarawarszawa.pl` is configured as a URL-prefix GSC property (`https://gitarawarszawa.pl/`).
+If it turns out to be a domain property, change `gsc` to `sc-domain:gitarawarszawa.pl`.

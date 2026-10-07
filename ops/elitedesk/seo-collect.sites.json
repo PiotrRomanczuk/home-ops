@@ -1,0 +1,29 @@
+{
+  "sites": [
+    {
+      "slug": "gitarawarszawa.pl",
+      "gsc": "https://gitarawarszawa.pl/",
+      "ga4": "557191115",
+      "events": ["booking_success", "waitlist_signup", "phone_click", "cta_click"]
+    },
+    {
+      "slug": "romanczuk.online",
+      "gsc": "sc-domain:romanczuk.online",
+      "ga4": "260202099",
+      "events": ["contact_click", "cv_download", "vcard_download", "outbound_click"]
+    }
+  ],
+  "places": [
+    {
+      "label": "self",
+      "is_self": true,
+      "enabled": false,
+      "query": "Piotr Romańczuk nauka gry na gitarze Szwedzka Warszawa"
+    },
+    { "label": "tetmajer", "query": "Michał Przerwa-Tetmajer lekcje gitary Marszałkowska Warszawa" },
+    { "label": "gramy-razem", "query": "Instytut Muzyki Gramy Razem Aleje Jerozolimskie Warszawa" },
+    { "label": "warsaw-guitar-college", "query": "Warsaw Guitar College Żupnicza Warszawa" },
+    { "label": "rock-discipline", "query": "Rock Discipline szkoła gitary Warszawa" },
+    { "label": "mikolajczuk", "query": "Arek Mikołajczuk nauczyciel gitary Warszawa" }
+  ]
+}
