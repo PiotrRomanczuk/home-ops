@@ -12,9 +12,9 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(HERE))
-from seo_llm import build_prompt  # noqa: E402
+from seo_llm import build_prompt, extract_plan_updates  # noqa: E402
 from seo_metrics import area_breakdown, ga4_summary, query_deltas, split_windows, totals  # noqa: E402
-from seo_render import render_card  # noqa: E402
+from seo_render import render_card, render_findings, render_plan  # noqa: E402
 
 CFG = json.loads((HERE / 'seo-districts.json').read_text())
 
@@ -116,6 +116,21 @@ class RenderTest(unittest.TestCase):
         p = build_prompt(Path(f.name), {'site': 'x'}, [{'day': '2026-10-12', 'narrative': 'ok'}])
         self.assertIn('### 2026-10-12\nok', p)
         self.assertIn('"site": "x"', p)
+
+
+class PlanIoTest(unittest.TestCase):
+    def test_extract_plan_updates_block(self):
+        text = 'CO SIĘ ZMIENIŁO\nnic\n```plan-updates\n[{"action": "propose", "title": "x"}, "junk"]\n```'
+        narrative, ups = extract_plan_updates(text)
+        self.assertEqual(narrative, 'CO SIĘ ZMIENIŁO\nnic')
+        self.assertEqual(ups, [{'action': 'propose', 'title': 'x'}])
+        self.assertEqual(extract_plan_updates('tekst ```plan-updates\n[broken\n```'), ('tekst', []))
+
+    def test_render_plan_and_findings(self):
+        plan = [{'id': 1, 'status': 'shipped', 'priority': 70, 'title': 'Targówek', 'verdict': {'day14': {'status': 'helped'}}}]
+        self.assertIn('#1   shipped   p70  helped/—  Targówek', render_plan(plan))
+        self.assertIn('pusty', render_plan([]))
+        self.assertIn('no-cta', render_findings([{'severity': 'warn', 'path': '/poradnik/x', 'rule': 'no-cta', 'detail': 'brak'}]))
 
 
 if __name__ == '__main__':

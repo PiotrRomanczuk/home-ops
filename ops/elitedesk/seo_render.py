@@ -51,3 +51,36 @@ def render_card(m: dict[str, Any]) -> str:
     if not m['queries']['top']:
         lines.append('  (brak danych w tym oknie — kolektor jeszcze nie zebrał GSC albo strona nie ma wyświetleń)')
     return '\n'.join(lines)
+
+
+def render_plan(plan: list[dict[str, Any]]) -> str:
+    """PLAN section: one line per active hypothesis with its latest verdict."""
+    if not plan:
+        return 'PLAN: pusty — analiza zaproponuje hipotezy, seo-improve wykona „ready”.'
+    lines = ['PLAN (status · priorytet · werdykt 14d/28d)']
+    for h in plan[:12]:
+        v = h.get('verdict') or {}
+        d14, d28 = v.get('day14', {}).get('status', '—'), v.get('day28', {}).get('status', '—')
+        lines.append(_line(f"  #{h['id']:<3} {h['status']:<9} p{h['priority']:<3} {d14}/{d28}  {h['title']}"))
+    return '\n'.join(lines)
+
+
+def render_findings(found: list[dict[str, Any]]) -> str:
+    if not found:
+        return 'STRONA: crawl bez uwag (title/description/canonical/JSON-LD/CTA w normie).'
+    lines = [f'STRONA: {len(found)} otwartych uwag z crawla']
+    for f in found[:10]:
+        lines.append(_line(f"  {f['severity']:<5} {f['path']:<28} {f['rule']}: {f['detail']}"))
+    return '\n'.join(lines)
+
+
+def render_opps(opps: dict[str, list[dict[str, Any]]]) -> str:
+    sd, lc = opps.get('striking_distance', []), opps.get('low_ctr', [])
+    if not sd and not lc:
+        return ''
+    lines = ['OKAZJE (progi dopasowane do wielkości strony)']
+    for q in sd[:5]:
+        lines.append(_line(f"  blisko top: poz. {_pos(q['position'])} · {q['impressions']} wyśw.  {q['query']}"))
+    for q in lc[:5]:
+        lines.append(_line(f"  niski CTR: {q['ctr']:.1%} (mediana {q['median_ctr']:.1%}) · poz. {_pos(q['position'])}  {q['query']}"))
+    return '\n'.join(lines)
