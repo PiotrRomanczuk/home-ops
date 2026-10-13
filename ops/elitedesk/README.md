@@ -1,6 +1,6 @@
 ---
 created: 2026-06-07
-updated: 2026-07-14
+updated: 2026-10-13
 ---
 
 # ops/elitedesk — host-side unit files for the elitedesk deployment
@@ -26,6 +26,13 @@ stack. They're version-controlled here; installed by symlinking into
 | `seo-collect.sites.json` | Sites (GSC property, GA4 property, tracked events) + Places entries | edit in repo |
 | `seo-collect.service` | Oneshot unit that runs `seo-collect.py` | `systemctl --user link` |
 | `seo-collect.timer` | Fires `seo-collect.service` daily at 06:00 | `systemctl --user enable --now` |
+| `seo-analyse.py` | 06:30 — 7d-vs-7d metrics + district breakdown → `digest.d/seo-<site>.txt` + `seo_analysis_daily` (+ headless Claude narrative) | (run by the unit) |
+| `seo_metrics.py`, `seo_render.py`, `seo_llm.py` | Pure computations (tested), plain-text card, `claude -p` wrapper | (imported) |
+| `seo-districts.json` | Query → district/metro-line regex classifier (right bank + M2 + central M1) | edit in repo |
+| `seo-analyse.prompt.md`, `seo-improve.prompt.md` | Analyst / editor prompts for headless Claude | edit in repo |
+| `seo-analyse.service` / `.timer` | Oneshot + daily 06:30 | `systemctl --user link` / `enable --now` |
+| `seo-improve.sh` | Monday 06:45 — headless Claude edits a clone of gitara-lekcje, runs its gates, opens a `seo-auto` PR (never merges) | `chmod +x` |
+| `seo-improve.service` / `.timer` | Oneshot + weekly Monday 06:45 | `systemctl --user link` / `enable --now` |
 
 Migration `postgres/migrations/014_night_digest.sql` adds `queue_night_digest()`,
 called by the **evening** run to enqueue the overnight LLM narrative.
@@ -274,3 +281,54 @@ SELECT label, day, rating, review_count FROM seo_places_daily ORDER BY day DESC,
 
 `gitarawarszawa.pl` is configured as a URL-prefix GSC property (`https://gitarawarszawa.pl/`).
 If it turns out to be a domain property, change `gsc` to `sc-domain:gitarawarszawa.pl`.
+
+---
+
+# SEO routine (gitarawarszawa.pl)
+
+Three units, one pipeline, all driven by `seo-collect.env`:
+
+| When | Unit | What | Output |
+| --- | --- | --- | --- |
+| 06:00 | `seo-collect` | Search Console (7-day rolling window), GA4, Places → `POST /api/seo/ingest` | `seo_gsc_daily`, `seo_ga4_daily`, `seo_places_daily` (017) |
+| 06:30 | `seo-analyse` | 7d vs previous 7d, new/lost queries, district + metro-line breakdown; `claude -p` narrative with 3 recommendations | `digest.d/seo-gitarawarszawa-pl.txt` → 07:00 e-mail; `seo_analysis_daily` (018) |
+| Mon 06:45 | `seo-improve` | headless Claude edits `~/code/gitara-lekcje`, runs `lint` + `typecheck` + `test`, opens PR labelled `seo-auto` | a PR for Piotr to review — **never auto-merged** |
+
+Degradation is explicit: no service-account key → collector skips Google with a
+warning; Claude CLI logged out → the card still ships, narrative column stays
+NULL and the journal says why; gates red → `seo-improve` discards the diff and
+exits 1 (no push).
+
+## Install
+
+```bash
+cd ~/code/logs-stack && git pull
+docker exec -i home-ops-postgres-1 psql -U postgres -d home_ops -v ON_ERROR_STOP=1 \
+  -f postgres/migrations/017_seo.sql -f postgres/migrations/018_seo_analysis.sql
+docker compose up -d --build ingest            # /api/seo/ingest route
+cp ops/elitedesk/seo-collect.env.example ops/elitedesk/seo-collect.env && chmod 600 ops/elitedesk/seo-collect.env
+# fill INGEST_TOKEN (same as .env), SEO_SA_JSON path once the key exists
+for u in seo-collect seo-analyse seo-improve; do
+  ln -sf ~/code/logs-stack/ops/elitedesk/$u.service ~/.config/systemd/user/
+  ln -sf ~/code/logs-stack/ops/elitedesk/$u.timer   ~/.config/systemd/user/
+done
+systemctl --user daemon-reload
+systemctl --user enable --now seo-collect.timer seo-analyse.timer seo-improve.timer
+claude login                                  # once; headless runs reuse the session
+```
+
+Google side (one-time, in the Cloud console): create a service account, download
+its JSON key to `ops/elitedesk/seo-sa.json` (chmod 600, gitignored), enable
+**Search Console API** and **Google Analytics Data API** on the project, add the
+service-account e-mail as a *restricted* user of the GSC property and as *Viewer*
+on the GA4 property.
+
+## Verify
+
+```bash
+systemctl --user start seo-collect.service && journalctl --user -u seo-collect -n 20
+systemctl --user start seo-analyse.service && cat ops/elitedesk/digest.d/seo-gitarawarszawa-pl.txt
+docker exec -i home-ops-postgres-1 psql -U postgres -d home_ops -c \
+  "select day, model, length(narrative) from seo_analysis_daily order by day desc limit 5"
+bash ops/elitedesk/seo-improve.sh --dry-run | head -40   # prints the prompt, edits nothing
+```

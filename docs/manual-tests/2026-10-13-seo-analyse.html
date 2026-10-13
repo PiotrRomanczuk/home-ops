@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="pl"><head><meta charset="utf-8"><title>Rutyna SEO na elitedesk — test manualny</title>
+<style>
+body{font:15px/1.5 -apple-system,Segoe UI,sans-serif;max-width:900px;margin:40px auto;padding:0 20px;color:#1b1b1b}
+h1{font-size:26px}h2{margin-top:36px;border-bottom:2px solid #1b1b1b;padding-bottom:4px}
+code,pre{font-family:ui-monospace,Menlo,monospace;font-size:13px}pre{background:#f4f2ec;padding:12px;overflow:auto;border-left:4px solid #c8372d}
+table{border-collapse:collapse;width:100%}td,th{border:1px solid #ccc;padding:6px 8px;text-align:left;vertical-align:top}
+.meta{color:#666;font-size:13px}.ok{color:#176b2f}.warn{color:#9a5b00}
+</style></head><body>
+<h1>Rutyna SEO na elitedesk (gitarawarszawa.pl)</h1>
+<p class="meta"><strong>Data</strong>: 2026-10-13 · <strong>Repo</strong>: home-ops, gałąź <code>feat/seo-analyse</code> (na <code>feat/seo-collector</code>, PR #45) · <strong>Host</strong>: uwh / elitedesk</p>
+
+<h2>1. Co zostało zrobione</h2>
+<p>Trzy unity systemd użytkownika tworzą jeden dzienny potok. Zbieranie było gotowe w PR #45; ten commit dodaje analizę i tygodniową rozbudowę promocji.</p>
+<table><tr><th>Kiedy</th><th>Unit</th><th>Co robi</th><th>Wynik</th></tr>
+<tr><td>06:00</td><td><code>seo-collect</code> (PR #45)</td><td>Search Console (okno 7 dni), GA4, Places → <code>/api/seo/ingest</code></td><td>tabele <code>seo_gsc_daily</code>, <code>seo_ga4_daily</code>, <code>seo_places_daily</code></td></tr>
+<tr><td>06:30</td><td><code>seo-analyse</code> <em>(nowe)</em></td><td>7 dni vs poprzednie 7: suma wyświetleń/kliknięć/pozycji, top frazy z deltami, nowe i utracone frazy, <strong>podział na dzielnice i linie metra</strong> (regexy w <code>seo-districts.json</code>: prawy brzeg + M2 + centralne M1), GA4 sesje i zdarzenia. Potem <code>claude -p</code> bez narzędzi pisze narrację: co się zmieniło, które dzielnice dają sygnał, 3 rekomendacje, co sprawdzić ręcznie.</td><td>karta <code>digest.d/seo-gitarawarszawa-pl.txt</code> w mailu 07:00; wiersz w <code>seo_analysis_daily</code> (migracja 018) z metrykami JSON, kartą, narracją</td></tr>
+<tr><td>pon 06:45</td><td><code>seo-improve</code> <em>(nowe)</em></td><td>Bierze 7 ostatnich analiz, odpala headless Claude w klonie <code>~/code/gitara-lekcje</code> z prawem edycji, każe wprowadzić 1–3 małe zmiany (title, FAQ, sekcja dojazdu, artykuł), uruchamia <code>lint</code> + <code>typecheck</code> + <code>test</code>, commit, push, PR z etykietą <code>seo-auto</code>.</td><td>PR do przejrzenia. <strong>Nigdy nie scala.</strong> Czerwone bramki = diff wyrzucony, brak pusha. Otwarty PR <code>seo-auto</code> = kolejny się nie tworzy.</td></tr></table>
+<p>Degradacja jest jawna: brak klucza konta serwisowego → kolektor pomija Google z ostrzeżeniem; wylogowany <code>claude</code> → karta z liczbami i tak wychodzi, kolumna <code>narrative</code> zostaje NULL, journal mówi dlaczego.</p>
+
+<h2>2. Pliki</h2>
+<pre>postgres/migrations/018_seo_analysis.sql     tabela seo_analysis_daily (site, day, kind)
+ops/elitedesk/seo-analyse.py                 main: psql → metryki → karta → claude → upsert
+ops/elitedesk/seo_metrics.py                 czyste obliczenia (okna, delty, dzielnice, GA4)
+ops/elitedesk/seo_render.py                  karta tekstowa ≤ 78 znaków/linia
+ops/elitedesk/seo_llm.py                     wrapper `claude -p --tools ""`
+ops/elitedesk/seo-districts.json             klasyfikator fraza → dzielnica / linia metra
+ops/elitedesk/seo-analyse.prompt.md          prompt analityka (PL)
+ops/elitedesk/seo-analyse.service / .timer   06:30
+ops/elitedesk/seo-improve.sh                 tygodniowy PR
+ops/elitedesk/seo-improve.prompt.md          prompt edytora (zasady: bez inline style, bez thin content, bez cen)
+ops/elitedesk/seo-improve.service / .timer   poniedziałek 06:45
+ops/elitedesk/tests/test_seo_analyse.py      9 testów jednostkowych
+ops/elitedesk/README.md, seo-collect.env.example, .github/workflows/check.yml</pre>
+
+<h2>3. Jak przetestować ręcznie</h2>
+<h3>A. Bez serwera (Mac)</h3>
+<pre>cd ~/Desktop/MainCV/home-ops
+python3 -m unittest discover -s ops/elitedesk/tests -p 'test_*.py'     # oczekiwane: OK, 15 testów
+python3 -m py_compile ops/elitedesk/seo-analyse.py ops/elitedesk/seo_*.py
+bash -n ops/elitedesk/seo-improve.sh</pre>
+
+<h3>B. Na elitedesk — analiza bez danych (sprawdza degradację)</h3>
+<pre>ssh uwh
+cd ~/code/logs-stack && git pull
+docker exec -i home-ops-postgres-1 psql -U postgres -d home_ops -v ON_ERROR_STOP=1 -f postgres/migrations/018_seo_analysis.sql
+set -a; . ops/elitedesk/seo-collect.env; set +a
+python3 ops/elitedesk/seo-analyse.py
+# oczekiwane: JSON {"gsc_rows": 0, "narrative": false, ...}, plik digest.d/seo-gitarawarszawa-pl.txt
+#             z linią „(brak danych w tym oknie …)”, 1 wiersz w seo_analysis_daily
+cat ops/elitedesk/digest.d/seo-gitarawarszawa-pl.txt</pre>
+
+<h3>C. Na elitedesk — pełny przebieg (po kluczu Google i <code>claude login</code>)</h3>
+<pre>systemctl --user start seo-collect.service && journalctl --user -u seo-collect -n 20
+# oczekiwane: "seo-collect done: {'gsc:gitarawarszawa.pl': N, 'ga4:gitarawarszawa.pl': M}"
+systemctl --user start seo-analyse.service && cat ops/elitedesk/digest.d/seo-gitarawarszawa-pl.txt
+# oczekiwane: sekcje DZIELNICE i TOP FRAZY z liczbami + narracja po polsku (≤ 22 linie, 3 rekomendacje)
+docker exec -i home-ops-postgres-1 psql -U postgres -d home_ops -c \
+  "select day, model, length(narrative), metrics->'areas'->0->>'label' from seo_analysis_daily order by day desc limit 3"
+# następnego ranka: mail 07:00 ma kartę „seo gitarawarszawa pl”</pre>
+
+<h3>D. Tygodniowy PR</h3>
+<pre>bash ops/elitedesk/seo-improve.sh --dry-run | head -60   # sam prompt z briefem, nic nie edytuje
+systemctl --user start seo-improve.service; journalctl --user -u seo-improve -f
+# oczekiwane: "claude exited 0", bramki zielone, "PR opened on seo/auto-YYYY-MM-DD";
+# gh pr list --label seo-auto pokazuje 1 PR; drugie uruchomienie tego dnia → "an open seo-auto PR already exists"</pre>
+
+<h2>4. Przypadki brzegowe</h2>
+<ul>
+<li><span class="warn">Wylogowany claude</span>: <code>seo-analyse</code> kończy się kodem 0, karta bez narracji, w journalu „claude narrative unavailable”. <code>seo-improve</code> pomija z kodem 0.</li>
+<li><span class="warn">Brak migracji 018</span>: karta zapisana, ale wyjście 1 z „save failed (migration 018 applied?)”.</li>
+<li><span class="warn">Czerwone bramki w gitara-lekcje</span>: diff wyrzucony (<code>git checkout -- . && git clean -fd</code>), wyjście 1, brak pusha.</li>
+<li><span class="ok">Ponowne uruchomienie tego samego dnia</span>: upsert po (site, day, kind), bez duplikatów.</li>
+<li><span class="ok">Fraza pasująca do kilku dzielnic</span>: wygrywa pierwszy wzorzec w <code>seo-districts.json</code> (np. „praga-północ” przed ogólną „praga”).</li>
+</ul>
+
+<h2>5. Kroki po stronie Piotra (jednorazowo)</h2>
+<ol>
+<li>Google Cloud: konto serwisowe + klucz JSON → <code>uwh:~/code/logs-stack/ops/elitedesk/seo-sa.json</code> (chmod 600); włączyć Search Console API i Analytics Data API; dodać e-mail konta jako użytkownika z ograniczeniami w GSC i Viewer w GA4.</li>
+<li><code>ssh -t uwh claude login</code> — sesja OAuth na uwh wygasła 2026-10-13.</li>
+<li>Scalić PR #45 i PR z tej gałęzi (auto-merge jest zablokowany dla asystenta).</li>
+</ol>
+</body></html>

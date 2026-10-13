@@ -1,0 +1,18 @@
+{
+  "_comment": "Query → area classifier for seo-analyse.py. Order matters: first match wins. Patterns are case-insensitive regexes on the GSC query (Polish diacritics optional). Scope decided 2026-10-13: right bank of the Vistula + M2 + central M1 (transfer at Świętokrzyska).",
+  "areas": [
+    { "key": "praga-polnoc",    "label": "Praga-Północ",     "line": "M2", "pattern": "praga[- ]?p[oó][lł]noc|szwedzk|dworzec wile|wile[nń]ski|stalow|nowa praga|szmulki" },
+    { "key": "praga-poludnie",  "label": "Praga-Południe",   "line": "M2", "pattern": "praga[- ]?po[lł]udnie|grochow|goc[lł]aw|saska k|kamionek|olszynka" },
+    { "key": "targowek",        "label": "Targówek",         "line": "M2", "pattern": "targ[oó]wek|trock|zacisz|kondratowicz|utrat|el[sś]ner" },
+    { "key": "brodno",          "label": "Bródno",           "line": "M2", "pattern": "br[oó]dn" },
+    { "key": "bialoleka",       "label": "Białołęka",        "line": "—",  "pattern": "bia[lł]o[lł][eę]k|tarchomin|choszcz" },
+    { "key": "marki-zabki",     "label": "Marki / Ząbki",    "line": "—",  "pattern": "\\bmark(i|ach)\\b|z[aą]bk|zielonk" },
+    { "key": "srodmiescie",     "label": "Śródmieście",      "line": "M2/M1", "pattern": "[sś]r[oó]dmie[sś]ci|centrum|[sś]wi[eę]tokrzysk|nowy [sś]wiat|powi[sś]le|muran[oó]w|ratusz" },
+    { "key": "wola",            "label": "Wola",             "line": "M2", "pattern": "\\bwol[aei]\\b|rondo daszy|p[lł]ocka|m[lł]ynów|ksi[aą][zż]ęca|bemowo|ulrychów" },
+    { "key": "zoliborz",        "label": "Żoliborz",         "line": "M1", "pattern": "[zż]oliborz|gda[nń]ski|plac wilsona|bielan" },
+    { "key": "mokotow-ursynow", "label": "Mokotów / Ursynów","line": "M1", "pattern": "mokot[oó]w|ursyn[oó]w|politechnik|pole mokotowskie|s[lł]u[zż]ew|kabaty|wilan[oó]w" },
+    { "key": "praga-generic",   "label": "Praga (ogólnie)",  "line": "M2", "pattern": "\\bprag[aiey]\\b|prawy brzeg|prawobrze" },
+    { "key": "warszawa",        "label": "Warszawa (bez dzielnicy)", "line": "—", "pattern": "warszaw" }
+  ],
+  "no_area_label": "bez lokalizacji"
+}

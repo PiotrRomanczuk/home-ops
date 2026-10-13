@@ -1,0 +1,15 @@
+[Unit]
+Description=home-ops seo-analyse — morning SEO analysis card (+ headless Claude narrative)
+After=docker.service network-online.target seo-collect.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/code/logs-stack
+EnvironmentFile=%h/code/logs-stack/ops/elitedesk/seo-collect.env
+ExecStart=/usr/bin/python3 %h/code/logs-stack/ops/elitedesk/seo-analyse.py
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target
