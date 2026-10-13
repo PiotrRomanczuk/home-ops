@@ -120,10 +120,12 @@ jobs:
         with:
           python-version: '3.12'
       - name: unittest discover
-        run: python3 -m unittest discover -s agents/tests -p 'test_*.py' -v
+        run: |
+          python3 -m unittest discover -s agents/tests -p 'test_*.py' -v
+          python3 -m unittest discover -s ops/elitedesk/tests -p 'test_*.py' -v
 
   tests-state-machine:
-    name: tests (cancellation state machine vs real postgres)
+    name: tests (state machine + decisions inbox vs real postgres)
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -160,7 +162,9 @@ jobs:
           # since the stock postgres image doesn't ship it.
           psql -h 127.0.0.1 -U postgres -d home_ops -v ON_ERROR_STOP=1 \
             -f postgres/migrations/001_init.sql \
-            -f postgres/migrations/004_cancelling_status.sql
+            -f postgres/migrations/004_cancelling_status.sql \
+            -f postgres/migrations/019_digest_cards.sql \
+            -f postgres/migrations/020_decisions.sql
 
       - name: integration tests
         working-directory: ingest
@@ -168,4 +172,4 @@ jobs:
           DATABASE_URL: postgresql://postgres:ci-placeholder@127.0.0.1:5432/home_ops
           INGEST_TOKEN: ci-token
           LOGS_PASSWORD: ci-password
-        run: npm test -- --run src/routes/__tests__/jobs-state-machine.test.ts
+        run: npm test -- --run src/routes/__tests__/jobs-state-machine.test.ts src/routes/__tests__/decisions.test.ts
