@@ -68,30 +68,47 @@ PROMPT="$(sed -e "/{{BRIEF}}/{r $BRIEF" -e 'd}' "$SCRIPT_DIR/seo-improve.prompt.
 git fetch -q origin main
 git checkout -q -B "$BRANCH" origin/main
 [[ -d node_modules ]] || npm ci --silent
-set +e
-timeout "$TIMEOUT_S" "$CLAUDE" -p --model "$MODEL" --output-format text --max-turns 80 \
-  --permission-mode acceptEdits \
-  --allowedTools "Read,Edit,Write,Glob,Grep,Bash(npm run lint),Bash(npm run typecheck),Bash(npm test),Bash(npx vitest run*),Bash(git diff*),Bash(git status*),Bash(ls*)" \
-  <<< "$PROMPT" > "/tmp/seo-improve-${TODAY}.log" 2>&1
-RC=$?
-set -e
-log "claude exited $RC (log /tmp/seo-improve-${TODAY}.log)"
-if git diff --quiet && [[ -z "$(git status --porcelain)" ]]; then log "no changes proposed — exit 0"; exit 0; fi
-
-# ── 3. gates + LLM-as-judge — nothing leaves this box unless both pass ────
-if ! { npm run lint --silent && npm run typecheck --silent && npm test --silent; }; then
-  log "quality gates FAILED — discarding changes"; git checkout -q -- .; git clean -qfd; exit 1
-fi
-FACTS="$(grep -E "prices|single|street|phoneDisplay|email|postalCode|openingHours|opens|closes" lib/site.ts | head -20)"
-DIFF="$(git add -A && git diff --cached | head -c 60000)"
-JUDGE_PROMPT="$(FACTS="$FACTS" DIFF="$DIFF" python3 -c '
+ALLOWED="Read,Edit,Write,Glob,Grep,Bash(npm run lint),Bash(npm run typecheck),Bash(npm test),Bash(npx vitest run*),Bash(git diff*),Bash(git status*),Bash(ls*)"
+edit_session() {  # $1 = prompt text, $2 = log suffix
+  set +e
+  timeout "$TIMEOUT_S" "$CLAUDE" -p --model "$MODEL" --output-format text --max-turns 80 \
+    --permission-mode acceptEdits --allowedTools "$ALLOWED" \
+    <<< "$1" > "/tmp/seo-improve-${TODAY}$2.log" 2>&1
+  local rc=$?
+  set -e
+  log "claude exited $rc (log /tmp/seo-improve-${TODAY}$2.log)"
+}
+gates_ok() { npm run lint --silent && npm run typecheck --silent && npm test --silent; }
+judge() {  # prints verdict JSON; sets JUDGE_OK=0/1
+  local facts diff prompt
+  facts="$(grep -E "prices|single|street|phoneDisplay|email|postalCode|openingHours|opens|closes" lib/site.ts | head -20)"
+  git add -A; diff="$(git diff --cached | head -c 60000)"; git reset -q
+  prompt="$(FACTS="$facts" DIFF="$diff" python3 -c '
 import os, sys
 t = open(sys.argv[1]).read()
 print(t.replace("{{FACTS}}", os.environ["FACTS"]).replace("{{DIFF}}", os.environ["DIFF"]))' "$SCRIPT_DIR/seo-judge.prompt.md")"
-VERDICT="$(timeout 300 "$CLAUDE" -p --model "$MODEL" --output-format text --tools "" --max-turns 2 <<< "$JUDGE_PROMPT" 2>/dev/null || true)"
-printf '%s\n' "$VERDICT" > "/tmp/seo-judge-${TODAY}.json"
-if ! printf '%s' "$VERDICT" | grep -q '"ok": *true'; then
-  log "judge rejected the diff (see /tmp/seo-judge-${TODAY}.json) — discarding"; git reset -q; git checkout -q -- .; git clean -qfd; exit 1
+  VERDICT="$(timeout 300 "$CLAUDE" -p --model "$MODEL" --output-format text --tools "" --max-turns 2 <<< "$prompt" 2>/dev/null || true)"
+  printf '%s\n' "$VERDICT" > "/tmp/seo-judge-${TODAY}.json"
+  printf '%s' "$VERDICT" | grep -q '"ok": *true' && JUDGE_OK=1 || JUDGE_OK=0
+}
+discard() { log "$1 — discarding changes"; git reset -q; git checkout -q -- .; git clean -qfd; exit 1; }
+
+edit_session "$PROMPT" ""
+if git diff --quiet && [[ -z "$(git status --porcelain)" ]]; then log "no changes proposed — exit 0"; exit 0; fi
+
+# ── 3. gates + LLM-as-judge, with ONE repair round ────────────────────────
+gates_ok || discard "quality gates FAILED"
+judge
+if [[ "$JUDGE_OK" != 1 ]]; then
+  log "judge rejected the diff — one repair round"
+  REPAIR="Sędzia odrzucił Twoje zmiany w tym repozytorium. Popraw DOKŁADNIE wymienione zastrzeżenia (nie rób nic innego), ponownie uruchom lint/typecheck/test i zaktualizuj raport docs/manual-tests. Zastrzeżenia:
+${VERDICT}
+
+Fakty o dojeździe i zasady twarde z pierwotnego zadania obowiązują nadal."
+  edit_session "$REPAIR" "-repair"
+  gates_ok || discard "quality gates FAILED after repair"
+  judge
+  [[ "$JUDGE_OK" == 1 ]] || discard "judge rejected the diff after repair (see /tmp/seo-judge-${TODAY}.json)"
 fi
 
 # ── 4. commit, push, PR (never merge) ─────────────────────────────────────
