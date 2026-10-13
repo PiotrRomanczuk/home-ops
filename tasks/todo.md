@@ -27,10 +27,13 @@ proponować konkretne zmiany w gitara-lekcje jako PR (nigdy auto-merge).
 ## Dokumentacja / wdrożenie
 - [x] README `ops/elitedesk` sekcja SEO, `seo-collect.env.example` nowe klucze
 - [x] `docs/manual-tests/2026-10-13-seo-analyse.html`
-- [ ] bramki: py_compile + unittest; commit; PR
-- [ ] wdrożenie na uwh: pull, migracje, env, symlinki, timery, klon gitara-lekcje, run ręczny
+- [x] bramki: py_compile + unittest; commit; PR
+- [x] wdrożenie na uwh: pull, migracje, env, symlinki, timery, klon gitara-lekcje, run ręczny
 - [ ] kroki Piotra: konto serwisowe Google (klucz JSON), `claude login` na uwh
-- [ ] vault: home-ops.md + gitara-lekcje.md
+- [x] vault: home-ops.md + gitara-lekcje.md
 
-## Review
-(uzupełnić po zakończeniu)
+## Review (2026-10-13)
+- Zrobione: warstwy 2 i 3 w PR #46 (na #45). 15/15 testów, CI py_compile + bash -n rozszerzone.
+- Wdrożone na uwh: migracje 017+018, ingest przebudowany (health 200), 3 timery aktywne; `seo-analyse` przeszedł na zielono bez danych (karta „brak danych”), `seo-improve --dry-run` buduje prompt.
+- Otwarte: klucz konta serwisowego Google (bez niego kolektor pomija GSC/GA4), token subskrypcji Max dla headless Claude (API key bez kredytów usunięty), scalenie #45 i #46, stash `elitedesk-local-2026-10-13` na uwh → PR.
+- Lekcja: `ANTHROPIC_API_KEY` w env wyłącza logowanie subskrypcją — na serwerze z planem Max używać `claude setup-token`.
