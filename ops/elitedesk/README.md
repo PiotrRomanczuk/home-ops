@@ -291,8 +291,8 @@ Three units, one pipeline, all driven by `seo-collect.env`:
 | When | Unit | What | Output |
 | --- | --- | --- | --- |
 | 06:00 | `seo-collect` | Search Console (7-day rolling window), GA4, Places → `POST /api/seo/ingest` | `seo_gsc_daily`, `seo_ga4_daily`, `seo_places_daily` (017) |
-| 06:30 | `seo-analyse` | 7d vs previous 7d, new/lost queries, district + metro-line breakdown; `claude -p` narrative with 3 recommendations | `digest.d/seo-gitarawarszawa-pl.txt` → 07:00 e-mail; `seo_analysis_daily` (018) |
-| Mon 06:45 | `seo-improve` | headless Claude edits `~/code/gitara-lekcje`, runs `lint` + `typecheck` + `test`, opens PR labelled `seo-auto` | a PR for Piotr to review — **never auto-merged** |
+| 06:30 | `seo-analyse` | 7d vs previous 7d, district + metro-line breakdown, adaptive opportunities; **own-site crawl** → snapshots + rule findings (drift, CTA coverage); **plan evaluation** (in_pr → shipped on PR merge; 14/28-day verdicts vs baseline + control pages); `claude -p` narrative + validated ```plan-updates``` JSON applied to `seo_plan` | `digest.d/seo-gitarawarszawa-pl.txt` → 07:00 e-mail; `seo_analysis_daily` (018); `seo_plan`, `seo_page_snapshot`, `seo_findings` (019) |
+| Mon 06:45 | `seo-improve` | takes up to 3 `ready` hypotheses from `seo_plan`, headless Claude edits `~/code/gitara-lekcje`, gates (`lint` + `typecheck` + `test`) **and an LLM-as-judge pass on the diff** (facts from `lib/site.ts`, scope, thin content), opens PR labelled `seo-auto`, rows → `in_pr` | a PR for Piotr to review — **never auto-merged** |
 
 Degradation is explicit: no service-account key → collector skips Google with a
 warning; Claude CLI logged out → the card still ships, narrative column stays
@@ -304,7 +304,7 @@ exits 1 (no push).
 ```bash
 cd ~/code/logs-stack && git pull
 docker exec -i home-ops-postgres-1 psql -U postgres -d home_ops -v ON_ERROR_STOP=1 \
-  -f postgres/migrations/017_seo.sql -f postgres/migrations/018_seo_analysis.sql
+  -f postgres/migrations/017_seo.sql -f postgres/migrations/018_seo_analysis.sql -f postgres/migrations/019_seo_plan.sql
 docker compose up -d --build ingest            # /api/seo/ingest route
 cp ops/elitedesk/seo-collect.env.example ops/elitedesk/seo-collect.env && chmod 600 ops/elitedesk/seo-collect.env
 # fill INGEST_TOKEN (same as .env), SEO_SA_JSON path once the key exists
@@ -332,3 +332,15 @@ docker exec -i home-ops-postgres-1 psql -U postgres -d home_ops -c \
   "select day, model, length(narrative) from seo_analysis_daily order by day desc limit 5"
 bash ops/elitedesk/seo-improve.sh --dry-run | head -40   # prints the prompt, edits nothing
 ```
+
+## Plan as state (`seo_plan`)
+
+```
+proposed ──(LLM/Piotr: ready)──▶ ready ──(seo-improve: PR)──▶ in_pr ──(PR merged)──▶ shipped
+    │                                                                              │
+    └──────── retire ◀─────────────────────────────── helped | hurt | neutral ◀────┘ (day28 verdict)
+```
+
+Piotr can edit the plan by hand: `UPDATE seo_plan SET status='ready' WHERE id=…;` or insert a row with
+`source='piotr'`. Verdicts need ≥ 10 impressions per window; the control group is every GSC row no
+shipped hypothesis targets, so a site-wide lift isn't credited to one change.

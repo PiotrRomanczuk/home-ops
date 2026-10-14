@@ -37,3 +37,14 @@ proponować konkretne zmiany w gitara-lekcje jako PR (nigdy auto-merge).
 - Wdrożone na uwh: migracje 017+018, ingest przebudowany (health 200), 3 timery aktywne; `seo-analyse` przeszedł na zielono bez danych (karta „brak danych”), `seo-improve --dry-run` buduje prompt.
 - Otwarte: klucz konta serwisowego Google (bez niego kolektor pomija GSC/GA4), token subskrypcji Max dla headless Claude (API key bez kredytów usunięty), scalenie #45 i #46, stash `elitedesk-local-2026-10-13` na uwh → PR.
 - Lekcja: `ANTHROPIC_API_KEY` w env wyłącza logowanie subskrypcją — na serwerze z planem Max używać `claude setup-token`.
+
+## Etap 2 (2026-10-13, gałąź feat/seo-plan) — plan jako stan
+- [x] migracja 019: seo_plan, seo_page_snapshot, seo_findings
+- [x] seo_plan.py — werdykty 14/28 dni vs baseline + strony kontrolne, MIN 10 wyśw.
+- [x] seo_drift.py — crawl sitemapy, reguły (title/desc/canonical/noindex/JSON-LD/CTA/thin/title-changed)
+- [x] seo_opps.py — adaptacyjne progi striking distance + niski CTR
+- [x] seo_plan_db.py — I/O planu, walidacja plan-updates, in_pr→shipped przez gh
+- [x] seo-analyse.py — crawl + plan + okazje + blok plan-updates
+- [x] seo-improve.sh — brief z planu, sędzia faktów (seo-judge.prompt.md), in_pr
+- [x] testy 27/27, CI, README, raport docs/manual-tests/2026-10-13-seo-plan.html
+- [ ] wdrożenie uwh: migracja 019, pull, przebieg próbny z realnym crawlem

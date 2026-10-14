@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="pl"><head><meta charset="utf-8"><title>Plan SEO jako stan — test manualny</title>
+<style>body{font:15px/1.5 -apple-system,Segoe UI,sans-serif;max-width:900px;margin:40px auto;padding:0 20px;color:#1b1b1b}h2{margin-top:36px;border-bottom:2px solid #1b1b1b;padding-bottom:4px}code,pre{font-family:ui-monospace,Menlo,monospace;font-size:13px}pre{background:#f4f2ec;padding:12px;overflow:auto;border-left:4px solid #c8372d}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ccc;padding:6px 8px;text-align:left;vertical-align:top}.meta{color:#666;font-size:13px}</style></head><body>
+<h1>Plan SEO jako stan: hipotezy, werdykty, crawl, sędzia</h1>
+<p class="meta"><strong>Data</strong>: 2026-10-13 · <strong>Repo</strong>: home-ops, gałąź <code>feat/seo-plan</code> (na <code>feat/seo-analyse</code>) · <strong>Host</strong>: uwh</p>
+<h2>1. Co zostało zrobione</h2>
+<p>Dzienna analiza nie tylko opisuje dane, ale <strong>koryguje tygodniowy plan</strong>, a tygodniowy job wykonuje tylko to, co plan oznaczył jako gotowe. Wzorce zebrane z research (Cloudflare seo-agent, serpiq, NotFair, Tetrate, SearchPilot) wdrożone jako:</p>
+<table><tr><th>Element</th><th>Plik</th><th>Zachowanie</th></tr>
+<tr><td>Tabela planu</td><td><code>019_seo_plan.sql</code></td><td><code>seo_plan</code>: proposed → ready → in_pr → shipped → helped/hurt/neutral → retired. Unikalny (site, title). <code>seo_page_snapshot</code>, <code>seo_findings</code> (open/resolved/dismissed, klucz path+rule).</td></tr>
+<tr><td>Werdykty 14/28 dni</td><td><code>seo_plan.py</code></td><td>Metryka hipotezy (regex fraz lub ścieżki) po wdrożeniu vs równe okno przed, skorygowana o trend stron kontrolnych (wiersze GSC, których żadna wdrożona hipoteza nie dotyczy). &lt;10 wyświetleń → <code>insufficient</code>. Progi 1,25× / 0,8×.</td></tr>
+<tr><td>Crawl własnej strony</td><td><code>seo_drift.py</code></td><td>Sitemapa → każda strona: title, description, canonical, robots, JSON-LD, liczba słów, linki CTA (tel:, cennik, rezerwacja), linki wewnętrzne. Reguły: długość title/description, canonical ≠ path, noindex w sitemapie, brak JSON-LD, brak CTA, thin content (&lt;250 słów), zmiana title vs wczoraj.</td></tr>
+<tr><td>Adaptacyjne progi</td><td><code>seo_opps.py</code></td><td>Striking distance i niski CTR z progami zależnymi od sumy wyświetleń (3 / 10 / 30). Niski CTR = poniżej mediany własnego top 10.</td></tr>
+<tr><td>Korekty planu przez LLM</td><td><code>seo_llm.py</code>, <code>seo_plan_db.py</code></td><td>Narracja kończy się blokiem <code>```plan-updates</code> z JSON (propose / reprioritize / ready / retire). Walidacja: nieznane akcje, brak pól, retire/ready na wdrożonych wierszach → odrzucone. Duplikaty tytułów ignorowane.</td></tr>
+<tr><td>in_pr → shipped</td><td><code>seo_plan_db.py</code></td><td>Codziennie <code>gh pr view --json mergedAt</code>; po scaleniu <code>shipped_at</code> = data merge, od tej daty liczą się okna.</td></tr>
+<tr><td>Tygodniowy PR z planu</td><td><code>seo-improve.sh</code></td><td>Brief = maks. 3 hipotezy <code>ready</code> + reszta planu + 7 analiz. Po bramkach <strong>sędzia</strong> (<code>seo-judge.prompt.md</code>): drugi przebieg Claude bez narzędzi ocenia diff wobec faktów z <code>lib/site.ts</code> (ceny, telefon, adres, godziny), zakresu dzielnic, thin content, inline style. <code>ok:false</code> → diff wyrzucony, exit 1. Po PR wiersze → <code>in_pr</code> z URL.</td></tr>
+<tr><td>Bramka landingów</td><td><code>seo-improve.prompt.md</code></td><td>Strona lokalna: ≥300 słów unikalnych, dane o stacji i dojeździe, FAQ, CTA, JSON-LD, inaczej noindex albo brak strony.</td></tr></table>
+<h2>2. Jak przetestować ręcznie</h2>
+<pre>cd ~/Desktop/MainCV/home-ops
+python3 -m unittest discover -s ops/elitedesk/tests -p 'test_*.py'     # oczekiwane: OK, 27 testów</pre>
+<pre>ssh uwh; cd ~/code/logs-stack && git pull
+docker exec -i home-ops-postgres-1 psql -U postgres -d home_ops -v ON_ERROR_STOP=1 -f postgres/migrations/019_seo_plan.sql
+systemctl --user start seo-analyse.service; journalctl --user -u seo-analyse -n 5 --no-pager -o cat
+# oczekiwane: JSON z findings_open > 0 (crawl 17 stron sitemapy), plan_rows 0, karta z sekcjami OKAZJE/PLAN/STRONA
+cat ops/elitedesk/digest.d/seo-gitarawarszawa-pl.txt
+docker exec -i home-ops-postgres-1 psql -U postgres -d home_ops -c "select path, rule, severity from seo_findings where status='open' order by 2"
+docker exec -i home-ops-postgres-1 psql -U postgres -d home_ops -c "select path, length(title), cta_links, words from seo_page_snapshot order by day desc, path limit 20"</pre>
+<p>Ręczna hipoteza (symulacja pełnego cyklu):</p>
+<pre>docker exec -i home-ops-postgres-1 psql -U postgres -d home_ops -c "insert into seo_plan (site,title,change,target_queries,status,source) values ('gitarawarszawa.pl','Test: Targówek w sekcji Gdzie','dopisać Targówek do sekcji dojazdu','targ[oó]wek','ready','piotr')"
+bash ops/elitedesk/seo-improve.sh --dry-run | sed -n '/DO WYKONANIA/,/Reszta planu/p'   # hipoteza w briefie
+# po prawdziwym uruchomieniu: status in_pr + pr_url; po merge PR następnego ranka: shipped + shipped_at; po 14/28 dniach: verdict</pre>
+<h2>3. Przypadki brzegowe</h2>
+<ul><li>Crawl nieosiągalny → ostrzeżenie w journalu, karta i plan bez zmian, exit 0.</li><li>Claude zwraca zepsuty JSON → narracja zapisana, plan nietknięty.</li><li>Sędzia niedostępny (timeout) → brak <code>"ok": true</code> → diff wyrzucony. Celowo: bez recenzji nic nie wychodzi.</li><li>Ta sama hipoteza proponowana drugi raz → <code>ON CONFLICT DO NOTHING</code>.</li><li>Finding znika z crawla → <code>resolved</code> z datą; wraca → ponownie <code>open</code>, <code>dismissed</code> zostaje.</li></ul>
+</body></html>

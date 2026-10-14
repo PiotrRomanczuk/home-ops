@@ -39,3 +39,16 @@ def narrate(prompt: str) -> tuple[str | None, str]:
     if r.returncode != 0 or not r.stdout.strip():
         return None, CLAUDE_MODEL
     return r.stdout.strip(), CLAUDE_MODEL
+
+
+def extract_plan_updates(text: str) -> tuple[str, list[dict[str, Any]]]:
+    """Split the narrative from a trailing ```plan-updates JSON block (list). Bad JSON → []."""
+    import re
+    m = re.search(r'```plan-updates\s*(.*?)```', text, re.DOTALL)
+    if not m:
+        return text.strip(), []
+    try:
+        updates = json.loads(m.group(1))
+    except json.JSONDecodeError:
+        return text[:m.start()].strip(), []
+    return text[:m.start()].strip(), [u for u in updates if isinstance(u, dict)]

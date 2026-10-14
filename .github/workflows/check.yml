@@ -58,7 +58,12 @@ jobs:
             ops/elitedesk/seo-analyse.py \
             ops/elitedesk/seo_metrics.py \
             ops/elitedesk/seo_render.py \
-            ops/elitedesk/seo_llm.py
+            ops/elitedesk/seo_llm.py \
+            ops/elitedesk/seo_db.py \
+            ops/elitedesk/seo_plan.py \
+            ops/elitedesk/seo_plan_db.py \
+            ops/elitedesk/seo_drift.py \
+            ops/elitedesk/seo_opps.py
 
   clients-node:
     name: clients/node (syntax)
