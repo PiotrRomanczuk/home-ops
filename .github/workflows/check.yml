@@ -54,7 +54,11 @@ jobs:
             clients/python/home_ops_log.py \
             ops/elitedesk/seo-collect.py \
             ops/elitedesk/seo_google.py \
-            ops/elitedesk/seo_sources.py
+            ops/elitedesk/seo_sources.py \
+            ops/elitedesk/seo-analyse.py \
+            ops/elitedesk/seo_metrics.py \
+            ops/elitedesk/seo_render.py \
+            ops/elitedesk/seo_llm.py
 
   clients-node:
     name: clients/node (syntax)
@@ -74,7 +78,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: bash syntax
         run: |
-          for f in scripts/*.sh; do
+          for f in scripts/*.sh ops/elitedesk/*.sh; do
             bash -n "$f" || exit 1
           done
           echo "✓ all shell scripts parse"

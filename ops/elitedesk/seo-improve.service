@@ -1,0 +1,16 @@
+[Unit]
+Description=home-ops seo-improve — weekly headless-Claude PR with SEO changes for gitarawarszawa.pl
+After=docker.service network-online.target seo-analyse.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/code/logs-stack
+EnvironmentFile=%h/code/logs-stack/ops/elitedesk/seo-collect.env
+ExecStart=/usr/bin/bash %h/code/logs-stack/ops/elitedesk/seo-improve.sh
+TimeoutStartSec=45min
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target
