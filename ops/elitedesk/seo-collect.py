@@ -11,9 +11,10 @@ seo-collect.sites.json it pulls:
 and for each entry in `places`, the Google rating + review count (own listing
 and local competitors), the basis for review-velocity comparisons.
 
-Everything goes to POST /api/seo/ingest (migration 017). A source whose
-credentials aren't configured is skipped with a warning, not failed — the
-Places key in particular is optional.
+Everything goes to POST /api/seo/ingest (migration 017). A missing
+SEO_SA_JSON fails the run whenever a site has GSC/GA4 configured — a silent
+skip once hid an absent key for days behind exit 0. Only the Places key is
+optional: without it competitor reviews are skipped with a warning.
 
 Env:
   INGEST_URL, INGEST_TOKEN  (required) same pair every agent on this host uses
@@ -40,7 +41,7 @@ sys.path.insert(0, str(_here))
 sys.path.insert(0, str(_here.parent.parent))
 from agents._common import IngestClient  # noqa: E402
 from seo_google import access_token  # noqa: E402
-from seo_sources import fetch_ga4, fetch_gsc, fetch_place, place_row  # noqa: E402
+from seo_sources import fetch_ga4, fetch_gsc, fetch_place, needs_google, place_row  # noqa: E402
 
 CONFIG = Path(os.environ.get('SEO_CONFIG') or (_here / 'seo-collect.sites.json'))
 SA_JSON = os.environ.get('SEO_SA_JSON', '')
@@ -76,9 +77,11 @@ def run_step(name: str, fn: Callable[[], int], failures: list[str], summary: dic
 
 
 def google_token(failures: list[str]) -> str:
-    """Bearer token for GSC + GA4, or '' when unconfigured (skip) or broken (fail)."""
+    """Bearer token for GSC + GA4, or '' (recorded as a failure) when the key is missing or broken."""
     if not SA_JSON:
-        ic.post_log('warn', 'seo-collect: SEO_SA_JSON not set — skipping Search Console + GA4')
+        failures.append('google-auth')
+        ic.post_log('error', 'seo-collect: SEO_SA_JSON not set — Search Console + GA4 not collected')
+        print('google-auth failed: SEO_SA_JSON not set', file=sys.stderr)
         return ''
     try:
         return access_token(SA_JSON)
@@ -95,7 +98,7 @@ def main() -> int:
     failures: list[str] = []
     summary: dict[str, int] = {}
 
-    token = google_token(failures)
+    token = google_token(failures) if needs_google(cfg) else ''
     if token:
         for site in cfg.get('sites', []):
             slug = site['slug']

@@ -19,6 +19,11 @@ PLACES_FIELDS = 'id,displayName,rating,userRatingCount'
 
 # ── Search Console ───────────────────────────────────────────────────────
 
+def needs_google(cfg: dict[str, Any]) -> bool:
+    """True when any configured site has a GSC property or GA4 id, i.e. the service-account key is required."""
+    return any(site.get('gsc') or site.get('ga4') for site in cfg.get('sites', []))
+
+
 def gsc_rows(site: str, api_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """searchAnalytics rows (dimensions date, query, page) → seo_gsc_daily rows."""
     out = []

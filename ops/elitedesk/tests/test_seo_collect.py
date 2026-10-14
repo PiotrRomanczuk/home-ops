@@ -13,11 +13,21 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from seo_google import jwt_signing_input, rs256_sign  # noqa: E402
-from seo_sources import ga4_rows, gsc_rows, place_row  # noqa: E402
+from seo_sources import ga4_rows, gsc_rows, needs_google, place_row  # noqa: E402
 
 
 def _b64d(s: str) -> bytes:
     return base64.urlsafe_b64decode(s + '=' * (-len(s) % 4))
+
+
+class NeedsGoogleTest(unittest.TestCase):
+    def test_key_required_when_any_site_has_gsc_or_ga4(self):
+        self.assertTrue(needs_google({'sites': [{'slug': 'a'}, {'slug': 'b', 'ga4': '1'}]}))
+        self.assertTrue(needs_google({'sites': [{'slug': 'a', 'gsc': 'sc-domain:a'}]}))
+
+    def test_places_only_config_needs_no_key(self):
+        self.assertFalse(needs_google({'sites': [{'slug': 'a'}], 'places': [{'label': 'x'}]}))
+        self.assertFalse(needs_google({}))
 
 
 class GscRowsTest(unittest.TestCase):
