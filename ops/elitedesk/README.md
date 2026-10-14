@@ -14,8 +14,8 @@ stack. They're version-controlled here; installed by symlinking into
 | `pg-backup.sh` | Nightly `pg_dump -Fc` of `home_ops` → `/mnt/nas/monitoring-backup/home-ops/` | `chmod +x` |
 | `pg-backup.service` | Oneshot unit that runs `pg-backup.sh` | `systemctl --user link` |
 | `pg-backup.timer` | Fires `pg-backup.service` daily at 04:30 | `systemctl --user enable --now` |
-| `daily-digest.sql` | Read-only queries that build the digest body | (piped into psql) |
-| `daily-digest.sh` | Assembles + emails the digest; `--mode morning\|evening` | `chmod +x` |
+| `daily-digest.sh` | Fetches `GET /api/digest`, renders, emails; `--mode morning\|evening` | `chmod +x` |
+| `render-digest.py` + `digest_html.py` | Pure JSON model → email-safe HTML (tests in `tests/`) | (called by the `.sh`) |
 | `send-digest.py` | stdlib `smtplib` sender (default transport, no install/sudo) | (called by the `.sh`) |
 | `daily-digest.service` | Oneshot unit — `daily-digest.sh` (morning) | `systemctl --user link` |
 | `daily-digest.timer` | Fires the morning digest daily at 07:00 | `systemctl --user enable --now` |
@@ -34,8 +34,9 @@ stack. They're version-controlled here; installed by symlinking into
 | `seo-improve.sh` | Monday 06:45 — headless Claude edits a clone of gitara-lekcje, runs its gates, opens a `seo-auto` PR (never merges) | `chmod +x` |
 | `seo-improve.service` / `.timer` | Oneshot + weekly Monday 06:45 | `systemctl --user link` / `enable --now` |
 
-Migration `postgres/migrations/014_night_digest.sql` adds `queue_night_digest()`,
-called by the **evening** run to enqueue the overnight LLM narrative.
+Migrations `020_digest_cards.sql` + `021_decisions.sql` add the routine
+contract the digest renders (see "Daily digest email" below). Migration 014's
+`queue_night_digest()` is no longer called: the GPU lane is off.
 
 ## Prerequisites — NAS mount
 
@@ -102,34 +103,57 @@ docker run --rm -i postgres:17 pg_restore --list < /mnt/nas/monitoring-backup/ho
 
 # Daily digest email
 
-Two emails a day, same rich HTML, one `daily-digest.sh` with `--mode`:
+_updated: 2026-10-13 — rewritten around routine cards + decisions._
 
-- **Morning (07:00)** — `--mode morning` (default). The 24h stack summary
-  (host health, sentinel alerts, error counts + top recurring failures, LLM-eval
-  progress, eval board, GPU queue, commits) + **Today's focus** (top of the
-  `## Next` list in `projects/home-ops.md`) + the **🌙 Overnight narrative**: an
-  LLM briefing written on the GPU overnight (see below).
-- **Evening (21:00)** — `--mode evening`. The same end-of-day snapshot, and it
-  **queues the overnight narrative job** now that the win10 box is done gaming
-  and the GPU is free. `queue_night_digest()` (migration 014) inserts one
-  `summarise` `gpu_job` from the day's infra/eval/gpu/project state; the win10
-  scheduler runs it overnight; the next morning's digest reads `result.summary`.
-  Idempotent per day. If the GPU didn't finish, the morning card says so and the
-  rest of the email is unaffected.
+The email answers two questions on a phone at 07:00: **did something break**
+and **what needs me**. Everything else lives in the console.
 
-**Apply the migration once** (functions aren't re-run from `docker-entrypoint-initdb.d`
-on an existing volume):
-
-```bash
-docker exec -i home-ops-postgres-1 psql -U postgres -d home_ops \
-  < ~/logs-stack/postgres/migrations/014_night_digest.sql
+```
+daily-digest.sh ──GET /api/digest──▶ JSON model ──render-digest.py──▶ HTML ──▶ smtplib / msmtp
 ```
 
-**Steering the process.** There is no separate task store. To change what
-tomorrow's digest features as *Today's focus*, reorder or edit the `## Next`
-list in `projects/home-ops.md` in Obsidian (desktop or phone) — `planner-sync`
-syncs it into the `projects` table within 60s. You can also tick items off from
-the web console; the `task_toggles` writeback flows the change back to the vault.
+Sections, each shown only when it has content:
+
+| Section | Source |
+| --- | --- |
+| Verdict (also the subject line) | computed by `/api/digest` |
+| **Needs you** — open decisions with one-tap buttons | `decisions` (migration 021) |
+| **Needs attention** — recurring problems, one per source, with "since" | `host_logs` errors grouped by source + host; known noise muted in `routes/digest.ts` |
+| Hosts — one line each; logs-only host names collapsed | `host_metrics` + `host_logs` |
+| Your sites — DOWN / RECOVERED transitions | rpi-sentinel `app:<slug>` events (`host='rpi'`) |
+| Today — focus + 3 next titles | Board focus / vault `## Next` |
+| **Routines** — latest card per routine, trend, acceptance | `digest_cards` (migration 020) |
+| Overnight / extras | narrative (if any) + `digest.d/*.txt` **younger than 26 h** |
+
+## How a routine reports
+
+Every routine ends its run with one card, and asks before anything public or
+irreversible. From bash:
+
+```bash
+python3 -m agents.routine_report card seo-analyse "Traffic flat, 2 hypotheses added" \
+  --item "H3: district pages|https://…" --metric "crawl findings=17" --delta -2 --lower-is-better
+python3 -m agents.routine_report ask seo-improve "Merge the weekly SEO PR #53?" \
+  --ref 53 --context https://github.com/…/pull/53 --option yes:Merge --option no:Skip --skip-if-open
+python3 -m agents.routine_report answers seo-improve      # next run: act on these
+python3 -m agents.routine_report consume seo-improve <id> # then mark done
+```
+
+From Python: `agents.routine_report.Reporter`. From a headless Claude: the MCP
+tools `post_digest_card`, `create_decision`, `list_decisions`, `consume_decision`.
+
+**Rule of thumb:** ask only when the effect is public or irreversible
+(publish, merge, send). Drafts, analyses and reports just get a card.
+
+## Decision links
+
+Buttons in the email are signed links (`/d/<id>/<option>/<exp>/<sig>`, HMAC
+keyed by `DECISION_SECRET`, default derived from `INGEST_TOKEN`). Opening one
+shows a confirmation page; only the POST from that page records the answer,
+so mail-client link prefetching can never answer for you. "No" asks for a
+one-line reason; reasons feed the per-routine acceptance line. Set
+`PUBLIC_BASE_URL` in `.env` to the console URL reachable from the phone
+(LAN or Tailscale), then `docker compose up -d --build ingest`.
 
 ## Prerequisites — outbound mail
 

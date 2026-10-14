@@ -1,0 +1,69 @@
+/* ============================================================
+   decisions.css — Decisions tab (approval inbox). Reuses the
+   tokens in styles.css; one narrow column of question cards.
+   ============================================================ */
+
+.dec-view { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+
+.dec-filters {
+  display: flex; align-items: center; gap: 6px; padding: 10px 14px 6px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.dec-filter {
+  font: inherit; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--fg-muted); background: transparent; border: 1px solid var(--border);
+  border-radius: 3px; padding: 2px 8px; cursor: pointer;
+}
+.dec-filter.on { color: var(--accent); border-color: var(--accent-line); background: var(--accent-dim); }
+.dec-filters .spacer { flex: 1; }
+.dec-hint { font-size: 11px; color: var(--fg-faint); }
+
+.dec-list {
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 12px 14px 20px; overflow-y: auto; max-width: 760px; min-height: 0;
+}
+
+.dec-card {
+  border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px;
+  background: var(--bg-elevated); display: flex; flex-direction: column; gap: 7px;
+  border-left: 2px solid var(--accent);
+}
+.dec-card.closed { border-left-color: var(--border); opacity: 0.85; }
+.dec-card.pending { opacity: 0.55; }
+
+.dec-meta { display: flex; flex-wrap: wrap; gap: 8px; font-size: 11px; color: var(--fg-muted); }
+.dec-routine { color: var(--fg); font-weight: 600; }
+.dec-slug::before { content: '· '; color: var(--fg-faint); }
+.dec-when { color: var(--fg-faint); }
+.dec-via { color: var(--fg-faint); }
+
+.dec-q { font-size: 14px; color: var(--fg-bright); line-height: 1.4; }
+.dec-detail {
+  margin: 0; font: inherit; font-size: 12px; color: var(--fg-muted);
+  white-space: pre-wrap; max-height: 12em; overflow: auto;
+  background: var(--bg-inset); border-radius: 4px; padding: 6px 8px;
+}
+.dec-ctx { font-size: 12px; color: var(--accent); text-decoration: none; }
+.dec-ctx:hover { text-decoration: underline; }
+
+.dec-answer { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 2px; }
+.dec-opt {
+  font: inherit; font-size: 12px; font-weight: 600; padding: 5px 12px; cursor: pointer;
+  border-radius: 4px; border: 1px solid var(--good); color: var(--good); background: transparent;
+}
+.dec-opt:hover { background: rgba(63, 185, 80, 0.14); }
+.dec-opt.no { border-color: var(--lv-error); color: var(--lv-error); }
+.dec-opt.no:hover { background: rgba(248, 81, 73, 0.14); }
+.dec-reason {
+  flex: 1 1 200px; min-width: 0; font: inherit; font-size: 12px; padding: 5px 8px;
+  background: var(--bg-inset); border: 1px solid var(--border); border-radius: 4px; color: var(--fg);
+}
+.dec-reason.bad { border-color: var(--lv-error); }
+.dec-reason:focus { outline: none; border-color: var(--accent-line); }
+
+.dec-outcome { font-size: 12px; font-weight: 600; }
+.dec-outcome.yes { color: var(--good); }
+.dec-outcome.no { color: var(--lv-error); }
+.dec-outcome.expired { color: var(--fg-faint); font-weight: 400; }
+.dec-why { color: var(--fg-muted); font-weight: 400; }
+.dec-err { font-size: 12px; color: var(--lv-error); padding: 4px 14px; }

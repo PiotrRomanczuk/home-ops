@@ -39,6 +39,11 @@ services:
       # Set AUTH_PUBLIC=1 in .env to open the console with no viewer login
       # (worker/token endpoints stay protected). Reachable over LAN + Tailscale.
       AUTH_PUBLIC: ${AUTH_PUBLIC:-}
+      # Console URL the digest email's one-tap decision links point at
+      # (LAN/Tailscale), e.g. http://192.168.1.75:64421
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}
+      # Optional: signs those links. Defaults to a hash of INGEST_TOKEN.
+      DECISION_SECRET: ${DECISION_SECRET:-}
       PORT: "8080"
     ports:
       - "0.0.0.0:64421:8080"

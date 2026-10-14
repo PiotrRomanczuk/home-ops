@@ -123,6 +123,7 @@ const TABS = [
   { id: 'evals',    label: 'Evals',    key: '6', ico: icoEvals },
   { id: 'board',    label: 'Board',    key: '7', ico: icoBoard },
   { id: 'scores',   label: 'Scores',   key: '8', ico: icoScores },
+  { id: 'decisions', label: 'Decisions', key: '9', ico: icoDecisions },
 ];
 function icon(p) { return `<svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`; }
 function icoStatus() { return icon('<circle cx="8" cy="8" r="5.5"/><path d="M5 8.3l2 2 4-4.5"/>'); }
@@ -133,6 +134,7 @@ function icoHosts() { return icon('<rect x="2.5" y="3" width="11" height="3.2"/>
 function icoEvals() { return icon('<rect x="2.5" y="2.5" width="3.4" height="7"/><rect x="6.4" y="2.5" width="3.4" height="10.5"/><rect x="10.3" y="2.5" width="3.4" height="5"/>'); }
 function icoBoard() { return icon('<rect x="2.5" y="2.5" width="3.2" height="11"/><rect x="6.4" y="2.5" width="3.2" height="7"/><rect x="10.3" y="2.5" width="3.2" height="9"/>'); }
 function icoScores() { return icon('<path d="M2.5 8.5l3 3 5-6.5"/><circle cx="12.5" cy="4" r="1.3"/>'); }
+function icoDecisions() { return icon('<rect x="2.5" y="3" width="11" height="10" rx="1.5"/><path d="M5 8.2l2 2 4-4"/>'); }
 
 function renderChrome() {
   const st = getState();
@@ -145,6 +147,8 @@ function renderChrome() {
     evals: (window.Evals?.items || []).filter(t => (t.stage === 'testing' || t.stage === 'active') && !t.has_files).length,
     // Open (not-done) tasks in the Now column.
     board: (window.Board?.items || []).filter(t => t.column_key === 'now' && !t.done).length,
+    // Questions routines filed that still wait for an answer.
+    decisions: window.Decisions?.openCount?.() || 0,
   };
   const tabs = TABS.map(t => h('button', {
     class: 'tab' + (st.tab === t.id ? ' on' : ''),

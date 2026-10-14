@@ -512,5 +512,10 @@ def get_eval_task_scores(task: str, limit: int = 15) -> str:
     )
 
 
+# Routine contract: digest cards + decisions inbox (separate module, see there).
+from decisions_tools import register as _register_decisions  # noqa: E402
+
+_register_decisions(mcp, _request)
+
 if __name__ == "__main__":
     mcp.run()
