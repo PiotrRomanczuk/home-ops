@@ -2,7 +2,7 @@
   "sites": [
     {
       "slug": "gitarawarszawa.pl",
-      "gsc": "https://gitarawarszawa.pl/",
+      "gsc": "sc-domain:gitarawarszawa.pl",
       "ga4": "557191115",
       "events": ["booking_success", "waitlist_signup", "phone_click", "cta_click"]
     },
