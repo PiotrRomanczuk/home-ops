@@ -1,6 +1,6 @@
 """routine_report.py — how a routine reports to the digest and asks Piotr.
 
-Two verbs, one per contract (migrations 019 + 020):
+Two verbs, one per contract (migrations 020 + 021):
 
   card      end of every run: one headline, ≤5 items, one metric
   decision  before anything irreversible or public: file a question, stop,

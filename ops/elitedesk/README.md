@@ -1,6 +1,6 @@
 ---
 created: 2026-06-07
-updated: 2026-07-14
+updated: 2026-10-13
 ---
 
 # ops/elitedesk — host-side unit files for the elitedesk deployment
@@ -21,8 +21,20 @@ stack. They're version-controlled here; installed by symlinking into
 | `daily-digest.timer` | Fires the morning digest daily at 07:00 | `systemctl --user enable --now` |
 | `daily-digest-evening.service` | Oneshot unit — `daily-digest.sh --mode evening` | `systemctl --user link` |
 | `daily-digest-evening.timer` | Fires the evening digest daily at 21:00 | `systemctl --user enable --now` |
+| `seo-collect.py` | Daily Search Console / GA4 / Places snapshot → `POST /api/seo/ingest` | (run by the unit) |
+| `seo_google.py`, `seo_sources.py` | Service-account JWT via `openssl`; per-source fetch + row shaping | (imported) |
+| `seo-collect.sites.json` | Sites (GSC property, GA4 property, tracked events) + Places entries | edit in repo |
+| `seo-collect.service` | Oneshot unit that runs `seo-collect.py` | `systemctl --user link` |
+| `seo-collect.timer` | Fires `seo-collect.service` daily at 06:00 | `systemctl --user enable --now` |
+| `seo-analyse.py` | 06:30 — 7d-vs-7d metrics + district breakdown → `digest.d/seo-<site>.txt` + `seo_analysis_daily` (+ headless Claude narrative) | (run by the unit) |
+| `seo_metrics.py`, `seo_render.py`, `seo_llm.py` | Pure computations (tested), plain-text card, `claude -p` wrapper | (imported) |
+| `seo-districts.json` | Query → district/metro-line regex classifier (right bank + M2 + central M1) | edit in repo |
+| `seo-analyse.prompt.md`, `seo-improve.prompt.md` | Analyst / editor prompts for headless Claude | edit in repo |
+| `seo-analyse.service` / `.timer` | Oneshot + daily 06:30 | `systemctl --user link` / `enable --now` |
+| `seo-improve.sh` | Monday 06:45 — headless Claude edits a clone of gitara-lekcje, runs its gates, opens a `seo-auto` PR (never merges) | `chmod +x` |
+| `seo-improve.service` / `.timer` | Oneshot + weekly Monday 06:45 | `systemctl --user link` / `enable --now` |
 
-Migrations `019_digest_cards.sql` + `020_decisions.sql` add the routine
+Migrations `020_digest_cards.sql` + `021_decisions.sql` add the routine
 contract the digest renders (see "Daily digest email" below). Migration 014's
 `queue_night_digest()` is no longer called: the GPU lane is off.
 
@@ -105,12 +117,12 @@ Sections, each shown only when it has content:
 | Section | Source |
 | --- | --- |
 | Verdict (also the subject line) | computed by `/api/digest` |
-| **Needs you** — open decisions with one-tap buttons | `decisions` (migration 020) |
+| **Needs you** — open decisions with one-tap buttons | `decisions` (migration 021) |
 | **Needs attention** — recurring problems, one per source, with "since" | `host_logs` errors grouped by source + host; known noise muted in `routes/digest.ts` |
 | Hosts — one line each; logs-only host names collapsed | `host_metrics` + `host_logs` |
 | Your sites — DOWN / RECOVERED transitions | rpi-sentinel `app:<slug>` events (`host='rpi'`) |
 | Today — focus + 3 next titles | Board focus / vault `## Next` |
-| **Routines** — latest card per routine, trend, acceptance | `digest_cards` (migration 019) |
+| **Routines** — latest card per routine, trend, acceptance | `digest_cards` (migration 020) |
 | Overnight / extras | narrative (if any) + `digest.d/*.txt` **younger than 26 h** |
 
 ## How a routine reports
@@ -242,3 +254,117 @@ systemctl --user start daily-digest.service          # fire the morning digest n
 systemctl --user start daily-digest-evening.service  # fire the evening digest (queues the night job)
 journalctl --user -u daily-digest.service -u daily-digest-evening.service -n 40
 ```
+
+---
+
+# seo-collect — daily search-visibility snapshot
+
+_Added 2026-10-07._ Feeds `seo_gsc_daily`, `seo_ga4_daily` and `seo_places_daily`
+(migration `017_seo.sql`) for gitarawarszawa.pl and romanczuk.online — the raw
+material for weekly SEO reports.
+
+## One-time Google setup (done by hand — keys never go through the repo)
+
+1. Google Cloud project (e.g. `home-ops-seo`) → enable **Google Search Console API**,
+   **Google Analytics Data API** and (optionally) **Places API (New)**.
+2. Create a service account → **Keys → Add key → JSON**. Copy it to
+   `~/code/logs-stack/ops/elitedesk/seo-sa.json`, `chmod 600` (gitignored as `*-sa.json`).
+3. Add the service account's e-mail as a **Restricted** user on each Search Console
+   property and as **Viewer** on each GA4 property listed in `seo-collect.sites.json`.
+4. Optional: an API key restricted to *Places API (New)* → `PLACES_API_KEY`. Six
+   lookups/day stay inside the free monthly usage cap.
+
+## Config + test run
+
+```bash
+cd ~/code/logs-stack
+cp ops/elitedesk/seo-collect.env.example ops/elitedesk/seo-collect.env && chmod 600 ops/elitedesk/seo-collect.env
+# fill INGEST_TOKEN (same as the other agents), SEO_SA_JSON, PLACES_API_KEY
+set -a; . ops/elitedesk/seo-collect.env; set +a; python3 ops/elitedesk/seo-collect.py
+```
+
+Prints `{"summary": {...}, "failed": [...]}`. A source without credentials is skipped
+with a `warn` in `host_logs`; an API error exits 1.
+
+## Install the timer
+
+```bash
+ln -sf ~/code/logs-stack/ops/elitedesk/seo-collect.service ~/.config/systemd/user/
+ln -sf ~/code/logs-stack/ops/elitedesk/seo-collect.timer   ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now seo-collect.timer
+```
+
+## Verify
+
+```sql
+SELECT site, max(day), count(*) FROM seo_gsc_daily GROUP BY site;
+SELECT site, day, sum(sessions), jsonb_object_agg(source_medium, events) FROM seo_ga4_daily GROUP BY 1, 2 ORDER BY 2 DESC LIMIT 7;
+SELECT label, day, rating, review_count FROM seo_places_daily ORDER BY day DESC, label;
+```
+
+`gitarawarszawa.pl` is configured as a URL-prefix GSC property (`https://gitarawarszawa.pl/`).
+If it turns out to be a domain property, change `gsc` to `sc-domain:gitarawarszawa.pl`.
+
+---
+
+# SEO routine (gitarawarszawa.pl)
+
+Three units, one pipeline, all driven by `seo-collect.env`:
+
+| When | Unit | What | Output |
+| --- | --- | --- | --- |
+| 06:00 | `seo-collect` | Search Console (7-day rolling window), GA4, Places → `POST /api/seo/ingest` | `seo_gsc_daily`, `seo_ga4_daily`, `seo_places_daily` (017) |
+| 06:30 | `seo-analyse` | 7d vs previous 7d, district + metro-line breakdown, adaptive opportunities; **own-site crawl** → snapshots + rule findings (drift, CTA coverage); **plan evaluation** (in_pr → shipped on PR merge; 14/28-day verdicts vs baseline + control pages); `claude -p` narrative + validated ```plan-updates``` JSON applied to `seo_plan` | `digest.d/seo-gitarawarszawa-pl.txt` → 07:00 e-mail; `seo_analysis_daily` (018); `seo_plan`, `seo_page_snapshot`, `seo_findings` (019) |
+| Mon 06:45 | `seo-improve` | takes up to 3 `ready` hypotheses from `seo_plan`, headless Claude edits `~/code/gitara-lekcje`, gates (`lint` + `typecheck` + `test`) **and an LLM-as-judge pass on the diff** (facts from `lib/site.ts`, scope, thin content), opens PR labelled `seo-auto`, rows → `in_pr` | a PR for Piotr to review — **never auto-merged** |
+
+Degradation is explicit: no service-account key → collector skips Google with a
+warning; Claude CLI logged out → the card still ships, narrative column stays
+NULL and the journal says why; gates red → `seo-improve` discards the diff and
+exits 1 (no push).
+
+## Install
+
+```bash
+cd ~/code/logs-stack && git pull
+docker exec -i home-ops-postgres-1 psql -U postgres -d home_ops -v ON_ERROR_STOP=1 \
+  -f postgres/migrations/017_seo.sql -f postgres/migrations/018_seo_analysis.sql -f postgres/migrations/019_seo_plan.sql
+docker compose up -d --build ingest            # /api/seo/ingest route
+cp ops/elitedesk/seo-collect.env.example ops/elitedesk/seo-collect.env && chmod 600 ops/elitedesk/seo-collect.env
+# fill INGEST_TOKEN (same as .env), SEO_SA_JSON path once the key exists
+for u in seo-collect seo-analyse seo-improve; do
+  ln -sf ~/code/logs-stack/ops/elitedesk/$u.service ~/.config/systemd/user/
+  ln -sf ~/code/logs-stack/ops/elitedesk/$u.timer   ~/.config/systemd/user/
+done
+systemctl --user daemon-reload
+systemctl --user enable --now seo-collect.timer seo-analyse.timer seo-improve.timer
+claude login                                  # once; headless runs reuse the session
+```
+
+Google side (one-time, in the Cloud console): create a service account, download
+its JSON key to `ops/elitedesk/seo-sa.json` (chmod 600, gitignored), enable
+**Search Console API** and **Google Analytics Data API** on the project, add the
+service-account e-mail as a *restricted* user of the GSC property and as *Viewer*
+on the GA4 property.
+
+## Verify
+
+```bash
+systemctl --user start seo-collect.service && journalctl --user -u seo-collect -n 20
+systemctl --user start seo-analyse.service && cat ops/elitedesk/digest.d/seo-gitarawarszawa-pl.txt
+docker exec -i home-ops-postgres-1 psql -U postgres -d home_ops -c \
+  "select day, model, length(narrative) from seo_analysis_daily order by day desc limit 5"
+bash ops/elitedesk/seo-improve.sh --dry-run | head -40   # prints the prompt, edits nothing
+```
+
+## Plan as state (`seo_plan`)
+
+```
+proposed ──(LLM/Piotr: ready)──▶ ready ──(seo-improve: PR)──▶ in_pr ──(PR merged)──▶ shipped
+    │                                                                              │
+    └──────── retire ◀─────────────────────────────── helped | hurt | neutral ◀────┘ (day28 verdict)
+```
+
+Piotr can edit the plan by hand: `UPDATE seo_plan SET status='ready' WHERE id=…;` or insert a row with
+`source='piotr'`. Verdicts need ≥ 10 impressions per window; the control group is every GSC row no
+shipped hypothesis targets, so a site-wide lift isn't credited to one change.

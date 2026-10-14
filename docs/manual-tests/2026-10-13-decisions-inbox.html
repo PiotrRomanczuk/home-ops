@@ -34,7 +34,7 @@ table{border-collapse:collapse;width:100%;background:#fff;border-radius:8px;over
 <h2>How to test it manually</h2>
 <h3>Setup on elitedesk (after merge)</h3>
 <pre>cd ~/code/logs-stack && git checkout main && git pull
-scripts/apply-migrations.sh                       # applies 019 + 020
+scripts/apply-migrations.sh                       # applies 020 + 021
 echo 'PUBLIC_BASE_URL=http://192.168.1.75:64421' >> .env
 docker compose up -d --build ingest
 curl -s localhost:64421/api/health                # {"ok":true}</pre>
@@ -76,5 +76,5 @@ python3 -m agents.routine_report answers seo-improve        # → []</pre>
 <h2>Known limits</h2>
 <ul><li>No routine posts cards or decisions yet; wiring SEO and lesson-notes-social is the next PR.</li>
 <li>The three live faults the email surfaces (planner-sync, Uptime Kuma DNS, elitedesk metrics under three host names) are not fixed here.</li>
-<li>Migrations are numbered 019/020 because 016–018 belong to open branches.</li></ul>
+<li>Migrations are numbered 020/021 because 017–019 belong to the SEO routine.</li></ul>
 </main></body></html>

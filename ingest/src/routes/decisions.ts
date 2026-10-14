@@ -13,7 +13,7 @@ import {
 } from '../decisions-store.ts';
 import { env } from '../env.ts';
 
-// Decisions inbox (migration 020). Routines file questions with the ingest
+// Decisions inbox (migration 021). Routines file questions with the ingest
 // token; Piotr answers from the console, the API, or a signed link in the
 // digest email (/d/...). Signed links are only handed out to token callers
 // (the digest), never to anonymous console viewers.

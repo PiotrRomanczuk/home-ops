@@ -1,4 +1,4 @@
--- 019_digest_cards.sql
+-- 020_digest_cards.sql
 -- Created: 2026-10-13
 --
 -- The routine → digest contract. Every scheduled routine (SEO collector,

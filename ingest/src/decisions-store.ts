@@ -2,7 +2,7 @@ import { pool } from './db.ts';
 import { buildLink, isValidOption } from './decision-links.ts';
 import { env } from './env.ts';
 
-// Shared read/write helpers for decisions (migration 020), used by the JSON
+// Shared read/write helpers for decisions (migration 021), used by the JSON
 // API, the signed-link pages and the digest model. Keeps the "what counts as
 // a valid answer" rule in one place.
 

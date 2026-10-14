@@ -30,7 +30,7 @@ beforeAll(async () => {
   const pgMod = await import('pg');
   pool = new pgMod.default.Pool({ connectionString: dbUrl, max: 4 });
   const r = await pool.query(`SELECT to_regclass('public.decisions') AS d, to_regclass('public.digest_cards') AS c`);
-  if (!r.rows[0].d || !r.rows[0].c) throw new Error('apply migrations 019 + 020 first');
+  if (!r.rows[0].d || !r.rows[0].c) throw new Error('apply migrations 020 + 021 first');
   const honoMod = await import('hono');
   const { registerDecisionsRoutes } = await import('../decisions.ts');
   const { registerCardsRoutes } = await import('../cards.ts');

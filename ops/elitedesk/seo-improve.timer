@@ -1,0 +1,12 @@
+[Unit]
+Description=Fire home-ops seo-improve every Monday at 06:45
+
+[Timer]
+# After Monday's seo-analyse (06:30), so the brief includes a full week.
+OnCalendar=Mon *-*-* 06:45:00
+RandomizedDelaySec=120
+Persistent=true
+Unit=seo-improve.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,13 @@
+[Unit]
+Description=Fire home-ops seo-analyse daily at 06:30
+
+[Timer]
+# After seo-collect (06:00 + up to 5 min jitter), before the 07:00 digest that
+# renders digest.d/seo-gitarawarszawa.txt.
+OnCalendar=*-*-* 06:30:00
+RandomizedDelaySec=120
+Persistent=true
+Unit=seo-analyse.service
+
+[Install]
+WantedBy=timers.target

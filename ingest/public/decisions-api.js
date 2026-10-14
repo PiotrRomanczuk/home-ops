@@ -1,7 +1,7 @@
 /* ============================================================
    decisions-api.js — wires the Decisions tab to /api/decisions.
 
-   The inbox of questions routines filed (migration 020). Answers
+   The inbox of questions routines filed (migration 021). Answers
    are optimistic with rollback, same pattern as Board. Routines
    consume answers on their next run, so nothing here triggers
    side effects directly.

@@ -2,7 +2,7 @@ import type { Hono } from 'hono';
 import { tokenOnly, viewerOrToken } from '../auth.ts';
 import { pool } from '../db.ts';
 
-// digest_cards — the routine → digest contract (migration 019). A routine
+// digest_cards — the routine → digest contract (migration 020). A routine
 // posts one card at the end of each run; the digest and the console read the
 // latest card per routine. Validation is strict on purpose: a card is the one
 // sentence Piotr reads about that routine, so the shape must stay small.
