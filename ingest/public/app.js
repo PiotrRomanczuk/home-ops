@@ -37,7 +37,7 @@ function getState() {
     if (i < 0) { s[pair] = true; continue; }
     s[decodeURIComponent(pair.slice(0, i))] = decodeURIComponent(pair.slice(i + 1));
   }
-  if (!s.tab) s.tab = 'chat';
+  if (!s.tab) s.tab = 'today';
   return s;
 }
 function setState(patch, replace) {
@@ -115,17 +115,19 @@ window.LV_ORDER = LV_ORDER;
    CHROME (top tab strip)
    ============================================================ */
 const TABS = [
-  { id: 'status',   label: 'Status',   key: '1', ico: icoStatus },
-  { id: 'chat',     label: 'Chat',     key: '2', ico: icoChat },
-  { id: 'projects', label: 'Projects', key: '3', ico: icoProj },
-  { id: 'logs',     label: 'Logs',     key: '4', ico: icoLogs },
-  { id: 'hosts',    label: 'Hosts',    key: '5', ico: icoHosts },
-  { id: 'evals',    label: 'Evals',    key: '6', ico: icoEvals },
-  { id: 'board',    label: 'Board',    key: '7', ico: icoBoard },
-  { id: 'scores',   label: 'Scores',   key: '8', ico: icoScores },
-  { id: 'decisions', label: 'Decisions', key: '9', ico: icoDecisions },
+  { id: 'today',    label: 'Dziś',     key: '1', ico: icoToday },
+  { id: 'status',   label: 'Status',   key: '2', ico: icoStatus },
+  { id: 'chat',     label: 'Chat',     key: '3', ico: icoChat },
+  { id: 'projects', label: 'Projects', key: '4', ico: icoProj },
+  { id: 'logs',     label: 'Logs',     key: '5', ico: icoLogs },
+  { id: 'hosts',    label: 'Hosts',    key: '6', ico: icoHosts },
+  { id: 'evals',    label: 'Evals',    key: '7', ico: icoEvals },
+  { id: 'board',    label: 'Board',    key: '8', ico: icoBoard },
+  { id: 'scores',   label: 'Scores',   key: '9', ico: icoScores },
+  { id: 'decisions', label: 'Decisions', key: '0', ico: icoDecisions },
 ];
 function icon(p) { return `<svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`; }
+function icoToday()  { return icon('<rect x="2.5" y="3.5" width="11" height="10" rx="1.5"/><path d="M2.5 6.5h11M5.5 2v3M10.5 2v3"/><circle cx="8" cy="10" r="1" fill="currentColor"/>'); }
 function icoStatus() { return icon('<circle cx="8" cy="8" r="5.5"/><path d="M5 8.3l2 2 4-4.5"/>'); }
 function icoChat()  { return icon('<path d="M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z"/>'); }
 function icoProj()  { return icon('<rect x="2.5" y="2.5" width="4.5" height="4.5"/><rect x="9" y="2.5" width="4.5" height="4.5"/><rect x="2.5" y="9" width="4.5" height="4.5"/><rect x="9" y="9" width="4.5" height="4.5"/>'); }
@@ -149,6 +151,8 @@ function renderChrome() {
     board: (window.Board?.items || []).filter(t => t.column_key === 'now' && !t.done).length,
     // Questions routines filed that still wait for an answer.
     decisions: window.Decisions?.openCount?.() || 0,
+    // Open Now tasks across hot/warm projects + Board.
+    today: window.Today?.openCount?.() || 0,
   };
   const tabs = TABS.map(t => h('button', {
     class: 'tab' + (st.tab === t.id ? ' on' : ''),
@@ -265,9 +269,9 @@ document.addEventListener('keydown', (e) => {
   const typing = /^(INPUT|TEXTAREA)$/.test(document.activeElement?.tagName) || document.activeElement?.isContentEditable;
   if (typing) return;
   const st = getState();
-  if (e.key >= '1' && e.key <= String(TABS.length) && !e.metaKey && !e.ctrlKey) {
-    const t = TABS[+e.key - 1]; if (t) { setState({ tab: t.id, conv: null, slug: null, eval: null }); e.preventDefault(); }
-  } else if (e.key === 'c') { openCapture(); e.preventDefault(); }
+  const keyTab = !e.metaKey && !e.ctrlKey && !e.altKey && TABS.find(t => t.key === e.key);
+  if (keyTab) { setState({ tab: keyTab.id, conv: null, slug: null, eval: null }); e.preventDefault(); }
+  else if (e.key === 'c') { openCapture(); e.preventDefault(); }
   else if (e.key === 't') { toggleTimeMode(); }
   else if (e.key === 'Escape' && (st.conv || st.slug || st.eval)) { setState({ conv: null, slug: null, eval: null }); }
   else if (window.VIEW_KEYS && window.VIEW_KEYS[st.tab]) window.VIEW_KEYS[st.tab](e, st);
@@ -275,8 +279,7 @@ document.addEventListener('keydown', (e) => {
 
 /* boot */
 window.addEventListener('DOMContentLoaded', () => {
-  // Phones land on the glanceable Status dashboard; desktop keeps Chat.
-  const defaultTab = window.matchMedia('(max-width: 720px)').matches ? 'status' : 'chat';
-  if (!location.hash) history.replaceState(null, '', '#tab=' + defaultTab);
+  // Every device lands on "Dziś": the day brief + what needs doing today.
+  if (!location.hash) history.replaceState(null, '', '#tab=today');
   window.render();
 });

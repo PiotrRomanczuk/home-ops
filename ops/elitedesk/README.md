@@ -1,6 +1,6 @@
 ---
 created: 2026-06-07
-updated: 2026-10-13
+updated: 2026-10-17
 ---
 
 # ops/elitedesk — host-side unit files for the elitedesk deployment
@@ -33,6 +33,9 @@ stack. They're version-controlled here; installed by symlinking into
 | `seo-analyse.service` / `.timer` | Oneshot + daily 06:30 | `systemctl --user link` / `enable --now` |
 | `seo-improve.sh` | Monday 06:45 — headless Claude edits a clone of gitara-lekcje, runs its gates, opens a `seo-auto` PR (never merges) | `chmod +x` |
 | `seo-improve.service` / `.timer` | Oneshot + weekly Monday 06:45 | `systemctl --user link` / `enable --now` |
+| `brief-pull.py` + `brief_parse.py` | Every 15 min — `git pull` the daily-brief repo, POST new/changed `briefs/*.md` to `/api/briefs` (tests in `tests/`) | (run by the unit) |
+| `brief-pull.service` / `.timer` | Oneshot + every 15 min | `systemctl --user link` / `enable --now` |
+| `brief-pull.env.example` | Template for `~/.config/home-ops/brief-pull.env` (all optional) | copy, `chmod 600` |
 
 Migrations `020_digest_cards.sql` + `021_decisions.sql` add the routine
 contract the digest renders (see "Daily digest email" below). Migration 014's
@@ -368,3 +371,56 @@ proposed ──(LLM/Piotr: ready)──▶ ready ──(seo-improve: PR)──�
 Piotr can edit the plan by hand: `UPDATE seo_plan SET status='ready' WHERE id=…;` or insert a row with
 `source='piotr'`. Verdicts need ≥ 10 impressions per window; the control group is every GSC row no
 shipped hypothesis targets, so a site-wide lift isn't credited to one change.
+
+---
+
+# Daily briefs (brief-pull) — feeds the console's „Dziś” tab
+
+Contract + reasoning: `docs/adr/2026-10-17-daily-briefs.md`. A cloud routine
+commits `briefs/YYYY-MM-DD-<slot>.md` to the private repo
+`PiotrRomanczuk/daily-brief`; this host pulls it every 15 min and upserts each
+brief via `POST /api/briefs`. Needs migration `022_daily_briefs.sql`.
+
+## One-time setup: read-only deploy key (by hand, on elitedesk)
+
+```bash
+ssh-keygen -t ed25519 -N '' -C 'uwh brief-pull (read-only)' -f ~/.ssh/daily_brief_deploy
+cat >> ~/.ssh/config <<'CFG'
+
+Host github-daily-brief
+  HostName github.com
+  User git
+  IdentityFile ~/.ssh/daily_brief_deploy
+  IdentitiesOnly yes
+CFG
+# From the Mac (gh logged in): add the PUBLIC key as a read-only deploy key.
+#   ssh uwh cat .ssh/daily_brief_deploy.pub > /tmp/daily_brief_deploy.pub
+#   gh repo deploy-key add /tmp/daily_brief_deploy.pub -R PiotrRomanczuk/daily-brief -t uwh-brief-pull
+# (no --allow-write → read-only)
+ssh -T github-daily-brief   # expect: "Hi PiotrRomanczuk/daily-brief! … does not provide shell access"
+```
+
+## Install
+
+```bash
+mkdir -p ~/.config/home-ops && cp ops/elitedesk/brief-pull.env.example ~/.config/home-ops/brief-pull.env
+chmod 600 ~/.config/home-ops/brief-pull.env      # defaults are fine; INGEST_* come from elitedesk-watcher.env
+python3 ops/elitedesk/brief-pull.py               # first run clones ~/code/daily-brief and backfills ≤120 days
+systemctl --user link ~/code/logs-stack/ops/elitedesk/brief-pull.service ~/code/logs-stack/ops/elitedesk/brief-pull.timer
+systemctl --user enable --now brief-pull.timer
+```
+
+## Verify
+
+```bash
+systemctl --user list-timers brief-pull.timer
+journalctl --user -u brief-pull.service -n 20
+docker exec home-ops-postgres-1 psql -U postgres -d home_ops \
+  -c "SELECT brief_date, slot, title, generated_at FROM daily_briefs ORDER BY brief_date DESC LIMIT 4"
+curl -s -H "X-Ingest-Token: $INGEST_TOKEN" http://127.0.0.1:64421/api/today | head -c 600
+```
+
+Re-send everything (harmless, upserts): `rm ~/.local/state/home-ops/brief-pull.state`.
+A malformed brief is skipped and logged as `agent:brief-pull` error (visible in
+the „Dziś” tab under Problemy); network/5xx failures retry on the next tick.
+

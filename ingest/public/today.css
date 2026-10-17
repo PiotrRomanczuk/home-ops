@@ -1,0 +1,94 @@
+/* ============================================================
+   today.css — "Dziś" tab. Brief on the left, attention lists on
+   the right; one column on phones. Tokens from styles.css.
+   ============================================================ */
+
+.td-view { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+
+.td-top {
+  display: flex; align-items: center; gap: 10px; padding: 10px 14px 8px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.td-top .spacer { flex: 1; }
+.td-date { color: var(--fg-bright); font-weight: 600; }
+.td-refresh {
+  font: inherit; color: var(--fg-muted); background: transparent; cursor: pointer;
+  border: 1px solid var(--border); border-radius: var(--r-sm); padding: 0 7px;
+}
+.td-refresh:hover { color: var(--accent); border-color: var(--accent-line); }
+.td-err { color: var(--lv-error); font-size: 11px; }
+
+.td-grid {
+  display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 14px;
+  padding: 12px 14px 24px; overflow-y: auto; min-height: 0; align-items: start;
+}
+.td-col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+
+.td-sec {
+  border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px;
+  background: var(--bg-elevated); display: flex; flex-direction: column; gap: 8px;
+}
+.td-brief { border-left: 2px solid var(--accent); }
+.td-brief.stale { border-left-color: var(--st-warn); }
+.td-h {
+  font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--fg-muted); display: flex; align-items: center; gap: 8px;
+}
+.td-brief > .td-h { font-size: 14px; text-transform: none; letter-spacing: 0; color: var(--fg-bright); }
+.td-ct {
+  color: var(--accent); background: var(--accent-dim); border-radius: var(--r-sm);
+  padding: 0 5px; font-size: 10px;
+}
+.td-meta { font-size: 11px; color: var(--fg-faint); }
+.td-empty { font-size: 12px; color: var(--fg-faint); }
+.td-empty.ok { color: var(--good); }
+
+/* brief markdown (md-lite output) */
+.td-md { font-size: 13px; line-height: 1.55; color: var(--fg); display: flex; flex-direction: column; gap: 6px; }
+.td-md h3, .td-md h4, .td-md h5, .td-md h6 { color: var(--fg-bright); font-size: 13px; margin-top: 6px; }
+.td-md h3 { font-size: 14px; }
+.td-md ul, .td-md ol { padding-left: 18px; display: flex; flex-direction: column; gap: 2px; }
+.td-md li.sub { margin-left: 16px; }
+.td-md li.task { list-style: none; margin-left: -16px; }
+.td-md li.task.done { color: var(--fg-faint); text-decoration: line-through; }
+.td-md .box { color: var(--fg-muted); }
+.td-md strong { color: var(--fg-bright); }
+.td-md code { background: var(--bg-inset); border-radius: var(--r-sm); padding: 0 4px; }
+.td-md a { color: var(--accent); }
+.td-md hr { border: 0; border-top: 1px solid var(--border-soft); }
+
+/* attention lists */
+.td-list { list-style: none; display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+.td-list li { line-height: 1.4; }
+.td-proj { display: flex; flex-direction: column; gap: 3px; }
+.td-proj + .td-proj { padding-top: 6px; border-top: 1px solid var(--border-soft); }
+.td-proj-h {
+  font: inherit; font-size: 12px; font-weight: 600; color: var(--fg-bright); background: none;
+  border: 0; padding: 0; cursor: pointer; display: flex; align-items: center; gap: 6px; text-align: left;
+}
+.td-proj-h:hover { color: var(--accent); }
+.td-proj .td-list { padding-left: 12px; }
+.td-proj .td-list li::before { content: '☐ '; color: var(--fg-faint); }
+.td-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--p-dormant); flex: none; }
+.td-dot.hot { background: var(--p-hot); }
+.td-dot.warm { background: var(--p-warm); }
+.td-focus {
+  color: var(--accent); background: var(--accent-dim); border-radius: var(--r-sm);
+  padding: 0 4px; margin-right: 6px; font-size: 10px; text-transform: uppercase;
+}
+.td-src { color: var(--fg-faint); font-size: 10px; margin-left: 6px; }
+.td-prob.bad b { color: var(--lv-error); }
+.td-prob.warn b { color: var(--st-warn); }
+.td-sample { color: var(--fg-muted); }
+.td-link {
+  font: inherit; color: var(--fg); background: none; border: 0; padding: 0;
+  cursor: pointer; text-align: left;
+}
+.td-link:hover { color: var(--accent); }
+.td-card.warn b { color: var(--st-warn); }
+.td-card.fail b { color: var(--lv-error); }
+.td-card.ok b { color: var(--good); }
+
+@media (max-width: 720px) {
+  .td-grid { grid-template-columns: minmax(0, 1fr); padding: 10px; }
+}

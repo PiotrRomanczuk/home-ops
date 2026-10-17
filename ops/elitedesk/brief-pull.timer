@@ -1,0 +1,14 @@
+[Unit]
+Description=Fire home-ops brief-pull every 15 minutes
+
+[Timer]
+# The cloud routines commit briefs at ~07:00 and ~20:30 Warsaw time; a
+# 15-minute pull keeps the "Dziś" tab at most a quarter-hour behind.
+OnBootSec=2min
+OnUnitActiveSec=15min
+RandomizedDelaySec=30
+Persistent=true
+Unit=brief-pull.service
+
+[Install]
+WantedBy=timers.target

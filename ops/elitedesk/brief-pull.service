@@ -1,0 +1,19 @@
+[Unit]
+Description=home-ops brief-pull — mirror daily-brief repo briefs into /api/briefs
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/code/logs-stack
+# Optional (leading "-"): without it the script uses its defaults and borrows
+# INGEST_URL / INGEST_TOKEN from ~/.config/elitedesk-watcher.env.
+EnvironmentFile=-%h/.config/home-ops/brief-pull.env
+ExecStart=/usr/bin/python3 %h/code/logs-stack/ops/elitedesk/brief-pull.py
+TimeoutStartSec=300
+# Stream stdout/stderr to journald — elitedesk-watcher picks it up into host_logs.
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

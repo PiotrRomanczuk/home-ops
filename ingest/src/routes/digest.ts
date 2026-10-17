@@ -19,12 +19,12 @@ import {
 
 // Known-noise patterns the digest hides from "needs attention". Each entry
 // is a decision already taken (the GPU lane was switched off 2026-07-16).
-const MUTED = [/gpu queue stalled/i];
+export const MUTED = [/gpu queue stalled/i];
 
 const SILENT_AFTER_MIN = 5;
 const DISK_WARN_PCT = 90;
 
-interface HostRow {
+export interface HostRow {
   host: string;
   last_metric_ts: string | null;
   last_event_ts: string | null;
@@ -33,7 +33,7 @@ interface HostRow {
   disk_pct: number | null;
 }
 
-function hostStatus(h: HostRow, now: number): 'ok' | 'warn' | 'bad' | 'off' {
+export function hostStatus(h: HostRow, now: number): 'ok' | 'warn' | 'bad' | 'off' {
   if (!h.last_metric_ts) return 'off';
   const silentMin = (now - new Date(h.last_metric_ts).getTime()) / 60_000;
   if (silentMin > SILENT_AFTER_MIN) return 'bad';

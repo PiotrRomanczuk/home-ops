@@ -4,6 +4,7 @@ import { logger } from 'hono/logger';
 import { env } from './env.ts';
 import { registerAuthRoutes } from './routes/auth.ts';
 import { registerBoardRoutes } from './routes/board.ts';
+import { registerBriefsRoutes } from './routes/briefs.ts';
 import { registerCardsRoutes } from './routes/cards.ts';
 import { registerDecisionsRoutes } from './routes/decisions.ts';
 import { registerDigestRoutes } from './routes/digest.ts';
@@ -17,6 +18,7 @@ import { registerMetricsRoutes } from './routes/metrics.ts';
 import { registerProjectsRoutes } from './routes/projects.ts';
 import { registerSeoRoutes } from './routes/seo.ts';
 import { registerStatusRoutes } from './routes/status.ts';
+import { registerTodayRoutes } from './routes/today.ts';
 
 const app = new Hono();
 app.use('*', logger());
@@ -39,6 +41,8 @@ registerDecisionsRoutes(app);
 registerDigestRoutes(app);
 registerSeoRoutes(app);
 registerStatusRoutes(app);
+registerBriefsRoutes(app);
+registerTodayRoutes(app);
 registerAuthRoutes(app);
 
 serve({ fetch: app.fetch, port: env.PORT }, (info) => {
