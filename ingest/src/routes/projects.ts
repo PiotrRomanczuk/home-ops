@@ -1,6 +1,7 @@
 import type { Hono } from 'hono';
 import { tokenOnly, viewerOrToken } from '../auth.ts';
 import { pool } from '../db.ts';
+import { coerceDate, coerceTimestamp } from '../project-dates.ts';
 
 interface ProjectRecord {
   slug: string;
@@ -19,6 +20,23 @@ interface ProjectRecord {
 }
 
 const STATUSES = new Set(['hot', 'warm', 'dormant', 'stalled']);
+
+// Bad frontmatter dates become a warn row in host_logs — at most once a day
+// per message, since planner-sync re-posts the same payload every minute.
+async function recordSyncWarnings(warnings: string[]): Promise<void> {
+  for (const message of warnings) {
+    await pool
+      .query(
+        `INSERT INTO public.host_logs (host, source, level, message)
+         SELECT 'elitedesk', 'app:projects-sync', 'warn', $1::text
+          WHERE NOT EXISTS (SELECT 1 FROM public.host_logs
+                             WHERE source = 'app:projects-sync' AND message = $1::text
+                               AND ts > now() - interval '24 hours')`,
+        [message],
+      )
+      .catch((err) => console.error('projects sync warning not logged:', err));
+  }
+}
 
 function validProject(p: unknown): p is ProjectRecord {
   if (!p || typeof p !== 'object') return false;
@@ -56,10 +74,14 @@ export function registerProjectsRoutes(app: Hono): void {
       else rejected.push({ index: i, reason: 'invalid project' });
     });
 
+    const warnings: string[] = [];
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
       for (const p of rows) {
+        const lastCommit = coerceDate(p.last_commit, 'last_commit', p.slug);
+        const updatedAt = coerceTimestamp(p.updated_at, 'updated_at', p.slug);
+        for (const w of [lastCommit.warning, updatedAt.warning]) if (w) warnings.push(w);
         await client.query(
           `INSERT INTO public.projects
              (slug, title, status, path, last_commit, commits_30d,
@@ -86,9 +108,9 @@ export function registerProjectsRoutes(app: Hono): void {
             p.title ?? null,
             p.status ?? null,
             p.path ?? null,
-            p.last_commit ?? null,
+            lastCommit.value,
             p.commits_30d ?? null,
-            p.updated_at ?? null,
+            updatedAt.value,
             p.now_md ?? null,
             p.next_md ?? null,
             p.later_md ?? null,
@@ -103,7 +125,8 @@ export function registerProjectsRoutes(app: Hono): void {
         keepSlugs,
       ]);
       await client.query('COMMIT');
-      return c.json({ upserted: rows.length, removed: del.rowCount ?? 0, rejected });
+      await recordSyncWarnings(warnings);
+      return c.json({ upserted: rows.length, removed: del.rowCount ?? 0, rejected, warnings });
     } catch (err) {
       await client.query('ROLLBACK');
       console.error('projects sync failed:', err);
