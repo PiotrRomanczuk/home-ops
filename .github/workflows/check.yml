@@ -63,7 +63,9 @@ jobs:
             ops/elitedesk/seo_plan.py \
             ops/elitedesk/seo_plan_db.py \
             ops/elitedesk/seo_drift.py \
-            ops/elitedesk/seo_opps.py
+            ops/elitedesk/seo_opps.py \
+            ops/elitedesk/brief-pull.py \
+            ops/elitedesk/brief_parse.py
 
   clients-node:
     name: clients/node (syntax)
@@ -137,7 +139,7 @@ jobs:
         run: python3 -m unittest discover -s ops/elitedesk/tests -p 'test_*.py' -v
 
   tests-state-machine:
-    name: tests (state machine + decisions inbox vs real postgres)
+    name: tests (state machine + decisions + briefs/today vs real postgres)
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -175,8 +177,16 @@ jobs:
           psql -h 127.0.0.1 -U postgres -d home_ops -v ON_ERROR_STOP=1 \
             -f postgres/migrations/001_init.sql \
             -f postgres/migrations/004_cancelling_status.sql \
+            -f postgres/migrations/005_projects.sql \
+            -f postgres/migrations/013_board_tasks.sql \
             -f postgres/migrations/020_digest_cards.sql \
-            -f postgres/migrations/021_decisions.sql
+            -f postgres/migrations/021_decisions.sql \
+            -f postgres/migrations/022_daily_briefs.sql \
+            -f postgres/migrations/022_daily_briefs.sql
+          # /api/today reads host_metrics (003); its trailing cron.schedule
+          # needs pg_cron, so apply the file without that last statement.
+          sed '/^SELECT cron.schedule(/,$d' postgres/migrations/003_host_metrics.sql \
+            | psql -h 127.0.0.1 -U postgres -d home_ops -v ON_ERROR_STOP=1
 
       - name: integration tests
         working-directory: ingest
@@ -184,7 +194,7 @@ jobs:
           DATABASE_URL: postgresql://postgres:ci-placeholder@127.0.0.1:5432/home_ops
           INGEST_TOKEN: ci-token
           LOGS_PASSWORD: ci-password
-        run: npm test -- --run src/routes/__tests__/jobs-state-machine.test.ts src/routes/__tests__/decisions.test.ts
+        run: npm test -- --run src/routes/__tests__/jobs-state-machine.test.ts src/routes/__tests__/decisions.test.ts src/routes/__tests__/briefs-today.test.ts
 
   tests-seo-ingest:
     name: tests (seo ingest upsert contract vs real postgres)
