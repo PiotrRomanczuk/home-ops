@@ -2,12 +2,19 @@
 Description=home-ops seo-collect — daily Search Console / GA4 / Places snapshot
 After=docker.service network-online.target
 Wants=network-online.target
+OnFailure=unit-failure-mail@%n.service
+StartLimitIntervalSec=2h
+StartLimitBurst=3
 
 [Service]
 Type=oneshot
 WorkingDirectory=%h/code/logs-stack
 EnvironmentFile=%h/code/logs-stack/ops/elitedesk/seo-collect.env
+ExecStartPre=/usr/bin/bash %h/code/logs-stack/ops/elitedesk/wait-for-postgres.sh
 ExecStart=/usr/bin/python3 %h/code/logs-stack/ops/elitedesk/seo-collect.py
+# Transient failures (network, ingest still starting): retry every 10 min, max 3 starts in 2 h.
+Restart=on-failure
+RestartSec=10min
 # Stream stdout/stderr to journald — elitedesk-watcher picks it up into host_logs.
 StandardOutput=journal
 StandardError=journal

@@ -1,6 +1,6 @@
 ---
 created: 2026-06-07
-updated: 2026-10-17
+updated: 2026-10-20
 ---
 
 # ops/elitedesk — host-side unit files for the elitedesk deployment
@@ -36,6 +36,10 @@ stack. They're version-controlled here; installed by symlinking into
 | `brief-pull.py` + `brief_parse.py` | Every 15 min — `git pull` the daily-brief repo, POST new/changed `briefs/*.md` to `/api/briefs` (tests in `tests/`) | (run by the unit) |
 | `brief-pull.service` / `.timer` | Oneshot + every 15 min | `systemctl --user link` / `enable --now` |
 | `brief-pull.env.example` | Template for `~/.config/home-ops/brief-pull.env` (all optional) | copy, `chmod 600` |
+| `seo-brief-export.sh` | 06:50 — copies the SEO card (`digest.d/seo-<site>.txt`) to `daily-brief/inputs/seo-<site>.md` and pushes, so the cloud brief sees SEO | `chmod +x` |
+| `seo-brief-export.service` / `.timer` | Oneshot + daily 06:50 | `systemctl --user link` / `enable --now` |
+| `wait-for-postgres.sh` | `ExecStartPre` of the seo units — waits up to 10 min for `pg_isready` in the compose container (boot / power-cut race, 2026-10-19) | `chmod +x` |
+| `notify-failure.sh` + `unit-failure-mail@.service` | `OnFailure=` target: e-mails the last 40 journal lines of a failed unit via `send-digest.py` (same recipient as the digest) | `systemctl --user link` (template) |
 
 Migrations `020_digest_cards.sql` + `021_decisions.sql` add the routine
 contract the digest renders (see "Daily digest email" below). Migration 014's

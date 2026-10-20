@@ -2,6 +2,7 @@
 Description=home-ops brief-pull — mirror daily-brief repo briefs into /api/briefs
 After=docker.service network-online.target
 Wants=network-online.target
+OnFailure=unit-failure-mail@%n.service
 
 [Service]
 Type=oneshot
