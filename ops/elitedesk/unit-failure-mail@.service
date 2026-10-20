@@ -1,0 +1,9 @@
+[Unit]
+Description=home-ops — e-mail o błędzie unitu %i
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/code/logs-stack
+ExecStart=/usr/bin/bash %h/code/logs-stack/ops/elitedesk/notify-failure.sh %i
+StandardOutput=journal
+StandardError=journal

@@ -1,0 +1,22 @@
+[Unit]
+Description=home-ops seo-brief-export — SEO card → daily-brief/inputs (for the morning brief)
+After=network-online.target seo-analyse.service
+Wants=network-online.target
+OnFailure=unit-failure-mail@%n.service
+StartLimitIntervalSec=2h
+StartLimitBurst=3
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/code/logs-stack
+EnvironmentFile=%h/code/logs-stack/ops/elitedesk/seo-collect.env
+ExecStart=/usr/bin/bash %h/code/logs-stack/ops/elitedesk/seo-brief-export.sh
+# Transient failures (network, push race with the brief routine): retry every 10 min, max 3 starts in 2 h.
+Restart=on-failure
+RestartSec=10min
+TimeoutStartSec=300
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,11 @@
+[Unit]
+Description=Fire home-ops seo-brief-export daily at 06:50
+
+[Timer]
+# After seo-analyse (06:30, ~1 min) and before the morning brief routine (07:00–08:00).
+OnCalendar=*-*-* 06:50:00
+Persistent=true
+Unit=seo-brief-export.service
+
+[Install]
+WantedBy=timers.target
