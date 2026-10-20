@@ -13,7 +13,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 : "${DIGEST_TO:?DIGEST_TO not set (daily-digest.env)}"
 : "${DIGEST_FROM:?DIGEST_FROM not set (daily-digest.env)}"
 
-HOST="$(hostname -s)"
+# Same name the agents log under (elitedesk), not the OS hostname — the
+# console groups per host, and three spellings of one box read as three hosts.
+HOST="${HOST_NAME:-elitedesk}"
 LOG="$(journalctl --user -u "$UNIT" -n 40 --no-pager -o short-iso 2>&1 || true)"
 ESCAPED="$(printf '%s' "$LOG" | python3 -c 'import html,sys; print(html.escape(sys.stdin.read()))')"
 HTML="<p><b>${UNIT}</b> na <b>${HOST}</b> zakończył się błędem ($(date '+%F %T')).</p>
