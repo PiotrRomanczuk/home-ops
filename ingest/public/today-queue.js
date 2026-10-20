@@ -32,18 +32,23 @@ function tqRow(t, cls) {
     t.model ? h('span', { class: 'tq-meta' }, t.model) : null);
 }
 
-function tqBar(q, inProgress) {
+/* Hours come only from retro lines ("~1 h", "30 min") in Zrobione — the label
+   says how many done tickets carry one, so a short bar reads as missing data,
+   not as a quiet week. Real measurement arrives with agent_runs (design 1c). */
+function tqBar(q, inProgress, done) {
   const cap = q.capacity_hours || 0;
   const used = q.summary?.done_hours || 0;
+  const timed = done.filter((t) => t.hours != null).length;
   const budget = inProgress.reduce((n, t) => n + (TQ_BUDGET_H[t.size] || 0), 0);
   if (!cap) return null;
   const pct = (n) => `${Math.min(100, Math.round((n / cap) * 100))}%`;
+  const usedLabel = done.length ? `zrobione ${tqHours(used)} (czas w ${timed}/${done.length})` : 'zrobione 0 h';
   return h('div', { class: 'tq-cap' },
     h('div', { class: 'tq-bar' },
       h('i', { class: 'used', style: { width: pct(used) } }),
       h('i', { class: 'budget', style: { width: pct(budget) } })),
     h('div', { class: 'tq-cap-l' },
-      h('span', {}, `zrobione ${tqHours(used)}${budget ? ` · w toku do ${tqHours(budget)}` : ''}`),
+      h('span', { class: timed < done.length ? 'tq-partial' : '' }, `${usedLabel}${budget ? ` · w toku do ${tqHours(budget)}` : ''}`),
       h('span', {}, `pojemność ${tqHours(cap)} · napełniaj do ${tqHours(cap * 0.7)}`)));
 }
 
@@ -68,7 +73,7 @@ function tdQueue(q) {
       h('span', { class: 'td-ct num' }, `${inProgress.length} w toku`),
       h('span', { class: 'spacer' }),
       h('span', { class: 'td-meta' }, `okno ${tqDay(q.window_from)} → ${tqDay(q.window_to)}${q.focus ? ` · fokus ${q.focus}` : ''}`)),
-    tqBar(q, inProgress),
+    tqBar(q, inProgress, s.done || []),
     rows.length ? h('ul', { class: 'tq-list' }, ...rows) : h('div', { class: 'td-empty' }, 'Kolejka pusta.'),
     h('div', { class: 'td-meta' }, counts));
 }

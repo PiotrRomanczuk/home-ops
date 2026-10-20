@@ -106,6 +106,7 @@
 .tq-bar .used { background: var(--accent); }
 .tq-bar .budget { background: var(--accent-line); }
 .tq-cap-l { display: flex; justify-content: space-between; gap: 8px; font-size: 10.5px; color: var(--fg-faint); }
+.tq-partial { color: var(--st-warn); }
 .tq-list { list-style: none; display: flex; flex-direction: column; margin: 0; padding: 0; }
 .tq-row {
   display: flex; align-items: center; flex-wrap: wrap; gap: 6px; padding: 6px 8px; font-size: 12px;
