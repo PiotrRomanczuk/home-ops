@@ -36,6 +36,7 @@ _here = Path(__file__).resolve().parent
 sys.path.insert(0, str(_here))
 sys.path.insert(0, str(_here.parent))
 from _common import IngestClient, Shutdown  # noqa: E402
+from queue_md import parse_queue_md  # noqa: E402
 
 HOST_NAME = os.environ.get('HOST_NAME', 'elitedesk')
 PLANNER_REMOTE = os.environ.get('PLANNER_REMOTE', '')
@@ -52,6 +53,8 @@ TOGGLES_URL = INGEST_BASE + '/api/task_toggles'
 BOARD_URL = INGEST_BASE + '/api/board'
 BOARD_IMPORT_URL = INGEST_BASE + '/api/board/import'
 BOARD_SLUG = os.environ.get('BOARD_SLUG', 'home-ops')
+QUEUE_URL = INGEST_BASE + '/api/queue/sync'
+QUEUE_FILE = os.environ.get('QUEUE_FILE', 'QUEUE.md')
 
 
 def post_log(level: str, message: str, data: dict[str, Any] | None = None) -> None:
@@ -551,6 +554,32 @@ def board_sync_once() -> None:
             _save_state()
 
 
+# ── queue sync (vault QUEUE.md → queue_state, read-only mirror) ───────
+
+_queue_last_hash: str | None = None
+
+
+def queue_sync_once() -> None:
+    """POST the parsed QUEUE.md once per change. The API also short-circuits
+    on source_hash, so a restart re-posting the same file is one SELECT."""
+    global _queue_last_hash
+    path = PLANNER_DIR / QUEUE_FILE
+    try:
+        text = path.read_text(encoding='utf-8')
+    except OSError:
+        return  # no queue file in this vault — the card simply stays hidden
+    digest = _hash(text)
+    if digest == _queue_last_hash:
+        return
+    payload = {**parse_queue_md(text), 'source_hash': digest}
+    status, body = ic.request(QUEUE_URL, payload, timeout=15)
+    if status in (200, 201):
+        _queue_last_hash = digest
+        post_log('info', 'queue sync ok', {'status': (body or {}).get('status'), **payload['summary']})
+    else:
+        post_log('error', 'queue sync failed', {'status': status, 'error': (body or {}).get('error')})
+
+
 # ── main loop ─────────────────────────────────────────────────────────
 
 def sync_once() -> None:
@@ -592,6 +621,11 @@ def sync_once() -> None:
         })
     else:
         post_log('error', 'sync failed', {'status': status, 'skipped_files': skipped})
+
+    try:
+        queue_sync_once()
+    except (OSError, ValueError) as e:
+        post_log('error', f'queue-sync raised: {type(e).__name__}', {'err': str(e)[:500]})
 
 
 def main() -> None:

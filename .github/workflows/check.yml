@@ -139,7 +139,7 @@ jobs:
         run: python3 -m unittest discover -s ops/elitedesk/tests -p 'test_*.py' -v
 
   tests-state-machine:
-    name: tests (state machine + decisions + briefs/today vs real postgres)
+    name: tests (state machine + decisions + briefs/today + queue vs real postgres)
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -182,7 +182,7 @@ jobs:
             -f postgres/migrations/020_digest_cards.sql \
             -f postgres/migrations/021_decisions.sql \
             -f postgres/migrations/022_daily_briefs.sql \
-            -f postgres/migrations/022_daily_briefs.sql
+            -f postgres/migrations/023_queue_state.sql
           # /api/today reads host_metrics (003); its trailing cron.schedule
           # needs pg_cron, so apply the file without that last statement.
           sed '/^SELECT cron.schedule(/,$d' postgres/migrations/003_host_metrics.sql \
@@ -194,7 +194,7 @@ jobs:
           DATABASE_URL: postgresql://postgres:ci-placeholder@127.0.0.1:5432/home_ops
           INGEST_TOKEN: ci-token
           LOGS_PASSWORD: ci-password
-        run: npm test -- --run src/routes/__tests__/jobs-state-machine.test.ts src/routes/__tests__/decisions.test.ts src/routes/__tests__/briefs-today.test.ts
+        run: npm test -- --run src/routes/__tests__/jobs-state-machine.test.ts src/routes/__tests__/decisions.test.ts src/routes/__tests__/briefs-today.test.ts src/routes/__tests__/queue.test.ts
 
   tests-seo-ingest:
     name: tests (seo ingest upsert contract vs real postgres)
