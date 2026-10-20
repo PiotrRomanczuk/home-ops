@@ -92,3 +92,36 @@
 @media (max-width: 720px) {
   .td-grid { grid-template-columns: minmax(0, 1fr); padding: 10px; }
 }
+
+/* "Kolejka" card (today-queue.js) — the QUEUE.md mirror */
+.tq .td-h .spacer { flex: 1; }
+.tq .td-h .td-ct { white-space: nowrap; text-transform: none; letter-spacing: 0; }
+.tq .td-h .td-meta { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.tq-cap { display: flex; flex-direction: column; gap: 4px; }
+.tq-bar {
+  height: 6px; border: 1px solid var(--border-soft); border-radius: 3px;
+  background: var(--bg-inset); overflow: hidden; display: flex;
+}
+.tq-bar i { display: block; height: 100%; }
+.tq-bar .used { background: var(--accent); }
+.tq-bar .budget { background: var(--accent-line); }
+.tq-cap-l { display: flex; justify-content: space-between; gap: 8px; font-size: 10.5px; color: var(--fg-faint); }
+.tq-list { list-style: none; display: flex; flex-direction: column; margin: 0; padding: 0; }
+.tq-row {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 6px; padding: 6px 8px; font-size: 12px;
+  border-top: 1px solid var(--border-soft); line-height: 1.4;
+}
+.tq-row.wip { background: var(--accent-dim); border-radius: var(--r-sm); border-top: 0; }
+.tq-row.tq-empty { color: var(--fg-faint); border-top: 0; }
+.tq-text { flex: 1; min-width: 140px; }
+.tq-proj { color: var(--accent); }
+.tq-meta { color: var(--fg-faint); font-size: 11px; white-space: nowrap; }
+.tq-chip {
+  font-size: 10.5px; padding: 0 6px; border: 1px solid var(--border); border-radius: var(--r-sm);
+  background: var(--bg); color: var(--fg-muted); white-space: nowrap; flex: none; line-height: 1.5;
+}
+.tq-size { color: var(--fg); font-weight: 600; }
+.tq-c-risk  { color: #ff9b94; border-color: rgba(248,81,73,.45);  background: rgba(248,81,73,.12); }
+.tq-c-money { color: #7ee787; border-color: rgba(63,185,80,.45);  background: rgba(63,185,80,.12); }
+.tq-c-focus { color: #9ecbff; border-color: var(--accent-line);    background: var(--accent-dim); }
+.tq-c-idea  { color: #d2a8ff; border-color: rgba(163,113,247,.45); background: rgba(163,113,247,.12); }

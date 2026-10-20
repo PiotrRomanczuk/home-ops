@@ -12,6 +12,8 @@
 #
 # What it does (Linux/systemd-user hosts):
 #   1. rsync agents/_common.py   to ~/bin/_common.py        (shared)
+#      + agents/<host>/*_*.py helper modules (e.g. queue_md.py; agent files
+#        themselves are hyphenated, helpers use underscores so they import)
 #   2. rsync agents/<host>/<agent_name>.py     to ~/bin/
 #   3. rsync agents/<host>/<agent_name>.service to ~/.config/systemd/user/
 #   4. systemctl --user daemon-reload && systemctl --user restart <name>
@@ -60,6 +62,9 @@ if [ "$PLATFORM" = linux ]; then
   echo "▶ deploying $AGENT to $HOST (linux/systemd-user)"
 
   run rsync -t agents/_common.py "$HOST:~/bin/_common.py"
+  for helper in "$SRC_DIR"/*_*.py; do
+    [ -f "$helper" ] && run rsync -t "$helper" "$HOST:~/bin/$(basename "$helper")"
+  done
   run rsync -t "$SCRIPT_PATH"    "$HOST:~/bin/$(basename "$SCRIPT_PATH")"
   run rsync -t "$SERVICE_PATH"   "$HOST:~/.config/systemd/user/$(basename "$SERVICE_PATH")"
   run ssh "$HOST" "systemctl --user daemon-reload && systemctl --user restart $AGENT && sleep 2 && systemctl --user is-active $AGENT"

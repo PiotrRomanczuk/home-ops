@@ -1,7 +1,7 @@
 /* ============================================================
    today.js — "Dziś" tab, the console's default view.
    Left: the latest day brief (cloud routine → daily-brief repo →
-   brief-pull → /api/briefs). Right: open Now tasks per project,
+   brief-pull → /api/briefs). Right: the agent queue card (today-queue.js), open Now tasks per project,
    what is broken, what waits for an answer, fresh routine cards.
    ============================================================ */
 
@@ -85,6 +85,6 @@ VIEWS.today = (st, main) => {
     h('div', { class: 'td-grid' },
       h('div', { class: 'td-col' }, tdBrief(m.brief)),
       h('div', { class: 'td-col' },
-        tdTasks(m.tasks || []), tdProblems(m.problems || [], m.hosts || []),
+        window.tdQueue(m.queue), tdTasks(m.tasks || []), tdProblems(m.problems || [], m.hosts || []),
         tdDecisions(m.decisions || []), tdCards(m.cards || [])))));
 };
