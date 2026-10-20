@@ -79,6 +79,7 @@
 .td-src { color: var(--fg-faint); font-size: 10px; margin-left: 6px; }
 .td-prob.bad b { color: var(--lv-error); }
 .td-prob.warn b { color: var(--st-warn); }
+.td-prob.off b { color: var(--fg-muted); }
 .td-sample { color: var(--fg-muted); }
 .td-link {
   font: inherit; color: var(--fg); background: none; border: 0; padding: 0;

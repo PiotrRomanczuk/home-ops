@@ -17,9 +17,21 @@ import {
 // ops/elitedesk/render-digest.py turns it into HTML; nothing in the renderer
 // needs the database. Token-only because the model carries signed links.
 
-// Known-noise patterns the digest hides from "needs attention". Each entry
-// is a decision already taken (the GPU lane was switched off 2026-07-16).
-export const MUTED = [/gpu queue stalled/i];
+// Known-noise patterns the digest and the "Dziś" tab hide from "needs
+// attention". Matched against the digit-normalised `pattern` (numbers → N).
+// Each entry is a decision already taken; say which and when.
+export const MUTED = [
+  // 2026-07-16: GPU lane switched off; lane back since 2026-10-19 but the
+  // 100 stuck `summarise` jobs were deleted 2026-10-20, so this stays quiet.
+  /gpu queue stalled/i,
+  // 2026-10-20: Uptime Kuma on rpi pings uwh by its Tailscale name while
+  // tailscaled on uwh has no address (QUEUE.md → "Czeka na Piotra"). ~1 440
+  // rows/day since 2026-09-20; unmute when the Kuma monitor targets LAN IP.
+  /^ping IPv\w+ error message: ping: \S+: Name or service not known/i,
+  // 2026-10-20: rpi kernel drops malformed BLE adverts from a neighbour's
+  // device (24 rows in 30 days, nothing of ours uses Bluetooth).
+  /^Bluetooth: hci\w+: Dropping invalid advertising data/i,
+];
 
 const SILENT_AFTER_MIN = 5;
 const DISK_WARN_PCT = 90;

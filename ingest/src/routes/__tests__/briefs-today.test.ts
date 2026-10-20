@@ -108,6 +108,7 @@ describe.skipIf(skip)('GET /api/today', () => {
       ['Fix sync', 'vault', false],
     ]);
     for (const k of ['problems', 'hosts', 'decisions', 'cards']) expect(Array.isArray(t[k])).toBe(true);
+    expect(typeof t.muted_problems).toBe('number');
     expect(JSON.stringify(t.decisions)).not.toContain('links');
   });
 

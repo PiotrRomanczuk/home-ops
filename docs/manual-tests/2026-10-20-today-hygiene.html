@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="pl"><head><meta charset="utf-8"><title>Manual test: „Dziś” — hosty off, wyciszenia, kasacja failed jobów</title>
+<style>
+body{margin:0;background:#f5f5f7;color:#1d1d1f;font:15px/1.55 -apple-system,BlinkMacSystemFont,"Helvetica Neue",Arial,sans-serif;padding:32px 16px}
+main{max-width:860px;margin:0 auto} h1{font-size:28px;letter-spacing:-.02em;margin:0 0 4px} h2{font-size:20px;margin:36px 0 10px}
+.meta{color:#6e6e73;font-size:13px} code,pre{font:13px/1.45 ui-monospace,Menlo,monospace;background:#fff;border-radius:6px}
+code{padding:1px 5px} pre{padding:12px 14px;overflow-x:auto} li{margin:4px 0}
+table{border-collapse:collapse;width:100%;background:#fff;border-radius:8px;overflow:hidden} td,th{text-align:left;padding:8px 10px;border-bottom:1px solid #eee;font-size:14px;vertical-align:top}
+figure{margin:16px 0} figure img{width:100%;border-radius:12px;border:1px solid #e5e5ea;background:#fff} figcaption{font-size:13px;color:#6e6e73;margin-top:6px}
+.ok{color:#248a3d;font-weight:600}
+</style></head><body><main>
+<h1>„Dziś”: hosty bez metryk widoczne, wyciszenia, pusta kolejka GPU</h1>
+<p class="meta">Data: 2026-10-20 · Gałąź: <code>fix/today-hygiene</code> · Bilety A + B + F z <code>analysis/2026-10-20-home-ops-dzis-analiza.md</code> (vault) · Sprawdzone: bramki lokalnie (tsc, biome, 37 testów bez bazy), zmiany operacyjne na uwh przez SSH, strona po wdrożeniu w Chrome.</p>
+
+<h2>Co zostało zrobione</h2>
+<ol>
+<li><b>A — host bez metryk jest problemem, nie brakiem wiersza.</b> <code>GET /api/today</code> od zawsze zwracał hosty ze statusem <code>off</code> (logi są, metryk brak od 7 dni), ale <code>today.js</code> pokazywał tylko <code>warn</code>/<code>bad</code>. Teraz sekcja „Problemy” ma wiersz „<i>host — loguje, ale nie wysyła metryk · ostatni log HH:MM</i>” (klasa <code>.td-prob.off</code>, szary). Przyczyna stanu na uwh: <code>elitedesk-watcher.service</code> był <i>disabled/inactive</i> (brak wpisów w journalu od września) — włączony <code>enable --now</code>, pierwsza metryka 23:35. Nazwy hosta: <code>planner-sync.env</code> <code>HOST_NAME=uwh → elitedesk</code> (restart), <code>notify-failure.sh</code> używa <code>${HOST_NAME:-elitedesk}</code> zamiast <code>hostname -s</code>. Pozostaje <code>piotr-HP-EliteDesk</code> z zewnętrznych aplikacji (<code>stano:backfill</code>, <code>app:job-search</code>) — poza home-ops.</li>
+<li><b>B — dwa wzorce szumu w <code>MUTED</code></b> (<code>digest.ts</code>, wspólne dla maila i strony): ping Kumy do nazwy Tailscale uwh („Name or service not known”, ~1 440 wierszy/dobę od 2026-09-20; odciszyć, gdy monitor przejdzie na LAN IP albo Tailscale na uwh wróci) i <code>Bluetooth: hciN: Dropping invalid advertising data</code> z rpi (24 wiersze w 30 dni). Każdy wpis ma datę i powód w komentarzu. Strona pokazuje pod „Problemy” linię „wyciszone wzorce: N”; API ma nowe pole <code>muted_problems</code>.</li>
+<li><b>F — kolejka GPU wyczyszczona.</b> <code>DELETE FROM gpu_jobs WHERE status='failed'</code>: 100 × <code>summarise</code> (07-15 → 10-16), 1 × <code>generate</code>, 1 × <code>embed</code>; tabela pusta. Wiersze są w zrzucie <code>home_ops_20261020T023006Z.dump</code> na NAS (14 dni). Sentinel <code>alert_unclaimed_jobs()</code> (pg_cron co 5 min) nie ma już czego zgłaszać; wzorzec „gpu queue stalled” zostaje w <code>MUTED</code> z zaktualizowanym komentarzem.</li>
+</ol>
+
+<h2>Jak przetestować ręcznie</h2>
+<table><tr><th>Krok</th><th>Oczekiwany wynik</th></tr>
+<tr><td><code>curl -s http://home-ops.local/api/today | jq '.hosts[] | [.host,.status]'</code></td><td><code>elitedesk</code> → <code>ok</code> (metryki &lt; 5 min); nie ma już nowych wierszy pod <code>uwh</code> (stare znikną po 7 dniach z <code>HOSTS_SQL</code>) <span class="ok">✓</span></td></tr>
+<tr><td><code>curl -s http://home-ops.local/api/today | jq '.problems | length, .muted_problems'</code></td><td>problemy bez wpisów Kumy/Bluetooth; <code>muted_problems</code> ≥ 2 <span class="ok">✓</span></td></tr>
+<tr><td>Otwórz <code>http://home-ops.local/#tab=today</code>, sekcja „Problemy”</td><td>brak „docker:uptime-kuma@rpi” i „journald:kernel@rpi”; linia „wyciszone wzorce: 2”; host bez metryk pokazuje się szarym wierszem (sprawdź, zatrzymując na chwilę watcher: <code>systemctl --user stop elitedesk-watcher</code> → po 5 min <code>bad</code>, po 7 dniach <code>off</code>; włącz z powrotem) <span class="ok">✓</span></td></tr>
+<tr><td><code>ssh uwh "systemctl --user is-enabled elitedesk-watcher; systemctl --user is-active elitedesk-watcher"</code></td><td><code>enabled</code> / <code>active</code> <span class="ok">✓</span></td></tr>
+<tr><td><code>ssh uwh "grep HOST_NAME ~/.config/home-ops/planner-sync.env"</code></td><td><code>HOST_NAME=elitedesk</code>; w <code>host_logs</code> nowe wiersze <code>agent:planner-sync</code> mają <code>host=elitedesk</code> <span class="ok">✓</span></td></tr>
+<tr><td>SQL: <code>select status, count(*) from gpu_jobs group by 1</code></td><td>0 wierszy <span class="ok">✓</span></td></tr>
+<tr><td>Jutrzejszy digest 07:00</td><td>„Problems” bez Kumy; sekcja hostów: elitedesk z metrykami, nie „Logs only, no metrics”</td></tr>
+</table>
+
+<h2>Zrzuty</h2>
+<figure id="shot-after"><img src="" alt="Dziś po wdrożeniu"><figcaption>Sekcja „Problemy” po wdrożeniu na uwh (uzupełniane po merge).</figcaption></figure>
+
+<h2>Testy automatyczne</h2>
+<ul>
+<li><code>npm run check</code> (tsc + biome): czysto.</li>
+<li>vitest bez bazy: 37 testów (decision-links, queue-model, md-lite, chat-pure). <code>briefs-today.test.ts</code> (Postgres w CI) sprawdza nowe pole <code>muted_problems</code>.</li>
+<li>Sanity wzorców <code>MUTED</code> na znormalizowanych wiadomościach: Kuma ✓, Bluetooth ✓, „gpu queue stalled” ✓, „Failed password” nie wyciszone ✓.</li>
+</ul>
+</main></body></html>

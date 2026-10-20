@@ -43,17 +43,27 @@ function tdTasks(groups) {
       t.source === 'board' ? h('span', { class: 'td-src' }, 'board') : null))))));
 }
 
-function tdProblems(problems, hosts) {
-  const bad = hosts.filter((x) => x.status === 'warn' || x.status === 'bad');
+/* A host is `off` when it sent logs but no metrics in 7 days (its watcher is
+   down or never deployed). It counts as a problem: the server everything runs
+   on must not be able to vanish from this list by going quiet. */
+function tdHostRow(x) {
+  const why = x.status === 'bad' ? 'milczy (brak świeżych metryk)'
+    : x.status === 'warn' ? `dysk ${x.disk_pct}%`
+    : `loguje, ale nie wysyła metryk${x.last_event_ts ? ` · ostatni log ${TD_TIME.format(new Date(x.last_event_ts))}` : ''}`;
+  return h('li', { class: 'td-prob ' + x.status }, h('b', {}, x.host), ` — ${why}`);
+}
+
+function tdProblems(problems, hosts, muted) {
+  const bad = hosts.filter((x) => x.status === 'warn' || x.status === 'bad' || x.status === 'off');
   const rows = [
-    ...bad.map((x) => h('li', { class: 'td-prob ' + x.status },
-      h('b', {}, x.host), x.status === 'bad' ? ' — milczy (brak świeżych metryk)' : ` — dysk ${x.disk_pct}%`)),
+    ...bad.map(tdHostRow),
     ...problems.map((p) => h('li', { class: 'td-prob bad', title: p.sample || '' },
       h('b', {}, `${p.source}@${p.host}`), ` — ${p.n_24h}× w 24 h · `,
       h('span', { class: 'td-sample' }, (p.sample || p.pattern || '').slice(0, 140)))),
   ];
   return tdSection('Problemy', rows.length,
-    rows.length ? h('ul', { class: 'td-list' }, ...rows) : h('div', { class: 'td-empty ok' }, 'Wszystko spokojnie.'));
+    rows.length ? h('ul', { class: 'td-list' }, ...rows) : h('div', { class: 'td-empty ok' }, 'Wszystko spokojnie.'),
+    muted ? h('div', { class: 'td-meta' }, `wyciszone wzorce: ${muted} (lista w MUTED, digest.ts)`) : null);
 }
 
 function tdDecisions(decisions) {
@@ -85,6 +95,6 @@ VIEWS.today = (st, main) => {
     h('div', { class: 'td-grid' },
       h('div', { class: 'td-col' }, tdBrief(m.brief)),
       h('div', { class: 'td-col' },
-        window.tdQueue(m.queue), tdTasks(m.tasks || []), tdProblems(m.problems || [], m.hosts || []),
+        window.tdQueue(m.queue), tdTasks(m.tasks || []), tdProblems(m.problems || [], m.hosts || [], m.muted_problems || 0),
         tdDecisions(m.decisions || []), tdCards(m.cards || [])))));
 };

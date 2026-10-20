@@ -29,6 +29,7 @@ export function registerTodayRoutes(app: Hono): void {
 
     const hostRows = (hosts.rows as HostRow[]).map((h) => ({ ...h, status: hostStatus(h, now) }));
     const visibleProblems = problems.rows.filter((p) => !MUTED.some((re) => re.test(p.pattern)));
+    const mutedProblems = problems.rows.length - visibleProblems.length;
 
     return c.json({
       generated_at: new Date(now).toISOString(),
@@ -36,6 +37,7 @@ export function registerTodayRoutes(app: Hono): void {
       queue: queue.rows[0] ?? null,
       tasks: groupTasks(board.rows as TaskRow[], vault.rows as TaskRow[]),
       problems: visibleProblems,
+      muted_problems: mutedProblems,
       hosts: hostRows,
       decisions: decisions.rows,
       cards: cards.rows,
