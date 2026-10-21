@@ -117,15 +117,22 @@ window.LV_ORDER = LV_ORDER;
 const TABS = [
   { id: 'today',    label: 'Dziś',     key: '1', ico: icoToday },
   { id: 'status',   label: 'Status',   key: '2', ico: icoStatus },
-  { id: 'chat',     label: 'Chat',     key: '3', ico: icoChat },
+  { id: 'chat',     label: 'Chat',     key: '3', ico: icoChat, hidden: true },
   { id: 'projects', label: 'Projects', key: '4', ico: icoProj },
   { id: 'logs',     label: 'Logs',     key: '5', ico: icoLogs },
   { id: 'hosts',    label: 'Hosts',    key: '6', ico: icoHosts },
-  { id: 'evals',    label: 'Evals',    key: '7', ico: icoEvals },
+  { id: 'evals',    label: 'Evals',    key: '7', ico: icoEvals, hidden: true },
   { id: 'board',    label: 'Board',    key: '8', ico: icoBoard },
-  { id: 'scores',   label: 'Scores',   key: '9', ico: icoScores },
-  { id: 'decisions', label: 'Decisions', key: '0', ico: icoDecisions },
+  { id: 'scores',   label: 'Scores',   key: '9', ico: icoScores, hidden: true },
+  { id: 'decisions', label: 'Decisions', key: '0', ico: icoDecisions, onlyWhenCounted: true },
 ];
+// hidden: dead since the local-LLM lane closed (2026-10-20 tab analysis, K6) —
+// still reachable by key / #tab=. onlyWhenCounted: shown while it has open items.
+function isTabShown(t, st, counts) {
+  if (st.tab === t.id) return true;
+  if (t.hidden) return false;
+  return !t.onlyWhenCounted || counts[t.id] > 0;
+}
 function icon(p) { return `<svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`; }
 function icoToday()  { return icon('<rect x="2.5" y="3.5" width="11" height="10" rx="1.5"/><path d="M2.5 6.5h11M5.5 2v3M10.5 2v3"/><circle cx="8" cy="10" r="1" fill="currentColor"/>'); }
 function icoStatus() { return icon('<circle cx="8" cy="8" r="5.5"/><path d="M5 8.3l2 2 4-4.5"/>'); }
@@ -150,11 +157,11 @@ function renderChrome() {
     // Open (not-done) tasks in the Now column.
     board: (window.Board?.items || []).filter(t => t.column_key === 'now' && !t.done).length,
     // Questions routines filed that still wait for an answer.
-    decisions: window.Decisions?.openCount?.() || 0,
+    decisions: Math.max(window.Decisions?.openCount?.() || 0, window.Today?.model?.decisions?.length || 0),
     // Open Now tasks across hot/warm projects + Board.
     today: window.Today?.openCount?.() || 0,
   };
-  const tabs = TABS.map(t => h('button', {
+  const tabs = TABS.filter(t => isTabShown(t, st, counts)).map(t => h('button', {
     class: 'tab' + (st.tab === t.id ? ' on' : ''),
     onclick: () => setState({ tab: t.id, conv: null, slug: null, eval: null }),
     title: `${t.label}  (press ${t.key})`,

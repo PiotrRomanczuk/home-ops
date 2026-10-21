@@ -1,0 +1,10 @@
+[Unit]
+Description=home-ops seo-decide twice a day — a "yes" lands within ~12 h, not next Monday
+
+[Timer]
+OnCalendar=*-*-* 08:15,19:15
+Persistent=true
+RandomizedDelaySec=5min
+
+[Install]
+WantedBy=timers.target

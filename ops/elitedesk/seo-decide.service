@@ -1,0 +1,14 @@
+[Unit]
+Description=home-ops seo-decide — act on Decisions answers for the weekly SEO PR, ask about new ones
+After=docker.service network-online.target
+Wants=network-online.target
+OnFailure=unit-failure-mail@%n.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/code/logs-stack
+EnvironmentFile=%h/code/logs-stack/ops/elitedesk/seo-collect.env
+ExecStart=/usr/bin/python3 %h/code/logs-stack/ops/elitedesk/seo_decide.py
+TimeoutStartSec=5min
+StandardOutput=journal
+StandardError=journal
