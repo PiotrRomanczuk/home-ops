@@ -1,0 +1,18 @@
+/* ============================================================
+   today-brief.css — folded day brief on "Dziś" (today-brief.js).
+   ============================================================ */
+
+.tb-list { display: flex; flex-direction: column; }
+.tb-sec { border-top: 1px solid var(--border-soft); }
+.tb-sec > .td-md { padding: 2px 0 10px; }
+.tb-sum {
+  list-style: none; cursor: pointer; display: flex; align-items: center; gap: 8px;
+  padding: 7px 0; color: var(--fg-muted); font-size: 12px; font-weight: 600;
+}
+.tb-sum::-webkit-details-marker { display: none; }
+.tb-sum::before { content: '▸'; color: var(--fg-faint); width: 10px; }
+.tb-sec[open] > .tb-sum::before { content: '▾'; }
+.tb-sec[open] > .tb-sum { color: var(--fg-bright); }
+.tb-sum:hover .tb-h { color: var(--accent); }
+.tb-n { color: var(--fg-faint); font-weight: 400; font-size: 11px; }
+

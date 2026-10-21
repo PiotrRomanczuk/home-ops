@@ -12,6 +12,7 @@ import {
   PROBLEMS_SQL,
   SITES_SQL,
 } from '../digest-sql.ts';
+import { titleOf } from '../task-title.ts';
 
 // GET /api/digest — the whole morning/evening email as one JSON model.
 // ops/elitedesk/render-digest.py turns it into HTML; nothing in the renderer
@@ -51,13 +52,6 @@ export function hostStatus(h: HostRow, now: number): 'ok' | 'warn' | 'bad' | 'of
   if (silentMin > SILENT_AFTER_MIN) return 'bad';
   if ((h.disk_pct ?? 0) >= DISK_WARN_PCT) return 'warn';
   return 'ok';
-}
-
-function titleOf(line: string): string {
-  // "Deploy X to the Pi (why…) — long explanation…" → "Deploy X to the Pi"
-  const bare = line.replace(/\s*\([^)]*\)/g, '');
-  const cut = (bare.split(/\s+[—–-]\s+|\.\s/)[0] ?? bare).replace(/`/g, '').trim();
-  return cut.length > 110 ? `${cut.slice(0, 107)}…` : cut;
 }
 
 export function registerDigestRoutes(app: Hono): void {
