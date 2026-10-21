@@ -22,19 +22,23 @@ function tdApprovals(brief) {
   if (!Decisions.loaded && !Decisions.loading && !Decisions.err) Decisions.loadAll();
   const open = Decisions.items.filter((d) => d.state === 'open' || d._pending);
   const part = taBriefPart(brief);
-  const nBrief = part ? part.body.split('\n').filter((l) => /^\s{0,1}[-*]\s/.test(l)).length : 0;
-  const body = [];
-  if (open.length) body.push(h('div', { class: 'ta-decs' }, ...open.map(window.decCard)));
-  if (part) {
-    body.push(h('div', { class: 'ta-sub', title: 'tekst z briefu, w ciągu dnia się nie odświeża' },
-      `${part.heading} · z briefu ${brief.generated_at ? TD_TIME.format(new Date(brief.generated_at)) : ''} · stan z rana`),
-      h('div', { class: 'td-md ta-brief', html: window.MdLite.render(part.body) }));
-  }
-  if (!body.length) body.push(h('div', { class: 'td-empty ok' }, 'Nic nie czeka na Twoją decyzję.'));
+  const body = [open.length
+    ? h('div', { class: 'ta-decs' }, ...open.map(window.decCard))
+    : h('div', { class: 'td-empty ok' }, 'Brak decyzji do podjęcia.')];
   if (Decisions.err) body.push(h('div', { class: 'td-err' }, `decyzje: ${Decisions.err}`));
-  return h('section', { class: 'td-sec ta-sec' },
+  if (part) {
+    // Brief text, not decisions: no buttons, morning snapshot, so folded and
+    // left out of the count (2026-10-21: "do akceptacji 6, ale decyzji żadnej").
+    const n = part.body.split('\n').filter((l) => /^\s{0,1}[-*]\s/.test(l)).length;
+    const when = brief.generated_at ? TD_TIME.format(new Date(brief.generated_at)) : '';
+    body.push(h('details', { class: 'ta-brief-wrap' },
+      h('summary', { class: 'ta-sub', title: 'tekst z briefu, w ciągu dnia się nie odświeża' },
+        `${part.heading} ${n} · z briefu ${when} · tylko do wglądu`),
+      h('div', { class: 'td-md ta-brief', html: window.MdLite.render(part.body) })));
+  }
+  return h('section', { class: 'td-sec ta-sec' + (open.length ? '' : ' quiet') },
     h('h2', { class: 'td-h' }, 'Do akceptacji',
-      open.length + nBrief ? h('span', { class: 'td-ct num' }, String(open.length + nBrief)) : null,
+      open.length ? h('span', { class: 'td-ct num' }, String(open.length)) : null,
       h('span', { class: 'spacer' }),
       h('button', { class: 'td-link ta-hist', onclick: () => setState({ tab: 'decisions' }) }, 'historia →')),
     ...body);

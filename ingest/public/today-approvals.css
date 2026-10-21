@@ -1,5 +1,7 @@
 /* "Do akceptacji" on Dziś — reuses .dec-card from decisions.css */
 .ta-sec { border-color: var(--accent); }
+.ta-sec.quiet { border-color: var(--border); }
+.ta-brief-wrap summary { cursor: pointer; }
 .ta-sec .td-h { display: flex; align-items: center; gap: 8px; }
 .ta-sec .spacer { flex: 1; }
 .ta-hist { font-size: 12px; color: var(--fg-muted); }
