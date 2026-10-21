@@ -26,7 +26,8 @@ function tdApprovals(brief) {
   const body = [];
   if (open.length) body.push(h('div', { class: 'ta-decs' }, ...open.map(window.decCard)));
   if (part) {
-    body.push(h('div', { class: 'ta-sub' }, `${part.heading} · z briefu`),
+    body.push(h('div', { class: 'ta-sub', title: 'tekst z briefu, w ciągu dnia się nie odświeża' },
+      `${part.heading} · z briefu ${brief.generated_at ? TD_TIME.format(new Date(brief.generated_at)) : ''} · stan z rana`),
       h('div', { class: 'td-md ta-brief', html: window.MdLite.render(part.body) }));
   }
   if (!body.length) body.push(h('div', { class: 'td-empty ok' }, 'Nic nie czeka na Twoją decyzję.'));
