@@ -2,6 +2,8 @@
 // into one list per project. planner-sync renders the Board back into the
 // vault, so the same task often arrives from both sides — dedupe on text.
 
+import { taskTitle } from './task-title.ts';
+
 export interface TaskRow {
   slug: string;
   title: string | null;
@@ -13,6 +15,8 @@ export interface TaskRow {
 
 export interface TodayTask {
   text: string;
+  /** one-line head of `text` for the compact list; `text` stays the tooltip */
+  title: string;
   source: 'vault' | 'board';
   is_focus: boolean;
 }
@@ -49,7 +53,8 @@ export function groupTasks(board: TaskRow[], vault: TaskRow[]): TaskGroup[] {
       g = { slug: r.slug, title: r.title || r.slug, status: r.status, tasks: [] };
       groups.set(r.slug, g);
     }
-    if (g.tasks.length < MAX_PER_PROJECT) g.tasks.push({ text, source, is_focus: r.is_focus === true });
+    if (g.tasks.length < MAX_PER_PROJECT)
+      g.tasks.push({ text, title: taskTitle(text), source, is_focus: r.is_focus === true });
   };
   for (const r of board) add(r, 'board');
   for (const r of vault) add(r, 'vault');

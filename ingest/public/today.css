@@ -57,6 +57,17 @@
 .td-md a { color: var(--accent); }
 .td-md hr { border: 0; border-top: 1px solid var(--border-soft); }
 
+/* compact task rows */
+.td-task { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.td-task-t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.td-proj-n { color: var(--fg-faint); font-weight: 400; font-size: 10px; margin-left: 4px; }
+.td-more {
+  font: inherit; font-size: 11px; color: var(--fg-faint); background: none; border: 0;
+  padding: 0; cursor: pointer;
+}
+.td-more:hover { color: var(--accent); }
+.td-proj .td-list li:has(> .td-more)::before { content: ''; }
+
 /* attention lists */
 .td-list { list-style: none; display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
 .td-list li { line-height: 1.4; }

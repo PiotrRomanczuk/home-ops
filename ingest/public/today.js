@@ -17,30 +17,33 @@ function tdSection(title, count, ...body) {
     ...body);
 }
 
-function tdBrief(b) {
-  if (!b) return tdSection('Brief', 0, h('div', { class: 'td-empty' }, 'Brak briefu — brief-pull jeszcze nic nie pobrał.'));
-  const meta = [
-    `${TD_SLOT[b.slot] || b.slot}`,
-    b.is_today ? null : `z ${TD_DAY.format(new Date(b.brief_date + 'T12:00:00'))}`,
-    b.generated_at ? `wygenerowany ${TD_TIME.format(new Date(b.generated_at))}` : null,
-    (b.sources || []).length ? `źródła: ${b.sources.join(', ')}` : null,
-  ].filter(Boolean).join(' · ');
-  return h('section', { class: 'td-sec td-brief' + (b.is_today ? '' : ' stale') },
-    h('h2', { class: 'td-h' }, b.title || 'Brief'),
-    h('div', { class: 'td-meta' }, meta),
-    h('div', { class: 'td-md', html: window.MdLite.render(b.body_md) }));
+/* tdBrief lives in today-brief.js (folded sections). */
+
+/* One line per task (title from the API, full text on hover), three per
+   project; "+N" unfolds the rest until the next reload. */
+const TD_PER_PROJECT = 3;
+const TD_EXPANDED = new Set();
+
+function tdTaskRow(t) {
+  return h('li', { class: 'td-task' + (t.is_focus ? ' focus' : ''), title: t.text },
+    t.is_focus ? h('span', { class: 'td-focus' }, 'fokus') : null,
+    h('span', { class: 'td-task-t' }, t.title || t.text));
 }
 
 function tdTasks(groups) {
   const n = groups.reduce((a, g) => a + g.tasks.length, 0);
   if (!groups.length) return tdSection('Zadania Now', 0, h('div', { class: 'td-empty' }, 'Brak otwartych zadań w Now.'));
-  return tdSection('Zadania Now', n, ...groups.map((g) => h('div', { class: 'td-proj' },
-    h('button', { class: 'td-proj-h', onclick: () => setState({ tab: 'projects', slug: g.slug }) },
-      h('span', { class: 'td-dot ' + (g.status || '') }), g.title),
-    h('ul', { class: 'td-list' }, ...g.tasks.map((t) => h('li', { class: t.is_focus ? 'focus' : '' },
-      t.is_focus ? h('span', { class: 'td-focus' }, 'fokus') : null,
-      t.text,
-      t.source === 'board' ? h('span', { class: 'td-src' }, 'board') : null))))));
+  return tdSection('Zadania Now', n, ...groups.map((g) => {
+    const open = TD_EXPANDED.has(g.slug);
+    const shown = open ? g.tasks : g.tasks.slice(0, TD_PER_PROJECT);
+    const rest = g.tasks.length - shown.length;
+    return h('div', { class: 'td-proj' },
+      h('button', { class: 'td-proj-h', onclick: () => setState({ tab: 'projects', slug: g.slug }) },
+        h('span', { class: 'td-dot ' + (g.status || '') }), g.title, h('span', { class: 'td-proj-n num' }, String(g.tasks.length))),
+      h('ul', { class: 'td-list' }, ...shown.map(tdTaskRow),
+        rest > 0 ? h('li', {}, h('button', { class: 'td-more', onclick: () => { TD_EXPANDED.add(g.slug); render(); } }, `+${rest} więcej`)) : null,
+        open && g.tasks.length > TD_PER_PROJECT ? h('li', {}, h('button', { class: 'td-more', onclick: () => { TD_EXPANDED.delete(g.slug); render(); } }, 'zwiń')) : null));
+  }));
 }
 
 /* A host is `off` when it sent logs but no metrics in 7 days (its watcher is
@@ -93,7 +96,7 @@ VIEWS.today = (st, main) => {
   if (!m) { main.append(h('div', { class: 'td-view' }, head, h('div', { class: 'empty' }, Today.err ? 'nie udało się pobrać' : 'ładowanie…'))); return; }
   main.append(h('div', { class: 'td-view' }, head,
     h('div', { class: 'td-grid' },
-      h('div', { class: 'td-col' }, tdBrief(m.brief)),
+      h('div', { class: 'td-col' }, window.tdBrief(m.brief)),
       h('div', { class: 'td-col' },
         window.tdQueue(m.queue), tdTasks(m.tasks || []), tdProblems(m.problems || [], m.hosts || [], m.muted_problems || 0),
         tdDecisions(m.decisions || []), tdCards(m.cards || [])))));
