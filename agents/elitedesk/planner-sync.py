@@ -353,26 +353,32 @@ def toggles_loop() -> None:
 
 # ── board sync (DB-authoritative board_tasks ↔ vault markdown) ────────
 #
-# The Board tab writes board_tasks (Postgres, authoritative). Each vault-sync
-# tick we render those rows back into the Now/Next/Later sections of
-# projects/<BOARD_SLUG>.md and push, so Obsidian + the digest stay consistent.
-# Obsidian-only edits (board untouched) are imported back into the board.
-# Reconciliation is watermark + managed-section-hash based; see board_sync_once.
+# The Board tab writes board_tasks (Postgres, authoritative), keyed by slug.
+# Each vault-sync tick we reconcile every slug that has cards (plus BOARD_SLUG,
+# the always-on default) — rendering rows back into the Now/Next/Later
+# sections of projects/<slug>.md and pushing, so Obsidian + the digest stay
+# consistent. Obsidian-only edits (board untouched) are imported back into
+# the board. Reconciliation is watermark + managed-section-hash based, kept
+# per-slug; see board_sync_once.
 
 _MANAGED = (('Now', 'now'), ('Next', 'next'), ('Later', 'later'))
 
-# Reconciliation baseline. Persisted across restarts: without it the first
-# tick after a restart takes the "DB is authoritative" branch and overwrites
-# any Obsidian edits made while the agent was down.
+# Reconciliation baseline, per slug. Persisted across restarts: without it
+# the first tick after a restart takes the "DB is authoritative" branch and
+# overwrites any Obsidian edits made while the agent was down.
 STATE_FILE = Path(os.environ.get('STATE_FILE') or f'{PLANNER_DIR}.state.json')
 
 
-def _load_state() -> dict[str, Any]:
+def _load_state() -> dict[str, dict[str, Any]]:
     try:
         raw = json.loads(STATE_FILE.read_text(encoding='utf-8'))
     except (OSError, ValueError):
-        return {'watermark': None, 'hash': None}
-    return {'watermark': raw.get('watermark'), 'hash': raw.get('hash')}
+        return {}
+    # Back-compat: the old format was a single flat {'watermark','hash'} for
+    # BOARD_SLUG only (pre-multi-project). Adopt it as that slug's state.
+    if 'watermark' in raw or 'hash' in raw:
+        return {BOARD_SLUG: {'watermark': raw.get('watermark'), 'hash': raw.get('hash')}}
+    return {slug: {'watermark': v.get('watermark'), 'hash': v.get('hash')} for slug, v in raw.items()}
 
 
 def _save_state() -> None:
@@ -382,7 +388,21 @@ def _save_state() -> None:
         post_log('warn', f'state file write failed: {e}', {'path': str(STATE_FILE)})
 
 
-_board_last: dict[str, Any] = _load_state()
+_board_last: dict[str, dict[str, Any]] = _load_state()
+
+
+def _board_slugs() -> list[str]:
+    """Every slug to reconcile this tick: BOARD_SLUG (always included, so a
+    fresh board still seeds itself) plus any other slug that already has
+    board_tasks rows (created via the Board tab's slug switcher)."""
+    req = urllib.request.Request(f'{BOARD_URL}/slugs', headers={'X-Ingest-Token': ic.token})
+    try:
+        with urllib.request.urlopen(req, timeout=8) as r:
+            payload = json.loads(r.read())
+    except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError) as e:
+        post_log('warn', f'board slugs fetch failed: {type(e).__name__}', {'err': str(e)[:300]})
+        return [BOARD_SLUG]
+    return sorted({BOARD_SLUG, *(payload.get('slugs') or [])})
 
 
 def _hash(text: str) -> str:
@@ -501,17 +521,18 @@ def _write_commit_push(md_path: Path, new_text: str, msg: str) -> bool:
     return True
 
 
-def board_sync_once() -> None:
-    """Reconcile board_tasks (authoritative) with the vault markdown.
+def board_sync_once(slug: str) -> None:
+    """Reconcile one project's board_tasks (authoritative) with its vault
+    markdown.
       board changed  → render DB→vault and push (DB wins).
       vault changed, board untouched → import Obsidian edits into the board.
       first tick with an empty board → seed the board from the vault.
     Loop-safe: after each write we store the managed-section hash, so our own
     commit is not seen as an external edit next tick."""
-    md_path = _find_project_file(PLANNER_DIR / 'projects', BOARD_SLUG)
+    md_path = _find_project_file(PLANNER_DIR / 'projects', slug)
     if md_path is None:
         return
-    board = _board_get(BOARD_SLUG)
+    board = _board_get(slug)
     if board is None:
         return
     tasks = board.get('tasks') or []
@@ -521,36 +542,38 @@ def board_sync_once() -> None:
     except (OSError, UnicodeDecodeError):
         return
 
+    state = _board_last.setdefault(slug, {'watermark': None, 'hash': None})
+
     # Seed an empty board from the vault on first run.
-    if not tasks and _board_last['watermark'] is None:
+    if not tasks and state['watermark'] is None:
         parsed = parse_project_file(md_path)
-        res = _board_import(BOARD_SLUG, parsed or {}, None) if parsed else None
+        res = _board_import(slug, parsed or {}, None) if parsed else None
         if res:
-            _board_last['watermark'] = res.get('updatedAt')
-            _board_last['hash'] = _managed_hash(current)
+            state['watermark'] = res.get('updatedAt')
+            state['hash'] = _managed_hash(current)
             _save_state()
         return
 
     rendered = render_sections_md(tasks)
     new_md = replace_managed_sections(current, rendered)
-    first = _board_last['watermark'] is None
-    board_changed = (not first) and (watermark != _board_last['watermark'])
+    first = state['watermark'] is None
+    board_changed = (not first) and (watermark != state['watermark'])
 
     if first or board_changed:
         # DB is authoritative — author the vault (write only if it differs).
-        if new_md != current and not _write_commit_push(md_path, new_md, f'board sync: {BOARD_SLUG}'):
+        if new_md != current and not _write_commit_push(md_path, new_md, f'board sync: {slug}'):
             return  # retry next tick; don't advance the baseline
-        _board_last['watermark'] = watermark
-        _board_last['hash'] = _managed_hash(new_md)
+        state['watermark'] = watermark
+        state['hash'] = _managed_hash(new_md)
         _save_state()
-    elif _managed_hash(current) != _board_last['hash']:
+    elif _managed_hash(current) != state['hash']:
         # Board untouched but the vault's managed sections changed in Obsidian.
         focus_text = next((t['text'] for t in tasks if t.get('is_focus')), None)
         parsed = parse_project_file(md_path)
-        res = _board_import(BOARD_SLUG, parsed or {}, focus_text) if parsed else None
+        res = _board_import(slug, parsed or {}, focus_text) if parsed else None
         if res:
-            _board_last['watermark'] = res.get('updatedAt')
-            _board_last['hash'] = _managed_hash(current)
+            state['watermark'] = res.get('updatedAt')
+            state['hash'] = _managed_hash(current)
             _save_state()
 
 
@@ -590,12 +613,14 @@ def sync_once() -> None:
         # the git remote shouldn't blank out the projects table.
         pass
 
-    # Board tab: reconcile board_tasks ↔ vault. Runs before the parse below so
-    # the projects table reflects any DB→vault render from this same tick.
-    try:
-        board_sync_once()
-    except (OSError, ValueError, subprocess.SubprocessError) as e:
-        post_log('error', f'board-sync raised: {type(e).__name__}', {'err': str(e)[:500]})
+    # Board tab: reconcile board_tasks ↔ vault, per slug, isolated so one
+    # project's failure doesn't block the rest. Runs before the parse below
+    # so the projects table reflects any DB→vault render from this same tick.
+    for slug in _board_slugs():
+        try:
+            board_sync_once(slug)
+        except (OSError, ValueError, subprocess.SubprocessError) as e:
+            post_log('error', f'board-sync raised for {slug}: {type(e).__name__}', {'err': str(e)[:500]})
 
     projects_dir = PLANNER_DIR / 'projects'
     if not projects_dir.is_dir():
@@ -604,11 +629,22 @@ def sync_once() -> None:
 
     records: list[dict[str, Any]] = []
     skipped: list[str] = []
+    seen_slugs: dict[str, Path] = {}
     for md in _project_files(projects_dir):
         rec = parse_project_file(md)
         if rec is None:
             skipped.append(md.name)
             continue
+        slug = rec['slug']
+        if slug in seen_slugs:
+            post_log('warn', f'duplicate project slug "{slug}" — keeping {seen_slugs[slug].name}, ignoring {md.name}', {
+                'slug': slug,
+                'kept': str(seen_slugs[slug].relative_to(projects_dir)),
+                'ignored': str(md.relative_to(projects_dir)),
+            })
+            skipped.append(md.name)
+            continue
+        seen_slugs[slug] = md
         records.append(rec)
 
     status, body = ic.request(SYNC_URL, {'projects': records}, timeout=15)

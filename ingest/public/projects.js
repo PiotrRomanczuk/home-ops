@@ -13,6 +13,18 @@ function projLogs(slug) {
 function projJobs(slug) { return (window.Chat?.conversations || DB.CONVERSATIONS).filter(c => c.project === slug); }
 
 /* ---------- card (grid) ---------- */
+// Well-known frontmatter keys the vault already carries per-project
+// (deploy URL, health emoji) but that previously landed only in
+// raw_frontmatter and were never rendered anywhere.
+function pcardFm(p) {
+  const fm = p.raw_frontmatter || {};
+  if (!fm.deployed && !fm.health) return null;
+  return h('div', { class: 'pcard-fm' },
+    fm.health ? h('span', { class: 'fm-health' }, fm.health) : null,
+    fm.deployed ? h('span', { class: 'fm-deploy' }, fm.deployed) : null,
+  );
+}
+
 function projCard(p) {
   const now2 = p.now.filter(n => !n[1]).slice(0, 2);
   const recentLogErr = projLogs(p.slug).filter(l => LV_ORDER[l.level] >= 3).length;
@@ -27,6 +39,7 @@ function projCard(p) {
     h('div', {},
       h('div', { class: 'pcard-slug' }, p.slug),
       h('div', { class: 'pcard-title' }, p.title)),
+    pcardFm(p),
     h('div', { class: 'pcard-mid' },
       h('span', { class: 'pulse', html: pulseBars(p.spark, `var(--p-${p.status})`) }),
     ),
@@ -43,9 +56,10 @@ function projCard(p) {
 /* ---------- compact list row ---------- */
 function projListRow(p) {
   const now1 = p.now.find(n => !n[1]);
+  const health = (p.raw_frontmatter || {}).health;
   return h('button', { class: 'plrow', onclick: () => setState({ slug: p.slug }) },
     h('span', { class: 'pill ' + p.status }, h('span', { class: 'pd' }), p.status),
-    h('span', { class: 'pl-slug' }, p.slug),
+    h('span', { class: 'pl-slug' }, health ? health + ' ' : '', p.slug),
     h('span', { class: 'pl-now' }, now1 ? now1[0] : h('span', { class: 'faint' }, '— now clear —')),
     h('span', { class: 'pl-lag' },
       p.errors_today ? h('span', { class: 'lag-chip err' }, '▲' + p.errors_today) : null,
@@ -107,6 +121,7 @@ function collapsibleBlock(title, count, bodyEl, collapsed) {
 function drillPage(p, main) {
   const logs = projLogs(p.slug).slice(0, 20);
   const jobs = projJobs(p.slug);
+  const fm = p.raw_frontmatter || {};
   const wrap = h('div', { class: 'drill' });
 
   // header
@@ -116,6 +131,7 @@ function drillPage(p, main) {
       h('span', { class: 'pill ' + p.status }, h('span', { class: 'pd' }), p.status),
       h('span', { class: 'slug' }, p.slug),
       h('span', { class: 'mut', style: { fontSize: '13px' } }, p.title),
+      fm.health ? h('span', {}, fm.health) : null,
       h('span', { class: 'grow' }),
       h('a', { class: 'vault-link', href: 'obsidian://open?path=' + encodeURIComponent(p.path), title: 'open in Obsidian' }, '◆ open vault file'),
     ),
@@ -124,8 +140,13 @@ function drillPage(p, main) {
       h('span', { class: 'num' }, h('span', { class: 'k' }, 'last commit '), rel(p.last_commit)),
       h('span', { class: 'num' }, h('span', { class: 'k' }, 'commits/30d '), h('b', {}, p.commits_30d)),
       h('span', { class: 'num' }, h('span', { class: 'k' }, 'updated '), rel(p.updated_at)),
+      fm.deployed ? h('a', {
+        class: 'vault-link', target: '_blank', rel: 'noopener',
+        href: /^https?:\/\//.test(fm.deployed) ? fm.deployed : 'https://' + fm.deployed,
+      }, '⇗ ' + fm.deployed) : null,
       h('span', { class: 'pulse', html: pulseBars(p.spark, `var(--p-${p.status})`) }),
     ),
+    fm.stack ? h('div', { class: 'drill-stack' }, h('span', { class: 'k' }, 'stack '), fm.stack) : null,
   );
   wrap.append(hd);
 

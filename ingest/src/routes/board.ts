@@ -26,6 +26,13 @@ export function registerBoardRoutes(app: Hono): void {
   app.use('/api/board', viewerOrToken);
   app.use('/api/board/*', viewerOrToken);
 
+  // Slugs with at least one card — planner-sync polls this to know which
+  // projects' boards (beyond its BOARD_SLUG default) need vault reconciliation.
+  app.get('/api/board/slugs', async (c) => {
+    const r = await pool.query(`SELECT DISTINCT slug FROM public.board_tasks ORDER BY slug`);
+    return c.json({ slugs: r.rows.map((row) => row.slug as string) });
+  });
+
   // List a project's cards + a change watermark (planner-sync polls this).
   app.get('/api/board', async (c) => {
     const slug = c.req.query('slug') || 'home-ops';

@@ -19,6 +19,19 @@ const Board = {
   err: null,
   _poll: null,
 
+  // Switch which project's board is shown (default BOARD_SLUG). Resets
+  // fetch state so loadAll() pulls the new slug's cards; a no-op if already
+  // on that slug, so it's safe to call on every render.
+  setSlug(slug) {
+    slug = slug || BOARD_SLUG;
+    if (slug === this.slug) return;
+    this.slug = slug;
+    this.items = [];
+    this.loaded = false;
+    this.err = null;
+    this.loadAll();
+  },
+
   async loadAll() {
     if (this.loading) return;
     this.loading = true; this.err = null;
