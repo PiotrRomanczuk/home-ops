@@ -39,7 +39,7 @@ stack. They're version-controlled here; installed by symlinking into
 | `seo-brief-export.sh` | 06:50 — copies the SEO card (`digest.d/seo-<site>.txt`) to `daily-brief/inputs/seo-<site>.md` and pushes, so the cloud brief sees SEO | `chmod +x` |
 | `seo-brief-export.service` / `.timer` | Oneshot + daily 06:50 | `systemctl --user link` / `enable --now` |
 | `wait-for-postgres.sh` | `ExecStartPre` of the seo units — waits up to 10 min for `pg_isready` in the compose container (boot / power-cut race, 2026-10-19) | `chmod +x` |
-| `notify-failure.sh` + `unit-failure-mail@.service` | `OnFailure=` target: e-mails the last 40 journal lines of a failed unit via `send-digest.py` (same recipient as the digest) | `systemctl --user link` (template) |
+| `notify-failure.sh` + `unit-failure-mail@.service` | `OnFailure=` target: e-mails a failed unit via `send-digest.py` (same recipient as the digest). Subject and first line = the program's own reason; then last success, next timer run, what to do, optional per-unit context from `~/.config/home-ops/failure-hints/<unit>.sh` (gets `FAILED_DAY`), and the journal of the failed run only (by InvocationID). `DRY_RUN=1` prints instead of sending | `systemctl --user link` (template) |
 
 Migrations `020_digest_cards.sql` + `021_decisions.sql` add the routine
 contract the digest renders (see "Daily digest email" below). Migration 014's
