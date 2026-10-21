@@ -43,9 +43,9 @@ def open_prs(run: Gh) -> list[dict[str, Any]]:
     return json.loads(out or '[]')
 
 
-def act(r: Reporter, run: Gh, retire: Callable[[str], None], log: Callable[[str], None]) -> int:
-    """Carry out answered decisions. Returns how many were consumed."""
-    done = 0
+def act(r: Reporter, run: Gh, retire: Callable[[str], None], log: Callable[[str], None]) -> set[str]:
+    """Carry out answered decisions. Returns the PR refs acted on (consumed)."""
+    done: set[str] = set()
     for d in r.answers():
         pr = str(d.get('ref') or '')
         try:
@@ -63,13 +63,15 @@ def act(r: Reporter, run: Gh, retire: Callable[[str], None], log: Callable[[str]
             log(f'PR #{pr}: gh failed ({(e.stderr or "").strip()[:200]}) — will retry next run')
             continue
         r.consume(d['id'])
-        done += 1
+        done.add(pr)
     return done
 
 
-def ask(r: Reporter, prs: list[dict[str, Any]], log: Callable[[str], None]) -> int:
-    """File one question per open PR that is not already waiting."""
-    waiting = r.open_refs() | {str(d.get('ref')) for d in r.answers()}
+def ask(r: Reporter, prs: list[dict[str, Any]], log: Callable[[str], None], skip: set[str] = frozenset()) -> int:
+    """File one question per open PR that is not already waiting. `skip` = refs
+    just merged/closed this run: GitHub's PR list lags, a merged PR can still
+    show as open seconds later (2026-10-21, PR #9 asked twice)."""
+    waiting = r.open_refs() | {str(d.get('ref')) for d in r.answers()} | set(skip)
     asked = 0
     for p in prs:
         ref = str(p['number'])
@@ -97,8 +99,8 @@ def main() -> int:
     r = Reporter.from_env(ROUTINE)
     log = lambda m: print(f'seo-decide: {m}', file=sys.stderr)  # noqa: E731
     acted = act(r, gh, retire_plan, log)
-    asked = ask(r, open_prs(gh), log)
-    log(f'acted on {acted}, asked {asked}')
+    asked = ask(r, open_prs(gh), log, acted)
+    log(f'acted on {len(acted)}, asked {asked}')
     return 0
 
 

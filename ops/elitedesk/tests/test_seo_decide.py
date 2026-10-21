@@ -49,7 +49,7 @@ URL = 'https://github.com/x/y/pull/9'
 class ActTest(unittest.TestCase):
     def test_yes_merges_and_consumes(self):
         r, g, retired = FakeReporter([{'id': 1, 'ref': '9', 'answer': 'yes'}]), FakeGh(), []
-        self.assertEqual(act(r, g, retired.append, lambda m: None), 1)
+        self.assertEqual(act(r, g, retired.append, lambda m: None), {'9'})
         self.assertEqual(g.calls, [['pr', 'merge', '9', '--squash', '--delete-branch']])
         self.assertEqual(r.consumed, [1])
         self.assertEqual(retired, [])
@@ -65,7 +65,7 @@ class ActTest(unittest.TestCase):
 
     def test_failed_merge_stays_unconsumed_for_retry(self):
         r, g = FakeReporter([{'id': 3, 'ref': '9', 'answer': 'yes'}]), FakeGh(fail_on='merge')
-        self.assertEqual(act(r, g, lambda u: None, lambda m: None), 0)
+        self.assertEqual(act(r, g, lambda u: None, lambda m: None), set())
         self.assertEqual(r.consumed, [])
 
     def test_missing_ref_is_consumed_without_gh(self):
@@ -85,6 +85,11 @@ class AskTest(unittest.TestCase):
         self.assertEqual(r.asked[0]['ref'], '9')
         self.assertEqual(r.asked[0]['context_url'], URL)
         self.assertEqual([o['key'] for o in r.asked[0]['options']], ['yes', 'no'])
+
+    def test_pr_acted_on_this_run_is_not_asked_again(self):
+        r = FakeReporter()
+        self.assertEqual(ask(r, self.PRS, lambda m: None, {'9'}), 1)
+        self.assertEqual(r.asked[0]['ref'], '10')
 
     def test_already_open_question_is_not_repeated(self):
         r = FakeReporter(open_refs={'9', '10'})
