@@ -1,0 +1,10 @@
+[Unit]
+Description=home-ops pr-decide twice a day, before the 08:15 brief and in the evening
+
+[Timer]
+OnCalendar=*-*-* 08,19:05:00
+Persistent=true
+RandomizedDelaySec=5min
+
+[Install]
+WantedBy=timers.target
