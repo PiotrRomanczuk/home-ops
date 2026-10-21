@@ -59,7 +59,7 @@ function tdBrief(b) {
     h('h2', { class: 'td-h' }, b.title || 'Brief'),
     h('div', { class: 'td-meta' }, meta),
     intro ? h('div', { class: 'td-md', html: window.MdLite.render(intro.body) }) : null,
-    h('div', { class: 'tb-list' }, ...parts.filter((p) => p.heading).map(tbSection)));
+    h('div', { class: 'tb-list' }, ...parts.filter((p) => p.heading && !(window.TA_BRIEF_RE && window.TA_BRIEF_RE.test(p.heading))).map(tbSection)));
 }
 window.tdBrief = tdBrief;
 window.tbSplit = tbSplit;
