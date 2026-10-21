@@ -1,0 +1,96 @@
+/* ============================================================
+   login.css — /login, same tokens as the console (styles.css).
+   One centred card; terminal-prompt input; no layout outside it.
+   ============================================================ */
+
+body.login { overflow: auto; }
+
+.login-wrap {
+  min-height: 100%;
+  display: grid; place-items: center;
+  padding: 24px 16px;
+  background:
+    radial-gradient(600px 300px at 50% 0%, var(--accent-dim), transparent 70%),
+    var(--bg);
+}
+
+.login-card {
+  width: 100%; max-width: 360px;
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 26px 24px 20px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+}
+
+.login-brand {
+  display: flex; align-items: center; gap: 9px;
+  font-size: 16px; font-weight: 700; letter-spacing: 0.02em; color: var(--fg-bright);
+}
+.login-brand .dot {
+  width: 9px; height: 9px; border-radius: 2px;
+  background: var(--good); box-shadow: 0 0 8px var(--good);
+}
+.login-brand .ver { color: var(--fg-faint); font-weight: 400; font-size: 11px; margin-left: 2px; }
+
+.login-sub { color: var(--fg-muted); font-size: 12px; margin: -4px 0 10px; }
+
+.login-card .lbl { margin-top: 2px; }
+
+.login-field {
+  display: flex; align-items: center;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+.login-field:focus-within { border-color: var(--accent-line); box-shadow: 0 0 0 3px var(--accent-dim); }
+.login-pre { padding: 0 4px 0 10px; color: var(--accent); font-weight: 600; }
+.login-field input {
+  flex: 1; min-width: 0;
+  padding: 9px 6px;
+  background: none; border: 0; outline: none;
+  color: var(--fg-bright); font-size: 14px; letter-spacing: 0.04em;
+}
+.login-field input::placeholder { color: var(--fg-faint); }
+.login-show {
+  padding: 0 10px; align-self: stretch;
+  color: var(--fg-faint); font-size: 11px;
+  border-left: 1px solid var(--border-soft);
+}
+.login-show:hover { color: var(--fg); }
+
+.login-btn {
+  margin-top: 6px;
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  padding: 9px 12px;
+  background: var(--accent); color: #0b1220;
+  border-radius: var(--r);
+  font-weight: 700; letter-spacing: 0.02em;
+  transition: filter 0.12s, opacity 0.12s;
+}
+.login-btn:hover { filter: brightness(1.08); }
+.login-btn:focus-visible { outline: 2px solid var(--fg-bright); outline-offset: 2px; }
+.login-btn kbd {
+  font: inherit; font-size: 11px; font-weight: 600;
+  padding: 0 5px; border-radius: var(--r-sm);
+  background: rgba(11, 18, 32, 0.18);
+}
+.login-btn:disabled { opacity: 0.6; cursor: progress; }
+.busy .login-btn-l::after { content: '…'; }
+
+.login-err { min-height: 18px; color: var(--lv-error); font-size: 12px; }
+.login-err:empty { visibility: hidden; }
+
+.login-foot {
+  padding-top: 10px; border-top: 1px solid var(--border-soft);
+  color: var(--fg-faint); font-size: 11px; line-height: 1.5;
+}
+.login-foot code { color: var(--fg-muted); }
+
+.shake { animation: login-shake 0.3s; }
+@keyframes login-shake {
+  25% { transform: translateX(-5px); } 50% { transform: translateX(4px); } 75% { transform: translateX(-2px); }
+}
+@media (prefers-reduced-motion: reduce) { .shake { animation: none; } }

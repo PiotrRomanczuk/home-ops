@@ -1,32 +1,79 @@
 <!doctype html>
-<html lang="en">
+<html lang="pl">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>home-ops · login</title>
-<link rel="stylesheet" href="/static/style.css">
+<meta name="theme-color" content="#0e1116">
+<title>home-ops · logowanie</title>
+<link rel="stylesheet" href="/static/styles.css">
+<link rel="stylesheet" href="/static/login.css">
 </head>
 <body class="login">
-  <form id="f" class="login-card">
-    <h1>home-ops</h1>
-    <input id="pw" type="password" autocomplete="current-password" placeholder="password" autofocus>
-    <button type="submit">enter</button>
-    <p id="err" class="err"></p>
-  </form>
+  <main class="login-wrap">
+    <form id="f" class="login-card" novalidate>
+      <div class="login-brand">
+        <span class="dot"></span>home-ops<span class="ver">elitedesk</span>
+      </div>
+      <p class="login-sub">Konsola operatora · LAN / Tailscale</p>
+
+      <label class="lbl" for="pw">hasło</label>
+      <div class="login-field">
+        <span class="login-pre" aria-hidden="true">›</span>
+        <input id="pw" name="password" type="password" autocomplete="current-password"
+               placeholder="••••••••" autofocus required spellcheck="false">
+        <button type="button" id="show" class="login-show" aria-label="pokaż hasło" title="pokaż / ukryj">pokaż</button>
+      </div>
+
+      <button type="submit" id="go" class="login-btn">
+        <span class="login-btn-l">wejdź</span><kbd>↵</kbd>
+      </button>
+      <p id="err" class="login-err" role="alert" aria-live="polite"></p>
+
+      <p class="login-foot">Hasło: <code>LOGS_PASSWORD</code> w <code>~/code/logs-stack/.env</code> na uwh.</p>
+    </form>
+  </main>
 <script>
-document.getElementById('f').addEventListener('submit', async e => {
-  e.preventDefault();
-  const pw = document.getElementById('pw').value;
-  const err = document.getElementById('err');
-  err.textContent = '';
-  const r = await fetch('/api/auth/login', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ password: pw }),
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const form = $('f'), pw = $('pw'), err = $('err'), go = $('go'), show = $('show');
+  // Back to the tab that sent us here (#tab=hosts …). Only a hash is accepted,
+  // so `next` can never point off-site.
+  const next = new URLSearchParams(location.search).get('next') || '';
+  const target = '/' + (next.startsWith('#') ? next : '');
+
+  show.addEventListener('click', () => {
+    const hidden = pw.type === 'password';
+    pw.type = hidden ? 'text' : 'password';
+    show.textContent = hidden ? 'ukryj' : 'pokaż';
+    pw.focus();
   });
-  if (r.ok) { location.href = '/'; return; }
-  err.textContent = 'wrong password';
-});
+
+  const fail = (msg) => {
+    err.textContent = msg;
+    form.classList.remove('shake'); void form.offsetWidth; form.classList.add('shake');
+    pw.select();
+  };
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!pw.value) return fail('wpisz hasło');
+    err.textContent = '';
+    go.disabled = true; form.classList.add('busy');
+    try {
+      const r = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ password: pw.value }),
+      });
+      if (r.ok) { location.href = target; return; }
+      fail(r.status === 401 ? 'złe hasło' : `błąd serwera (${r.status})`);
+    } catch {
+      fail('brak połączenia z ingest');
+    } finally {
+      go.disabled = false; form.classList.remove('busy');
+    }
+  });
+})();
 </script>
 </body>
 </html>
