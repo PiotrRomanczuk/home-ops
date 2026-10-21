@@ -37,6 +37,27 @@ def strip_ansi(s: str) -> str:
     return _ANSI_RE.sub('', s)
 
 
+def check_url(url: str, timeout: float = 10.0) -> tuple[bool, int | None]:
+    """HEAD (fallback GET) reachability probe against a public URL.
+
+    Bare domains get https:// prefixed. Reachable = the host answered with
+    anything below 500 — a 4xx still proves the site is up. Returns
+    (reachable, status_code); status_code is None when nothing answered.
+    Shared by github-repo-sync (elitedesk vantage) and rpi-sentinel (second
+    vantage) so both probers agree on what "reachable" means."""
+    full = url if url.startswith('http') else f'https://{url}'
+    for method in ('HEAD', 'GET'):
+        try:
+            req = urllib.request.Request(full, method=method)
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                return 200 <= r.status < 400, r.status
+        except urllib.error.HTTPError as e:
+            return e.code < 500, e.code
+        except (urllib.error.URLError, TimeoutError, OSError):
+            continue
+    return False, None
+
+
 # ── shutdown coordination ─────────────────────────────────────────────
 
 

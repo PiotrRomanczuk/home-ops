@@ -6,6 +6,7 @@ ops/elitedesk/daily-digest.env
 ops/elitedesk/seo-collect.env
 # Google service-account keys (seo-collect)
 ops/elitedesk/*-sa.json
+ops/elitedesk/github-repo-sync.env
 
 # Node
 node_modules/
@@ -36,3 +37,6 @@ Thumbs.db
 .idea/
 *.swp
 ops/elitedesk/digest.d/
+
+# Playwright MCP session output
+.playwright-mcp/

@@ -46,12 +46,14 @@ jobs:
             agents/elitedesk/elitedesk-watcher.py \
             agents/elitedesk/planner-sync.py \
             agents/rpi/rpi-watcher.py \
+            agents/rpi/rpi-sentinel.py \
             agents/win10/win10-watcher.py \
             scheduler/gpu-scheduler.py \
             scheduler/jobs/embed.py \
             scheduler/jobs/generate.py \
             scheduler/jobs/summarise.py \
             clients/python/home_ops_log.py \
+            ops/elitedesk/github-repo-sync.py \
             ops/elitedesk/seo-collect.py \
             ops/elitedesk/seo_google.py \
             ops/elitedesk/seo_sources.py \
@@ -133,7 +135,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: unittest discover
+      - name: unittest discover (agents)
         run: python3 -m unittest discover -s agents/tests -p 'test_*.py' -v
       - name: unittest discover (ops/elitedesk)
         run: python3 -m unittest discover -s ops/elitedesk/tests -p 'test_*.py' -v
@@ -240,3 +242,48 @@ jobs:
           INGEST_TOKEN: ci-token
           LOGS_PASSWORD: ci-password
         run: npm test -- --run src/routes/__tests__/seo-ingest.test.ts
+
+  tests-projects-repo-sync:
+    name: tests (repo-sync UPDATE-only contract vs real postgres)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: ci-placeholder
+          POSTGRES_DB: home_ops
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d home_ops"
+          --health-interval 3s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: ingest/package-lock.json
+
+      - name: install
+        working-directory: ingest
+        run: npm ci
+
+      - name: apply projects schema (005 + 016 — no pg_cron needed)
+        env:
+          PGPASSWORD: ci-placeholder
+        run: |
+          psql -h 127.0.0.1 -U postgres -d home_ops -v ON_ERROR_STOP=1 \
+            -f postgres/migrations/005_projects.sql \
+            -f postgres/migrations/016_project_repo_meta.sql
+
+      - name: integration tests
+        working-directory: ingest
+        env:
+          DATABASE_URL: postgresql://postgres:ci-placeholder@127.0.0.1:5432/home_ops
+          INGEST_TOKEN: ci-token
+          LOGS_PASSWORD: ci-password
+        run: npm test -- --run src/routes/__tests__/projects-repo-sync.test.ts

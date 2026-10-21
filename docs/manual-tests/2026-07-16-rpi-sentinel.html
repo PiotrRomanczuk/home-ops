@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Manual test report — rpi-sentinel (2026-07-16)</title>
+<style>
+  :root {
+    --bg: #0b0e0c; --panel: #10140f; --line: #1e2620; --fg: #d7e8dc; --fg-muted: #93a99b;
+    --fg-faint: #62786a; --accent: #4fd6a0; --amber: #e0b34a; --red: #e0685a; --mono: ui-monospace, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --bg: #f6f8f6; --panel: #ffffff; --line: #dbe4dd; --fg: #1c261f; --fg-muted: #4c5c50;
+      --fg-faint: #7c8e80; --accent: #1c8a5f; --amber: #9a6c0d; --red: #b8382a; }
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--fg); font-family: var(--mono); line-height: 1.55; margin: 0; padding: 32px 20px 80px; }
+  .wrap { max-width: 880px; margin: 0 auto; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .meta { color: var(--fg-faint); font-size: 12.5px; margin-bottom: 28px; }
+  h2 { font-size: 15px; color: var(--accent); border-bottom: 1px solid var(--line); padding-bottom: 6px; margin: 34px 0 14px; letter-spacing: .02em; }
+  p { margin: 0 0 12px; font-size: 13.5px; }
+  ul, ol { margin: 0 0 14px; padding-left: 22px; font-size: 13.5px; }
+  li { margin-bottom: 6px; }
+  code { background: var(--panel); border: 1px solid var(--line); border-radius: 3px; padding: 1px 5px; font-size: 12.5px; }
+  pre { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px; overflow-x: auto; font-size: 12.5px; margin: 0 0 14px; }
+  pre code { background: none; border: none; padding: 0; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px 18px; margin-bottom: 16px; }
+  .expect { border-left: 3px solid var(--accent); padding: 8px 12px; background: rgba(79,214,160,0.06); border-radius: 0 4px 4px 0; margin: 8px 0 14px; font-size: 13px; }
+  .expect b { color: var(--accent); }
+  .warn { border-left: 3px solid var(--amber); padding: 8px 12px; background: rgba(224,179,74,0.08); border-radius: 0 4px 4px 0; margin: 8px 0 14px; font-size: 13px; }
+  .warn b { color: var(--amber); }
+  .verified { border-left: 3px solid var(--accent); padding: 8px 12px; background: rgba(79,214,160,0.06); border-radius: 0 4px 4px 0; margin: 8px 0 14px; font-size: 13px; }
+  .verified b { color: var(--accent); }
+  .files { font-size: 12.5px; color: var(--fg-muted); }
+  .files code { color: var(--fg); }
+  table { border-collapse: collapse; width: 100%; font-size: 12.5px; margin: 0 0 14px; }
+  th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--line); }
+  th { color: var(--fg-faint); font-weight: 600; text-transform: uppercase; font-size: 10.5px; letter-spacing: .05em; }
+  .toc { font-size: 12.5px; }
+  .toc a { color: var(--fg-muted); text-decoration: none; }
+  .toc a:hover { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Manual test report — rpi-sentinel</h1>
+  <div class="meta">2026-07-16 · branch <code>feature/multi-project-hub</code> · not yet committed</div>
+
+  <div class="card toc">
+    <b>Contents:</b>
+    <ol>
+      <li><a href="#what">What was actually done</a></li>
+      <li><a href="#smoke">End-to-end smoke test (already run — real output below)</a></li>
+      <li><a href="#deploy">How to deploy to the Pi</a></li>
+      <li><a href="#live">Live verification on the Pi</a></li>
+      <li><a href="#edge">Edge cases worth checking</a></li>
+      <li><a href="#automated">What's already covered by automated tests</a></li>
+    </ol>
+  </div>
+
+  <h2 id="what">1. What was actually done</h2>
+  <p>
+    Everything in home-ops observes the world <i>through</i> elitedesk — Postgres, ingest,
+    digest, github-repo-sync all live there. The dead-agent sentinel (migration 010) alerts by
+    inserting into <code>host_logs</code>, a table that dies with the host, so elitedesk going
+    down was the one failure the stack could not report about itself. And with only one
+    reachability prober (elitedesk), its own egress hiccup made every project look "down" at
+    once. <b>rpi-sentinel</b> closes both gaps from the Pi — always-on, separate failure domain,
+    ~5W (the one host where recurring background work is guilt-free after the electric-bill
+    decision).
+  </p>
+  <table>
+    <tr><th>Change</th><th>Behavior now</th><th>Files</th></tr>
+    <tr>
+      <td>Watchdog loop</td>
+      <td>Polls <code>GET /api/health</code> (covers ingest + Postgres in one call) every 60s.
+        3 consecutive failures → alert email sent <b>directly from the Pi</b> via stdlib
+        smtplib (Gmail app password from a 0600 file, the send-digest.py pattern) —
+        the alert path does not touch elitedesk. Re-alerts every 4h while down. On recovery:
+        recovery email + a <b>retroactive outage record</b> posted into <code>host_logs</code>
+        (it couldn't log during the outage — the log store was the thing that was down).</td>
+      <td class="files"><code>agents/rpi/rpi-sentinel.py</code></td>
+    </tr>
+    <tr>
+      <td>Second-vantage deploy probes</td>
+      <td>Every 10 min, discovers deploy URLs from <code>GET /api/projects</code>
+        (<code>repo_meta.deploy.url</code>, falling back to <code>raw_frontmatter.deployed</code>
+        — no second hand-maintained URL list) and probes each. Transition-only: up→down (2
+        consecutive failed rounds + a same-tick retry) posts an error event with
+        <code>source='app:&lt;slug&gt;'</code>, down→up posts an info recovery event. The project
+        drill page already renders <code>app:&lt;slug&gt;</code> events, so this needed <b>zero UI
+        changes</b>. Real outage = elitedesk's repo_meta AND an rpi event agree; elitedesk
+        egress problem = only one of the two says down.</td>
+      <td class="files"><code>agents/rpi/rpi-sentinel.py</code></td>
+    </tr>
+    <tr>
+      <td>Shared probe helper</td>
+      <td><code>check_url()</code> extracted into <code>agents/_common.py</code> (rsynced to every
+        host by deploy-agent.sh) so both vantage points agree on what "reachable" means;
+        github-repo-sync.py refactored to use it — its 16 tests pass unchanged.</td>
+      <td class="files"><code>agents/_common.py</code>, <code>ops/elitedesk/github-repo-sync.py</code></td>
+    </tr>
+    <tr>
+      <td>Unit + CI</td>
+      <td>22 new unit tests (state machines, URL extraction, health check, alert channel);
+        rpi-sentinel.py added to CI's py_compile list.</td>
+      <td class="files"><code>agents/tests/test_rpi_sentinel.py</code>, <code>.github/workflows/check.yml</code>,
+        <code>agents/rpi/rpi-sentinel.service</code></td>
+    </tr>
+  </table>
+
+  <h2 id="smoke">2. End-to-end smoke test — already run, real output</h2>
+  <p>Disposable local Postgres (:55432) + the real ingest server (:58080) + the real sentinel
+    with fast intervals (<code>CHECK_INTERVAL=2 PROBE_INTERVAL=5 FAILS_TO_ALERT=2
+    ALERT_DRY_RUN=1</code>). Two seeded projects: <code>strummy</code> (real URL, up) and
+    <code>testdown</code> (bogus <code>.invalid</code> domain). Sequence: run 25s → kill ingest →
+    10s → restart → 8s.</p>
+  <div class="verified"><b>Verified — actual output this session:</b>
+<pre><code>[dry-run alert] [home-ops] ingest DOWN (from rpi)
+home-ops ingest (http://127.0.0.1:58080/api/health) unreachable from the Pi.
+Down since: 2026-07-16 19:59:58 (0m02s ago, 2 consecutive failed checks).
+...
+[dry-run alert] [home-ops] ingest RECOVERED (from rpi)
+home-ops ingest is answering again (down since 2026-07-16 19:59:58, ~0m10s).
+
+host_logs rows written by the sentinel:
+ 19:59:32 | agent:rpi-sentinel | info  | rpi-sentinel up: health every 2s ...
+ 19:59:53 | app:testdown       | error | deploy unreachable from rpi: definitely-not-real-xyz123.invalid (no response)
+ 20:00:08 | agent:rpi-sentinel | error | ingest outage over: down ~0m10s (watched from rpi)
+ 20:00:15 | agent:rpi-sentinel | info  | rpi-sentinel down (signal)</code></pre>
+    Every designed behavior confirmed: startup self-log; exactly <b>one</b> transition event for
+    the bogus URL (not one per probe round); <b>no</b> event for strummy (up — silence is
+    correct); DOWN alert after exactly K=2 failures with down-since + failure count; RECOVERED
+    alert with outage duration; the retroactive outage record posted <i>after</i> ingest came
+    back; clean shutdown log.</div>
+
+  <h2 id="deploy">3. How to deploy to the Pi</h2>
+  <ol>
+    <li>Put the Gmail app password on the Pi (same credential the digest uses on elitedesk):
+      <pre><code>ssh rpi "mkdir -p ~/.config/home-ops && umask 177 && cat > ~/.config/home-ops/smtp.pass"
+# paste the app password, Ctrl-D</code></pre></li>
+    <li>Create <code>~/.config/rpi-sentinel.env</code> on the Pi:
+      <pre><code>INGEST_URL=http://192.168.1.75:64421/api/ingest
+INGEST_TOKEN=&lt;shared token, same as rpi-watcher.env&gt;
+ALERT_TO=p.romanczuk@gmail.com
+ALERT_FROM=p.romanczuk@gmail.com</code></pre></li>
+    <li>Deploy + enable (the script's <code>rpi</code> branch already existed — no changes needed):
+      <pre><code>scripts/deploy-agent.sh rpi rpi-sentinel
+ssh rpi "systemctl --user enable rpi-sentinel"</code></pre></li>
+  </ol>
+
+  <h2 id="live">4. Live verification on the Pi</h2>
+  <ul>
+    <li><code>ssh rpi "journalctl --user -u rpi-sentinel --since '2 min ago'"</code> — shows no
+      errors; the console's Logs tab shows the <code>agent:rpi-sentinel</code> "up" event.</li>
+    <li>After ~10 min, no <code>app:*</code> events from host <code>rpi</code> should exist (all
+      deploys up — silence is the success state).</li>
+    <li><b>Fire drill (recommended once):</b> <code>ssh uwh "docker stop home-ops-ingest-1"</code>
+      → an alert email should arrive within ~4 min → <code>docker start home-ops-ingest-1</code>
+      → recovery email + an <code>ingest outage over</code> error row in the Logs view.</li>
+    <li><b>Probe drill:</b> temporarily add a bogus <code>deploy_url</code> to one project in
+      elitedesk's <code>github-repo-sync.projects.json</code>, wait for its next 4h tick (or run
+      it once by hand), then within ~20 min the sentinel posts an <code>app:&lt;slug&gt;</code>
+      error visible on that project's drill page. Revert after.</li>
+  </ul>
+
+  <h2 id="edge">5. Edge cases worth checking</h2>
+  <ul>
+    <li><b>Alert channel broken</b> (bad app password, Gmail down): <code>send_alert</code>
+      returns False and logs to stderr/journald — the sentinel keeps running (unit-tested;
+      worth eyeballing journald after the first real alert).</li>
+    <li><b>Pi reboot:</b> unit is <code>WantedBy=default.target</code> with
+      <code>Restart=on-failure</code>, same as rpi-watcher — confirm it comes back after
+      <code>ssh rpi sudo reboot</code>.</li>
+    <li><b>Both probers down-vote:</b> when a deploy is genuinely down, expect BOTH the red dot
+      (elitedesk's repo_meta, ≤4h stale) AND an rpi event (≤20 min fresh) — the rpi event will
+      usually arrive first.</li>
+    <li><b>No repo_meta yet:</b> if github-repo-sync hasn't run, the sentinel falls back to
+      <code>raw_frontmatter.deployed</code> URLs from the vault — probing still works.</li>
+  </ul>
+
+  <h2 id="automated">6. What's already covered by automated tests (don't re-check by hand)</h2>
+  <ul>
+    <li><code>python3 -m unittest discover -s agents/tests -p 'test_*.py' -v</code> — 46/46
+      (24 existing + 22 new: watchdog K-threshold/re-alert/recovery/blip handling, probe
+      transition-only emission, URL extraction fallbacks, health-check verdicts, alert dry-run +
+      failure paths).</li>
+    <li><code>python3 -m unittest discover -s ops/elitedesk/tests -p 'test_*.py' -v</code> —
+      16/16 unchanged after the check_url refactor.</li>
+    <li><code>py_compile</code> (all agents incl. rpi-sentinel), <code>bash -n scripts/*.sh</code>,
+      ingest <code>npm run check</code> — all green; sentinel wired into
+      <code>.github/workflows/check.yml</code>.</li>
+  </ul>
+
+</div>
+</body>
+</html>

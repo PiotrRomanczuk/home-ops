@@ -15,13 +15,20 @@ function projJobs(slug) { return (window.Chat?.conversations || DB.CONVERSATIONS
 /* ---------- card (grid) ---------- */
 // Well-known frontmatter keys the vault already carries per-project
 // (deploy URL, health emoji) but that previously landed only in
-// raw_frontmatter and were never rendered anywhere.
+// raw_frontmatter and were never rendered anywhere. repo_meta is a second,
+// independently-synced layer (github-repo-sync.py) — version + a live
+// reachability dot on the same deploy chip, when present.
 function pcardFm(p) {
   const fm = p.raw_frontmatter || {};
-  if (!fm.deployed && !fm.health) return null;
+  const rm = p.repo_meta || {};
+  if (!fm.deployed && !fm.health && !rm.version) return null;
   return h('div', { class: 'pcard-fm' },
     fm.health ? h('span', { class: 'fm-health' }, fm.health) : null,
-    fm.deployed ? h('span', { class: 'fm-deploy' }, fm.deployed) : null,
+    rm.version ? h('span', { class: 'fm-version' }, 'v' + rm.version) : null,
+    fm.deployed ? h('span', {
+      class: 'fm-deploy' + (rm.deploy ? (rm.deploy.reachable ? ' fm-reachable' : ' fm-unreachable') : ''),
+      title: rm.deploy ? `${rm.deploy.reachable ? 'reachable' : 'unreachable'} · checked ${relShort(rm.deploy.checked_at)} ago` : '',
+    }, fm.deployed) : null,
   );
 }
 
@@ -122,6 +129,8 @@ function drillPage(p, main) {
   const logs = projLogs(p.slug).slice(0, 20);
   const jobs = projJobs(p.slug);
   const fm = p.raw_frontmatter || {};
+  const rm = p.repo_meta || {};
+  const stackLine = fm.stack || (rm.stack ? [rm.stack.runtime, rm.stack.framework, ...(rm.stack.key_deps || [])].filter(Boolean).join(' · ') : null);
   const wrap = h('div', { class: 'drill' });
 
   // header
@@ -132,6 +141,7 @@ function drillPage(p, main) {
       h('span', { class: 'slug' }, p.slug),
       h('span', { class: 'mut', style: { fontSize: '13px' } }, p.title),
       fm.health ? h('span', {}, fm.health) : null,
+      rm.version ? h('span', { class: 'fm-version' }, 'v' + rm.version) : null,
       h('span', { class: 'grow' }),
       h('a', { class: 'vault-link', href: 'obsidian://open?path=' + encodeURIComponent(p.path), title: 'open in Obsidian' }, '◆ open vault file'),
     ),
@@ -141,12 +151,19 @@ function drillPage(p, main) {
       h('span', { class: 'num' }, h('span', { class: 'k' }, 'commits/30d '), h('b', {}, p.commits_30d)),
       h('span', { class: 'num' }, h('span', { class: 'k' }, 'updated '), rel(p.updated_at)),
       fm.deployed ? h('a', {
-        class: 'vault-link', target: '_blank', rel: 'noopener',
+        class: 'vault-link' + (rm.deploy ? (rm.deploy.reachable ? ' fm-reachable' : ' fm-unreachable') : ''),
+        target: '_blank', rel: 'noopener',
         href: /^https?:\/\//.test(fm.deployed) ? fm.deployed : 'https://' + fm.deployed,
+        title: rm.deploy ? `${rm.deploy.reachable ? 'reachable' : 'unreachable'} · checked ${relShort(rm.deploy.checked_at)} ago` : '',
       }, '⇗ ' + fm.deployed) : null,
       h('span', { class: 'pulse', html: pulseBars(p.spark, `var(--p-${p.status})`) }),
     ),
-    fm.stack ? h('div', { class: 'drill-stack' }, h('span', { class: 'k' }, 'stack '), fm.stack) : null,
+    stackLine ? h('div', { class: 'drill-stack' }, h('span', { class: 'k' }, 'stack '), stackLine) : null,
+    (rm.git || rm.unsupported || rm.error) ? h('div', { class: 'drill-stack' },
+      h('span', { class: 'k' }, 'repo data '),
+      rm.git ? `computed ${rm.git.commits_30d} commits/30d, last ${rel(rm.git.last_commit)}` : (rm.unsupported || rm.error),
+      p.repo_synced_at ? h('span', { class: 'faint' }, ' · synced ' + relShort(p.repo_synced_at) + ' ago') : null,
+    ) : null,
   );
   wrap.append(hd);
 
@@ -203,6 +220,14 @@ function syncedLabel() {
   return '· vault sync ' + relShort(Projects.syncedAt) + ' ago';
 }
 
+// Separate producer (github-repo-sync.py, 4h cadence) — absent until the
+// first tick runs, and normally lags the 60s vault sync; that's expected,
+// not a fault, so no "awaiting" language here.
+function repoSyncedLabel() {
+  if (!Projects.repoSyncedAt) return null;
+  return '· repo data ' + relShort(Projects.repoSyncedAt) + ' ago';
+}
+
 VIEWS.projects = function (st, main) {
   if (!Projects.loaded && !Projects.loading) Projects.loadAll();
 
@@ -222,6 +247,7 @@ VIEWS.projects = function (st, main) {
   wrap.append(h('div', { class: 'sec-bar' },
     h('span', { class: 'lbl' }, 'projects ', h('span', { class: 'faint num', style: { fontWeight: 400 } }, Projects.items.length)),
     h('span', { class: 'faint', style: { fontSize: '11px' } }, syncedLabel()),
+    repoSyncedLabel() ? h('span', { class: 'faint', style: { fontSize: '11px' } }, repoSyncedLabel()) : null,
     Projects.err ? h('span', { class: 'lv error', style: { fontSize: '11px' } }, '✕ ' + Projects.err) : null,
     h('span', { class: 'grow' }),
     h('button', { class: 'toolbtn', onclick: () => Projects.loadAll(), title: 'refresh from server' }, '↻'),

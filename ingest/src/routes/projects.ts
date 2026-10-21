@@ -148,7 +148,7 @@ export function registerProjectsRoutes(app: Hono): void {
       SELECT slug, title, status, path, last_commit, commits_30d,
              updated_at, synced_at,
              now_md, next_md, later_md, pain_md,
-             raw_frontmatter
+             raw_frontmatter, repo_meta, repo_synced_at
       FROM public.projects
       ${where}
       ORDER BY
@@ -169,6 +169,58 @@ export function registerProjectsRoutes(app: Hono): void {
     const r = await pool.query(`SELECT * FROM public.projects WHERE slug = $1`, [slug]);
     if (r.rowCount === 0) return c.json({ error: 'not found' }, 404);
     return c.json({ project: r.rows[0] });
+  });
+
+  // Repo-metadata sync: a separate producer (github-repo-sync.py on
+  // elitedesk) POSTs computed stack/version/deploy/git data per slug. This
+  // is UPDATE-only — unlike /api/projects/sync, it never creates or deletes
+  // rows, because row existence stays owned by the vault sync path. A slug
+  // with no matching row is reported back, not silently inserted.
+  interface RepoMetaEntry {
+    slug: string;
+    repo_meta?: Record<string, unknown> | null;
+    source?: string | null;
+  }
+
+  function validRepoMetaEntry(e: unknown): e is RepoMetaEntry {
+    if (!e || typeof e !== 'object') return false;
+    const x = e as RepoMetaEntry;
+    return typeof x.slug === 'string' && x.slug.length > 0 && x.slug.length <= 128;
+  }
+
+  app.use('/api/projects/repo-sync', tokenOnly);
+  app.post('/api/projects/repo-sync', async (c) => {
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: 'invalid json' }, 400);
+    }
+    const raw = body && typeof body === 'object' && 'entries' in body ? (body as { entries: unknown }).entries : null;
+    if (!Array.isArray(raw)) return c.json({ error: 'entries array required' }, 400);
+    if (raw.length > 200) return c.json({ error: 'too many entries (max 200)' }, 413);
+
+    const entries: RepoMetaEntry[] = [];
+    const rejected: Array<{ index: number; reason: string }> = [];
+    raw.forEach((e, i) => {
+      if (validRepoMetaEntry(e)) entries.push(e);
+      else rejected.push({ index: i, reason: 'invalid entry' });
+    });
+
+    let updated = 0;
+    const unknownSlugs: string[] = [];
+    for (const e of entries) {
+      const r = await pool.query(
+        `UPDATE public.projects
+            SET repo_meta = COALESCE($2::jsonb, '{}'::jsonb),
+                repo_synced_at = now()
+          WHERE slug = $1`,
+        [e.slug, e.repo_meta ? JSON.stringify({ ...e.repo_meta, source: e.source ?? null }) : null],
+      );
+      if (r.rowCount === 0) unknownSlugs.push(e.slug);
+      else updated += 1;
+    }
+    return c.json({ updated, unknownSlugs, rejected });
   });
 
   // Task writeback. POST enqueues a toggle; planner-sync polls and applies.
