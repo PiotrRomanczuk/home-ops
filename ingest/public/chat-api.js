@@ -24,7 +24,8 @@ async function api(method, path, body) {
     opts.body = JSON.stringify(body);
   }
   const r = await fetch(path, opts);
-  if (r.status === 401) { location.href = '/login'; throw new Error('unauthorized'); }
+  // Keep the current tab: /login sends you back to this hash after the password.
+  if (r.status === 401) { location.href = '/login?next=' + encodeURIComponent(location.hash); throw new Error('unauthorized'); }
   if (r.status === 204) return null;
   if (!r.ok) throw new Error('HTTP ' + r.status);
   return r.json();
