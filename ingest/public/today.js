@@ -69,14 +69,6 @@ function tdProblems(problems, hosts, muted) {
     muted ? h('div', { class: 'td-meta' }, `wyciszone wzorce: ${muted} (lista w MUTED, digest.ts)`) : null);
 }
 
-function tdDecisions(decisions) {
-  if (!decisions.length) return tdSection('Decyzje', 0, h('div', { class: 'td-empty' }, 'Nic nie czeka na odpowiedź.'));
-  return tdSection('Decyzje', decisions.length, h('ul', { class: 'td-list' }, ...decisions.map((d) =>
-    h('li', { class: 'td-dec' },
-      h('button', { class: 'td-link', onclick: () => setState({ tab: 'decisions' }) }, d.question),
-      h('span', { class: 'td-src' }, d.routine)))));
-}
-
 function tdCards(cards) {
   if (!cards.length) return null;
   return tdSection('Rutyny', 0, h('ul', { class: 'td-list' }, ...cards.map((c) =>
@@ -98,6 +90,6 @@ VIEWS.today = (st, main) => {
     h('div', { class: 'td-grid' },
       h('div', { class: 'td-col' }, window.tdBrief(m.brief)),
       h('div', { class: 'td-col' },
-        window.tdQueue(m.queue), tdTasks(m.tasks || []), tdProblems(m.problems || [], m.hosts || [], m.muted_problems || 0),
-        tdDecisions(m.decisions || []), tdCards(m.cards || [])))));
+        window.tdApprovals(m.brief), window.tdQueue(m.queue), tdTasks(m.tasks || []), tdProblems(m.problems || [], m.hosts || [], m.muted_problems || 0),
+        tdCards(m.cards || [])))));
 };
