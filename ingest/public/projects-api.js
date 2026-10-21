@@ -74,6 +74,11 @@ function parseProject(row) {
     pain: parsePain(row.pain_md),
     spark: makeSpark(row.commits_30d || 0, slug),
     raw_frontmatter: row.raw_frontmatter || {},
+    // Second, independently-refreshed layer written by github-repo-sync.py
+    // (stack/version/deploy reachability/real git activity) — additive to
+    // the vault-owned fields above, never overwrites them.
+    repo_meta: row.repo_meta || {},
+    repo_synced_at: row.repo_synced_at || null,
     // Reactive counts — recomputed via getters on each access so they pick
     // up Logs/Chat as those modules populate.
     get errors_today() {
@@ -98,6 +103,7 @@ const Projects = {
   loading: false,
   err: null,
   syncedAt: null,
+  repoSyncedAt: null,
 
   async loadAll() {
     if (this.loading) return;
@@ -109,6 +115,12 @@ const Projects = {
       // Most recent synced_at across all rows == when the worker last ran.
       this.syncedAt = this.items.reduce(
         (acc, p) => (p.synced_at && (!acc || p.synced_at > acc) ? p.synced_at : acc),
+        null,
+      );
+      // Same idea for the separate github-repo-sync producer (4h cadence,
+      // not 60s — expected to lag the vault sync, that's not a fault).
+      this.repoSyncedAt = this.items.reduce(
+        (acc, p) => (p.repo_synced_at && (!acc || p.repo_synced_at > acc) ? p.repo_synced_at : acc),
         null,
       );
     } catch (e) { this.err = e.message; }

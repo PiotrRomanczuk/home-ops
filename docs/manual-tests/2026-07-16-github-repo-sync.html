@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Manual test report — github-repo-sync (2026-07-16)</title>
+<style>
+  :root {
+    --bg: #0b0e0c; --panel: #10140f; --line: #1e2620; --fg: #d7e8dc; --fg-muted: #93a99b;
+    --fg-faint: #62786a; --accent: #4fd6a0; --amber: #e0b34a; --red: #e0685a; --mono: ui-monospace, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --bg: #f6f8f6; --panel: #ffffff; --line: #dbe4dd; --fg: #1c261f; --fg-muted: #4c5c50;
+      --fg-faint: #7c8e80; --accent: #1c8a5f; --amber: #9a6c0d; --red: #b8382a; }
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--fg); font-family: var(--mono); line-height: 1.55; margin: 0; padding: 32px 20px 80px; }
+  .wrap { max-width: 880px; margin: 0 auto; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .meta { color: var(--fg-faint); font-size: 12.5px; margin-bottom: 28px; }
+  h2 { font-size: 15px; color: var(--accent); border-bottom: 1px solid var(--line); padding-bottom: 6px; margin: 34px 0 14px; letter-spacing: .02em; }
+  h3 { font-size: 13.5px; margin: 22px 0 8px; color: var(--fg); }
+  p { margin: 0 0 12px; font-size: 13.5px; }
+  ul, ol { margin: 0 0 14px; padding-left: 22px; font-size: 13.5px; }
+  li { margin-bottom: 6px; }
+  code { background: var(--panel); border: 1px solid var(--line); border-radius: 3px; padding: 1px 5px; font-size: 12.5px; }
+  pre { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px; overflow-x: auto; font-size: 12.5px; margin: 0 0 14px; }
+  pre code { background: none; border: none; padding: 0; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px 18px; margin-bottom: 16px; }
+  .badge { display: inline-block; font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; padding: 2px 8px; border-radius: 3px; font-weight: 600; }
+  .badge.done { color: var(--accent); border: 1px solid var(--accent); }
+  .badge.risk { color: var(--red); border: 1px solid var(--red); }
+  .badge.note { color: var(--amber); border: 1px solid var(--amber); }
+  .expect { border-left: 3px solid var(--accent); padding: 8px 12px; background: rgba(79,214,160,0.06); border-radius: 0 4px 4px 0; margin: 8px 0 14px; font-size: 13px; }
+  .expect b { color: var(--accent); }
+  .warn { border-left: 3px solid var(--amber); padding: 8px 12px; background: rgba(224,179,74,0.08); border-radius: 0 4px 4px 0; margin: 8px 0 14px; font-size: 13px; }
+  .warn b { color: var(--amber); }
+  .verified { border-left: 3px solid var(--accent); padding: 8px 12px; background: rgba(79,214,160,0.06); border-radius: 0 4px 4px 0; margin: 8px 0 14px; font-size: 13px; }
+  .verified b { color: var(--accent); }
+  .files { font-size: 12.5px; color: var(--fg-muted); }
+  .files code { color: var(--fg); }
+  table { border-collapse: collapse; width: 100%; font-size: 12.5px; margin: 0 0 14px; }
+  th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--line); }
+  th { color: var(--fg-faint); font-weight: 600; text-transform: uppercase; font-size: 10.5px; letter-spacing: .05em; }
+  .toc { font-size: 12.5px; }
+  .toc a { color: var(--fg-muted); text-decoration: none; }
+  .toc a:hover { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Manual test report — github-repo-sync</h1>
+  <div class="meta">2026-07-16 · branch <code>feature/multi-project-hub</code> · not yet committed</div>
+
+  <div class="card toc">
+    <b>Contents:</b>
+    <ol>
+      <li><a href="#what">What was actually done</a></li>
+      <li><a href="#setup">Test setup</a></li>
+      <li><a href="#t1">Test 1 — repo-sync is UPDATE-only (never creates/deletes rows)</a></li>
+      <li><a href="#t2">Test 2 — github-repo-sync.py end-to-end (already run once — real output below)</a></li>
+      <li><a href="#t3">Test 3 — Projects tab renders the new fields</a></li>
+      <li><a href="#edge">Edge cases worth checking</a></li>
+      <li><a href="#automated">What's already covered by automated tests</a></li>
+    </ol>
+  </div>
+
+  <h2 id="what">1. What was actually done</h2>
+  <p>
+    home-ops already tracked basic project state (status, Now/Next/Later) synced from the
+    Obsidian vault, but <code>last_commit</code>/<code>commits_30d</code> were hand-typed
+    frontmatter, not real git data, and there was no stack/version/deploy-reachability tracking
+    at all. This adds a second, independently-refreshed data layer for Piotr's other MainCV
+    projects (strummy, landing-portfolio, inborr, shortscannon, etc.) — computed server-side on
+    elitedesk, with no new process on his Mac.
+  </p>
+  <table>
+    <tr><th>Change</th><th>Behavior now</th><th>Files</th></tr>
+    <tr>
+      <td>New <code>repo_meta</code>/<code>repo_synced_at</code> columns</td>
+      <td>Additive to the existing <code>projects</code> table — never overwrites the
+        vault-owned columns (<code>title</code>, <code>status</code>, <code>now_md</code>/etc.,
+        <code>raw_frontmatter</code>).</td>
+      <td class="files"><code>postgres/migrations/016_project_repo_meta.sql</code></td>
+    </tr>
+    <tr>
+      <td>New <code>POST /api/projects/repo-sync</code></td>
+      <td><b>UPDATE-only</b> — unlike <code>/api/projects/sync</code>, it never inserts or
+        deletes a row. A slug with no matching project is reported back in
+        <code>unknownSlugs</code>, not silently created. Row existence stays owned by the vault
+        sync path.</td>
+      <td class="files"><code>ingest/src/routes/projects.ts</code></td>
+    </tr>
+    <tr>
+      <td><code>github-repo-sync.py</code> (new, runs on elitedesk only)</td>
+      <td>Every 4h: per mapped project, pulls stack/version/commit-activity from the GitHub API
+        (or a direct local <code>git log</code> for <code>stano</code>, whose remote is a bare
+        repo already on elitedesk, not GitHub), plus a deploy-URL reachability check — run from
+        elitedesk specifically so it never flaps with Piotr's laptop sleeping. POSTs the batch to
+        <code>/api/projects/repo-sync</code>.</td>
+      <td class="files"><code>ops/elitedesk/github-repo-sync.py</code>,
+        <code>github-repo-sync.projects.json</code>,
+        <code>github-repo-sync.{service,timer,env.example}</code></td>
+    </tr>
+    <tr>
+      <td>Projects tab renders the new fields</td>
+      <td>Version badge, a live reachability dot on the deploy link (green/red, distinct from the
+        static vault <code>deployed</code> text), computed <code>commits_30d</code>/last-commit
+        labelled "repo data" (separate from the vault's hand-typed numbers), and a
+        "repo data N ago" freshness label next to the existing "vault sync N ago" one.</td>
+      <td class="files"><code>ingest/public/projects.js</code>, <code>projects.css</code>,
+        <code>projects-api.js</code></td>
+    </tr>
+  </table>
+  <div class="warn"><b>Not deployed yet.</b> Getting this live on elitedesk needs two manual
+    steps only Piotr can do: (1) create a GitHub PAT (fine-grained, <code>Contents: read-only</code>
+    + <code>Metadata: read-only</code> on his repos, including private ones like
+    <code>home-infra-docs</code>) and put it in <code>github-repo-sync.env</code>; (2) confirm
+    nothing else needs adjusting in <code>github-repo-sync.projects.json</code> before enabling
+    the timer.</div>
+
+  <h2 id="setup">2. Test setup</h2>
+  <p>Two independent things needed verifying: the Postgres/route contract, and the Python
+    script's actual behavior against real GitHub/git. Both were run this session — see the
+    <span class="verified">verified</span> callouts below for the exact commands and real output,
+    not hypothetical ones.</p>
+  <div class="warn"><b>Docker Desktop was unhealthy for most of this session</b> (returned
+    <code>500 Internal Server Error</code> on every API call). Rather than skip verification, a
+    disposable local Postgres 16 (Homebrew, <code>initdb</code>/<code>pg_ctl</code>, port
+    <code>55432</code>, deleted afterward) plus the real <code>node ingest/src/server.ts</code>
+    process (port <code>58080</code>) stood in for <code>docker compose up</code>. Same schema,
+    same route code, same script — only the container runtime differs. Re-run against the real
+    <code>docker compose</code> stack once Docker is healthy again, as a final sanity check
+    before deploying.</div>
+
+  <h2 id="t1">3. Test 1 — repo-sync is UPDATE-only</h2>
+  <p>The core contract this whole design leans on: <code>repo-sync</code> must never create or
+    delete a <code>projects</code> row.</p>
+  <div class="verified"><b>Verified</b> via
+    <code>ingest/src/routes/__tests__/projects-repo-sync.test.ts</code> against a real Postgres
+    (not mocked) — 6/6 passing:</div>
+  <pre><code>cd ingest
+DATABASE_URL=postgresql://postgres@127.0.0.1:5432/home_ops \
+INGEST_TOKEN=ci-token LOGS_PASSWORD=ci-password \
+npm test -- --run src/routes/__tests__/projects-repo-sync.test.ts
+
+# ✓ updates repo_meta + repo_synced_at for an existing slug
+# ✓ reports unknown slugs and never creates a row for them
+# ✓ never touches vault-owned columns (title/status/now_md)
+# ✓ requires a token
+# ✓ rejects a non-array entries payload
+# ✓ GET /api/projects and GET /api/projects/:slug include repo_meta + repo_synced_at</code></pre>
+  <p>To re-check by hand: <code>POST /api/projects/repo-sync</code> with a slug that doesn't
+    exist in <code>projects</code>, then <code>SELECT count(*) FROM projects WHERE
+    slug='that-slug'</code> — must be <code>0</code>.</p>
+
+  <h2 id="t2">4. Test 2 — github-repo-sync.py end-to-end</h2>
+  <p>Seeded 4 rows covering every dispatch path, then ran the real script against a real local
+    ingest server (no mocks anywhere in this test):</p>
+  <pre><code>psql -d home_ops -c "
+INSERT INTO public.projects (slug, title, status) VALUES
+  ('strummy', 'Strummy', 'hot'),
+  ('rhcsa-lab', 'RHCSA Lab', 'dormant'),
+  ('stano', 'Stano', 'warm'),
+  ('disk-usage-utility', 'Disk Usage Utility', 'dormant');"
+
+INGEST_URL=http://127.0.0.1:58080/api/ingest INGEST_TOKEN=ci-token \
+python3 ops/elitedesk/github-repo-sync.py</code></pre>
+  <div class="verified"><b>Verified — actual output this session:</b>
+    <pre><code>synced 4/15 projects (unknown slugs: ['landing-portfolio', 'inborr',
+  'instagram-stories-webhook', 'fanpage_cleaner', 'shortscannon', 'contentforge',
+  'justmeandguitars', 'job-search', 'PiotrRomanczuk', 'infrastructure', 'blogposts'])</code></pre>
+    Exactly right: 4 updated (the 4 seeded rows), 11 reported unknown (correctly <b>not</b>
+    inserted) since only those 4 slugs existed. <code>SELECT slug, repo_meta FROM projects</code>
+    afterward showed:
+    <ul>
+      <li><b>strummy</b> — real GitHub data: <code>version: "0.160.0"</code>, 8 key deps, real
+        <code>git.commits_30d: 77</code>/<code>last_commit: "2026-07-14"</code>, and — this hit
+        the actual production site — <code>deploy: {url: "strummy.vercel.app", reachable: true,
+        status_code: 200}</code>.</li>
+      <li><b>rhcsa-lab</b>, <b>disk-usage-utility</b> — correctly <code>{"unsupported": "..."}</code>,
+        no network/git call attempted.</li>
+      <li><b>stano</b> — correctly attempted the local-git branch and reported
+        <code>"local_git_dir not found: /home/piotr/git/stano.git"</code>, since that path only
+        exists on elitedesk. <b>This is the expected result when testing from the Mac</b> — the
+        real check is that it resolves once the timer actually runs on elitedesk.</li>
+    </ul>
+  </div>
+  <div class="expect"><b>Once deployed for real</b>, re-run this same check against elitedesk
+    directly and confirm <b>stano</b> also gets real <code>git.commits_30d</code>/<code>last_commit</code>
+    instead of the "not found" error above.</div>
+
+  <h2 id="t3">5. Test 3 — Projects tab renders the new fields</h2>
+  <p>With the ingest server + seeded rows from Test 2 still running, open
+    <code>http://127.0.0.1:58080/#tab=projects</code> (or the real console once deployed).</p>
+  <div class="expect"><b>Expected:</b>
+    <ul>
+      <li><b>strummy</b>'s grid card shows a small <code>v0.160.0</code> badge next to the health
+        emoji/deploy chip, and the deploy chip has a green dot (reachable).</li>
+      <li>Click into <b>strummy</b>'s drill page — the title row shows the version badge; the
+        deploy link has a green dot and its title tooltip (hover) reads "reachable · checked N
+        ago"; a new "repo data" line under the stack line reads
+        <code>computed 77 commits/30d, last 2026-07-14 · synced N ago</code>.</li>
+      <li><b>rhcsa-lab</b>'s drill page shows a "repo data" line with the unsupported reason
+        instead of a commits count.</li>
+      <li>The section bar (top of the Projects tab) shows both
+        <code>· vault sync N ago</code> and <code>· repo data N ago</code> — two independent
+        freshness labels, since the two producers run on different schedules (60s vs 4h).</li>
+      <li>A project with no <code>repo_meta</code> at all (never synced) shows none of the above
+        — no stray empty badges or dots.</li>
+    </ul>
+  </div>
+
+  <h2 id="edge">6. Edge cases worth checking</h2>
+  <ul>
+    <li><b>GITHUB_TOKEN missing</b>: the script still runs and POSTs, but every
+      <code>owner_repo</code> entry likely degrades to <code>{"error": "GET ... failed"}</code>
+      once GitHub's 60/hr anonymous limit is hit (this session had headroom left, so
+      <b>strummy</b> above got real data on an unauthenticated run — don't rely on that lasting;
+      set <code>GITHUB_TOKEN</code> before enabling the timer for real).</li>
+    <li><b>A vault slug renamed/removed</b>: the mapping file
+      (<code>github-repo-sync.projects.json</code>) is hand-maintained and won't auto-follow a
+      vault rename — a stale entry just shows up in <code>unknownSlugs</code> each run
+      (harmless, but worth pruning).</li>
+    <li><b>justmeandguitars' two nested repos</b>: only <code>overlay-app</code> is tracked per
+      the mapping file's <code>_note</code> — confirm that's still the right call once the
+      <code>planning/</code> repo has meaningful activity too.</li>
+    <li><b>Deploy URL that's actually down</b>: point <code>deploy_url</code> at something that
+      404s or times out and confirm the drill page's dot goes red / the chip's tooltip shows
+      "unreachable" rather than crashing the render.</li>
+  </ul>
+
+  <h2 id="automated">7. What's already covered by automated tests (don't re-check by hand)</h2>
+  <ul>
+    <li><code>cd ingest && npm run typecheck && npm run lint && npm test -- --run</code> —
+      TS types, Biome, Vitest (DB-dependent files correctly self-skip without
+      <code>DATABASE_URL</code>).</li>
+    <li><code>python3 -m unittest discover -s ops/elitedesk/tests -p 'test_*.py' -v</code> —
+      16/16: dispatch (unsupported/local-git/owner_repo), GitHub response parsing (node version +
+      deps, .NET release/tag fallback, python has no version attempt), local git log parsing, and
+      deploy reachability (2xx/4xx/5xx/network-error) — all against mocked
+      <code>urlopen</code>/<code>subprocess.run</code>, no real network.</li>
+    <li><code>python3 -m unittest discover -s agents/tests -p 'test_*.py' -v</code> — 24/24,
+      unaffected by this change.</li>
+    <li><code>python3 -m py_compile ops/elitedesk/github-repo-sync.py</code> and
+      <code>bash -n scripts/*.sh</code> — both clean (also wired into
+      <code>.github/workflows/check.yml</code>'s <code>python</code>/<code>scripts</code> jobs).</li>
+  </ul>
+  <p>These don't cover the live-network paths (real GitHub API, real deploy reachability, real
+    <code>stano</code> bare-repo path on elitedesk) — that's what Test 2 above already exercised
+    once for real, and what re-running on elitedesk itself confirms for good.</p>
+
+</div>
+</body>
+</html>

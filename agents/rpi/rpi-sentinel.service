@@ -1,0 +1,15 @@
+[Unit]
+Description=home-ops rpi sentinel (elitedesk watchdog + second-vantage deploy probes)
+After=network.target
+
+[Service]
+Type=simple
+EnvironmentFile=%h/.config/rpi-sentinel.env
+ExecStart=/usr/bin/python3 %h/bin/rpi-sentinel.py
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

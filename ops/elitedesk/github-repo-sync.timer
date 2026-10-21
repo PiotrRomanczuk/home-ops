@@ -1,0 +1,13 @@
+[Unit]
+Description=Fire home-ops github-repo-sync every 4 hours
+
+[Timer]
+# Comfortably inside GitHub's authenticated 5000 req/hr limit for ~14
+# projects x a few calls each. OnCalendar follows the host's system
+# timezone — doesn't matter here since this isn't a human-facing schedule.
+OnCalendar=*-*-* 0,4,8,12,16,20:00
+Persistent=true
+Unit=github-repo-sync.service
+
+[Install]
+WantedBy=timers.target

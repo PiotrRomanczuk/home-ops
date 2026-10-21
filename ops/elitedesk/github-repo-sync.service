@@ -1,0 +1,16 @@
+[Unit]
+Description=home-ops github-repo-sync — stack/version/deploy/git metadata for Piotr's other projects
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/logs-stack
+EnvironmentFile=%h/logs-stack/ops/elitedesk/github-repo-sync.env
+ExecStart=/usr/bin/python3 %h/logs-stack/ops/elitedesk/github-repo-sync.py
+# Stream stdout/stderr to journald — elitedesk-watcher picks it up into host_logs.
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

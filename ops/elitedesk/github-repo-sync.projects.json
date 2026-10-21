@@ -1,0 +1,21 @@
+{
+  "_comment": "slug -> where github-repo-sync.py finds repo/stack/deploy data. slug must match the vault projects/*.md frontmatter 'project:' key (same join key as the vault sync path). owner_repo: GitHub API. local_git_dir: a bare/working repo reachable by `git --git-dir=<path> log` directly from elitedesk (no GitHub involved). unsupported: no remote (or no .git at all) — github-repo-sync.py records repo_meta={source:'github-api', unsupported: <reason>} and moves on, it does not error.",
+
+  "strummy": { "owner_repo": "PiotrRomanczuk/strummy", "manifest": "node", "deploy_url": "strummy.vercel.app" },
+  "landing-portfolio": { "owner_repo": "PiotrRomanczuk/landing-portfolio", "manifest": "node", "deploy_url": "romanczuk.vercel.app" },
+  "inborr": { "owner_repo": "PiotrRomanczuk/INBORR---LandingPage", "manifest": "node", "deploy_url": "inborr.pl" },
+  "instagram-stories-webhook": { "owner_repo": "PiotrRomanczuk/instagram-stories-webhook", "manifest": "node" },
+  "fanpage_cleaner": { "owner_repo": "PiotrRomanczuk/fanpage-cleaner", "manifest": "node" },
+  "shortscannon": { "owner_repo": "PiotrRomanczuk/ShortsCannon", "manifest": "dotnet" },
+  "contentforge": { "owner_repo": "PiotrRomanczuk/ContentForge", "manifest": "dotnet" },
+  "justmeandguitars": { "owner_repo": "PiotrRomanczuk/justmeandguitars-overlay-app", "manifest": "node", "_note": "vault slug covers two nested repos (overlay-app + planning); overlay-app is primary since it's the shippable Next.js piece" },
+  "job-search": { "owner_repo": "PiotrRomanczuk/job-search", "manifest": "python" },
+  "PiotrRomanczuk": { "owner_repo": "PiotrRomanczuk/PiotrRomanczuk", "manifest": "none" },
+  "infrastructure": { "owner_repo": "PiotrRomanczuk/home-infra-docs", "manifest": "none" },
+
+  "stano": { "local_git_dir": "/home/piotr/git/stano.git", "_note": "bare repo already on elitedesk itself, not GitHub — confirmed 2026-07-16 via `ssh uwh git -C ~/Stano remote -v`; working copy moved to ~/code/stano on 2026-08-03" },
+
+  "rhcsa-lab": { "unsupported": "no git remote configured (local-only repo)" },
+  "disk-usage-utility": { "unsupported": "no .git directory at all" },
+  "blogposts": { "unsupported": "no .git directory at all" }
+}
