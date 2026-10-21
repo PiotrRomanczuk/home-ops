@@ -14,13 +14,13 @@ backups, and monitoring. For *what the system is* and *why*, read
 ```bash
 # Initial setup (once)
 ssh elitedesk
-git clone git@github.com:PiotrRomanczuk/home-ops.git ~/logs-stack
-cd ~/logs-stack
+git clone git@github.com:PiotrRomanczuk/home-ops.git ~/code/logs-stack
+cd ~/code/logs-stack
 ./scripts/generate-env.sh        # generates ./.env with strong secrets, prompts for LOGS_PASSWORD
 docker compose up -d
 
 # Subsequent deploys (after `git push`)
-ssh elitedesk "cd ~/logs-stack && git pull && docker compose up -d --build"
+ssh elitedesk "cd ~/code/logs-stack && git pull && docker compose up -d --build"
 ```
 
 Per-host agents run as systemd `--user` services (Linux) or WinSW services
@@ -90,11 +90,9 @@ docker exec home-ops-postgres-1 psql -U postgres -d home_ops -c \
 `pg_dump -Fc` runs nightly at 04:30 (elitedesk local time) via a systemd `--user`
 timer, with 14-day retention.
 
-> **Current state:** dumps land in a **local** directory on elitedesk
-> (`~/backups/home-ops/`), not the NAS. The unit is written to target the NAS
-> `monitoring-backup` SMB share (`BACKUP_DIR=/mnt/nas/monitoring-backup/home-ops`)
-> — installing the NAS mount is a pending hardening step so backups survive
-> loss of the host. See `ops/elitedesk/README.md` for the fstab entry.
+> **Current state (2026-10-21):** dumps go straight to the NAS over scp
+> (`admin@192.168.1.25:/share/MD0_DATA/Backups/home-ops/`), 14 days kept there;
+> nothing stays on elitedesk. See `ops/elitedesk/README.md`.
 
 ```bash
 # On elitedesk

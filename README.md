@@ -89,7 +89,7 @@ A **systemd timer** fires every 6 hours and runs a set of coding tasks through l
 **Deploy** (from the always-on server):
 ```bash
 ssh elitedesk
-cd ~/logs-stack
+cd ~/code/logs-stack
 git pull && docker compose up -d --build
 ```
 Per-host agents run as systemd `--user` services (Linux) or WinSW services (Windows).

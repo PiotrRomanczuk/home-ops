@@ -1,43 +1,58 @@
 #!/usr/bin/env bash
-# pg-backup.sh — nightly logical backup of the home_ops database.
+# pg-backup.sh — nightly logical backup of the home_ops database -> QNAP NAS.
 #
 # - Runs `pg_dump -Fc` inside the home-ops-postgres-1 container (no Postgres
 #   client install needed on the host).
-# - Writes a date-stamped .dump file to $BACKUP_DIR.
-# - Prunes files older than $RETENTION_DAYS.
+# - Ships the dump to the NAS over SSH/SCP (same key-auth mechanism already
+#   proven by strummy-prod-backup.sh) instead of a CIFS mount — no NAS
+#   credentials needed on this host at all.
+# - Prunes remote (and local staging) files older than $RETENTION_DAYS.
 #
-# Designed to be invoked by ops/elitedesk/pg-backup.timer at 04:30 daily, 30 min
-# after Kuma's 04:00 backup so they don't fight for the SMB mount.
+# Designed to be invoked by ops/elitedesk/pg-backup.timer at 04:30 daily, well
+# clear of the 02:30-03:00 window used by strummy-prod/studentmanager/stano
+# backups so nobody fights over the NAS SSH session.
 
 set -euo pipefail
 
-BACKUP_DIR="${BACKUP_DIR:-/mnt/nas/monitoring-backup/home-ops}"
+DEST_HOST="${DEST_HOST:-admin@192.168.1.25}"
+NAS_BASE="${NAS_BASE:-/share/MD0_DATA/Backups/home-ops}"
 RETENTION_DAYS="${RETENTION_DAYS:-14}"
 CONTAINER="${CONTAINER:-home-ops-postgres-1}"
 DB="${DB:-home_ops}"
 DB_USER="${DB_USER:-postgres}"
 
-if [[ ! -d "$BACKUP_DIR" ]]; then
-  printf 'BACKUP_DIR does not exist: %s\n' "$BACKUP_DIR" >&2
-  printf 'Mount the NAS share first — see ops/elitedesk/README.md for the fstab entry.\n' >&2
-  exit 1
-fi
+log() { echo "$(date -Is) $*"; }
 
 if ! docker inspect "$CONTAINER" >/dev/null 2>&1; then
   printf 'container %s is not running\n' "$CONTAINER" >&2
   exit 1
 fi
 
+WORK="$(mktemp -d)"; trap 'rm -rf "$WORK"' EXIT
 ts=$(date -u +%Y%m%dT%H%M%SZ)
-dest="${BACKUP_DIR}/home_ops_${ts}.dump"
+DUMP="$WORK/home_ops_${ts}.dump"
 
-docker exec "$CONTAINER" pg_dump -U "$DB_USER" -Fc "$DB" > "$dest.tmp"
-mv "$dest.tmp" "$dest"
+docker exec "$CONTAINER" pg_dump -U "$DB_USER" -Fc "$DB" > "$DUMP"
+bytes=$(stat -c%s "$DUMP" 2>/dev/null || stat -f%z "$DUMP")
+log "dump OK: ${DUMP} (${bytes} bytes)"
 
-# Prune old dumps. -mtime +N keeps the file if mtime is <= N days; +14 means
-# "older than 14 full 24h windows" → on day-15 the first one disappears.
-find "$BACKUP_DIR" -maxdepth 1 -type f -name 'home_ops_*.dump' -mtime "+${RETENTION_DAYS}" -delete
+ssh -o BatchMode=yes -o ConnectTimeout=15 "$DEST_HOST" "mkdir -p '$NAS_BASE'"
+scp -O -q -o BatchMode=yes -o ConnectTimeout=30 "$DUMP" "$DEST_HOST:$NAS_BASE/"
 
-bytes=$(stat -c%s "$dest" 2>/dev/null || stat -f%z "$dest")
-printf 'wrote %s (%s bytes); pruned dumps older than %d days from %s\n' \
-  "$dest" "$bytes" "$RETENTION_DAYS" "$BACKUP_DIR"
+# Prune remote dumps older than RETENTION_DAYS. The QNAP's `find` is BusyBox
+# and doesn't support -mtime/-delete, so pull the filename list back to this
+# host (GNU date/grep) and issue individual deletes instead — same approach
+# as kuma-backup.sh/beszel-backup.sh use for their SMB-based retention.
+CUTOFF_EPOCH=$(date -d "-${RETENTION_DAYS} days" +%s)
+ssh -o BatchMode=yes -o ConnectTimeout=15 "$DEST_HOST" "ls -1 '$NAS_BASE'" 2>/dev/null \
+  | grep -oE 'home_ops_[0-9]{8}T[0-9]{6}Z\.dump' \
+  | while read -r fname; do
+      fdate=$(echo "$fname" | grep -oE '[0-9]{8}' | head -1)
+      fepoch=$(date -d "$fdate" +%s)
+      if [ "$fepoch" -lt "$CUTOFF_EPOCH" ]; then
+        ssh -o BatchMode=yes -o ConnectTimeout=15 "$DEST_HOST" "rm -f '$NAS_BASE/$fname'"
+        log "  pruned remote: $fname"
+      fi
+    done || log "WARN: NAS retention pass had a non-fatal error"
+
+log "NAS OK: ${DEST_HOST}:${NAS_BASE}/$(basename "$DUMP"); pruned dumps older than ${RETENTION_DAYS} days"

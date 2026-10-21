@@ -11,7 +11,7 @@ stack. They're version-controlled here; installed by symlinking into
 
 | File | What | Install pattern |
 | --- | --- | --- |
-| `pg-backup.sh` | Nightly `pg_dump -Fc` of `home_ops` → `/mnt/nas/monitoring-backup/home-ops/` | `chmod +x` |
+| `pg-backup.sh` | Nightly `pg_dump -Fc` of `home_ops` → NAS over scp (`/share/MD0_DATA/Backups/home-ops/`) | `chmod +x` |
 | `pg-backup.service` | Oneshot unit that runs `pg-backup.sh` | `systemctl --user link` |
 | `pg-backup.timer` | Fires `pg-backup.service` daily at 04:30 | `systemctl --user enable --now` |
 | `daily-digest.sh` | Fetches `GET /api/digest`, renders, emails; `--mode morning\|evening` | `chmod +x` |
@@ -45,42 +45,29 @@ Migrations `020_digest_cards.sql` + `021_decisions.sql` add the routine
 contract the digest renders (see "Daily digest email" below). Migration 014's
 `queue_night_digest()` is no longer called: the GPU lane is off.
 
-## Prerequisites — NAS mount
+## Prerequisites — NAS over SSH
 
-`pg-backup.sh` writes to `/mnt/nas/monitoring-backup/home-ops/`. The share
-must be mounted before the timer fires. If not yet set up:
+`pg-backup.sh` ships the dump to the NAS with `scp` (`admin@192.168.1.25:/share/MD0_DATA/Backups/home-ops/`),
+the same key-auth path `strummy-prod-backup.sh` uses. No CIFS mount, no NAS
+password on this host. One-time check that the key works:
 
 ```bash
-# As root on elitedesk, one-time setup
-sudo mkdir -p /mnt/nas/monitoring-backup
-sudo apt install -y cifs-utils
-sudo install -m 600 -o root -g root /dev/null /etc/kuma-backup/credentials
-# Put the kuma-backup user's NAS password into /etc/kuma-backup/credentials:
-#   username=kuma-backup
-#   password=<from password manager>
-# (Reuses the same SMB user the Pi already authenticates as.)
-
-# /etc/fstab
-//192.168.1.25/monitoring-backup /mnt/nas/monitoring-backup cifs \
-  credentials=/etc/kuma-backup/credentials,uid=$(id -u <user>),gid=$(id -g <user>),file_mode=0640,dir_mode=0750,_netdev,nofail 0 0
-
-sudo mount -a
-mkdir -p /mnt/nas/monitoring-backup/home-ops
+ssh -o BatchMode=yes admin@192.168.1.25 'mkdir -p /share/MD0_DATA/Backups/home-ops && echo ok'
 ```
 
-Reuses the existing `monitoring-backup` SMB share documented in
-`~/Desktop/MainCV/infrastructure/HOSTS.md` (Pi backs Kuma into the same share).
+Overrides: `DEST_HOST`, `NAS_BASE`, `RETENTION_DAYS` (default 14; pruned on the
+NAS by filename date, since QNAP's BusyBox `find` has no `-mtime`).
 
 ## Install the timer
 
 ```bash
 # After git clone has finished and the stack is running
-cd ~/logs-stack
+cd ~/code/logs-stack
 chmod +x ops/elitedesk/pg-backup.sh
 
 # Symlink (not copy) so future `git pull` updates the unit files in place.
-ln -sf ~/logs-stack/ops/elitedesk/pg-backup.service ~/.config/systemd/user/
-ln -sf ~/logs-stack/ops/elitedesk/pg-backup.timer   ~/.config/systemd/user/
+ln -sf ~/code/logs-stack/ops/elitedesk/pg-backup.service ~/.config/systemd/user/
+ln -sf ~/code/logs-stack/ops/elitedesk/pg-backup.timer   ~/.config/systemd/user/
 
 systemctl --user daemon-reload
 systemctl --user enable --now pg-backup.timer
@@ -102,8 +89,8 @@ systemctl --user start pg-backup.service
 journalctl --user -u pg-backup.service -n 30
 
 # Confirm the dump exists and is restorable
-ls -lh /mnt/nas/monitoring-backup/home-ops/
-docker run --rm -i postgres:17 pg_restore --list < /mnt/nas/monitoring-backup/home-ops/home_ops_*.dump | head
+ssh admin@192.168.1.25 'ls -lh /share/MD0_DATA/Backups/home-ops/ | tail -3'
+ssh admin@192.168.1.25 'cat /share/MD0_DATA/Backups/home-ops/home_ops_<ts>.dump' | docker run --rm -i postgres:17 pg_restore --list | head
 ```
 
 ---
@@ -213,7 +200,7 @@ chmod 600 ~/.msmtprc
 ## Config
 
 ```bash
-cd ~/logs-stack
+cd ~/code/logs-stack
 cp ops/elitedesk/daily-digest.env.example ops/elitedesk/daily-digest.env
 # Set DIGEST_TO / DIGEST_FROM. Leave DIGEST_TRANSPORT=smtplib (default) unless
 # you set up msmtp above. daily-digest.env is gitignored; the password lives in
@@ -238,10 +225,10 @@ ops/elitedesk/daily-digest.sh --mode evening  # evening (also queues the night j
 
 ```bash
 # Morning + evening — symlink both service/timer pairs
-ln -sf ~/logs-stack/ops/elitedesk/daily-digest.service         ~/.config/systemd/user/
-ln -sf ~/logs-stack/ops/elitedesk/daily-digest.timer           ~/.config/systemd/user/
-ln -sf ~/logs-stack/ops/elitedesk/daily-digest-evening.service ~/.config/systemd/user/
-ln -sf ~/logs-stack/ops/elitedesk/daily-digest-evening.timer   ~/.config/systemd/user/
+ln -sf ~/code/logs-stack/ops/elitedesk/daily-digest.service         ~/.config/systemd/user/
+ln -sf ~/code/logs-stack/ops/elitedesk/daily-digest.timer           ~/.config/systemd/user/
+ln -sf ~/code/logs-stack/ops/elitedesk/daily-digest-evening.service ~/.config/systemd/user/
+ln -sf ~/code/logs-stack/ops/elitedesk/daily-digest-evening.timer   ~/.config/systemd/user/
 systemctl --user daemon-reload
 systemctl --user enable --now daily-digest.timer daily-digest-evening.timer
 systemctl --user list-timers --all | grep daily-digest
