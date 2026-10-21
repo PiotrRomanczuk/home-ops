@@ -161,13 +161,13 @@ start: "(1) which projects start dual-writing domain events first?
 
 **Carryover** (UI / shell actions on the actual hosts — not file edits):
 - [ ] Tailscale admin console: delete stale devices at https://login.tailscale.com/admin/machines (from session 2)
-- [x] 2026-06-07 elitedesk: deployed session 3 changes — `cd ~/logs-stack && git pull && docker compose down && docker compose up -d --build`. Postgres switched alpine→debian 17.10 with pg_cron, pgdata preserved, ingest rebuilt with /api/metrics.
+- [x] 2026-06-07 elitedesk: deployed session 3 changes — `cd ~/code/logs-stack && git pull && docker compose down && docker compose up -d --build`. Postgres switched alpine→debian 17.10 with pg_cron, pgdata preserved, ingest rebuilt with /api/metrics.
 - [x] 2026-06-07 elitedesk: applied 002_pg_cron.sql + 003_host_metrics.sql against the running DB. 3 cron jobs scheduled (host_logs daily 04:00, gpu_jobs daily 04:15, host_metrics hourly :30).
-- [x] 2026-06-07 elitedesk: Phase G deployed — psutil 7.0.0 already present (apt install unnecessary), `~/bin/elitedesk-watcher.py` overwritten from `~/logs-stack/agents/elitedesk/elitedesk-watcher.py`, `systemctl --user restart elitedesk-watcher.service`, journal confirms `metrics=on`, first samples landed in `host_metrics` with cpu/mem/disk/net + top_cpu/top_mem attribution.
+- [x] 2026-06-07 elitedesk: Phase G deployed — psutil 7.0.0 already present (apt install unnecessary), `~/bin/elitedesk-watcher.py` overwritten from `~/code/logs-stack/agents/elitedesk/elitedesk-watcher.py`, `systemctl --user restart elitedesk-watcher.service`, journal confirms `metrics=on`, first samples landed in `host_metrics` with cpu/mem/disk/net + top_cpu/top_mem attribution.
 - [ ] elitedesk: mount the NAS share + install the pg-backup timer per `ops/elitedesk/README.md`.
 - [ ] Pi (Kuma): add the HTTP monitor per README → "Monitoring" section.
 
-**Deploy mechanism note (elitedesk-watcher)**: there is no deploy script. The watcher runs from `~/bin/elitedesk-watcher.py` (NOT from the cloned repo) as a user-scope systemd service (`~/.config/systemd/user/elitedesk-watcher.service`, enabled). Pulling the repo does not update the running code — you must `cp ~/logs-stack/agents/elitedesk/elitedesk-watcher.py ~/bin/elitedesk-watcher.py && systemctl --user restart elitedesk-watcher.service`. Same pattern will apply to win10 (via WinSW) and rpi when those agents land — consider writing a small `scripts/deploy-agent.sh` to formalize this.
+**Deploy mechanism note (elitedesk-watcher)**: there is no deploy script. The watcher runs from `~/bin/elitedesk-watcher.py` (NOT from the cloned repo) as a user-scope systemd service (`~/.config/systemd/user/elitedesk-watcher.service`, enabled). Pulling the repo does not update the running code — you must `cp ~/code/logs-stack/agents/elitedesk/elitedesk-watcher.py ~/bin/elitedesk-watcher.py && systemctl --user restart elitedesk-watcher.service`. Same pattern will apply to win10 (via WinSW) and rpi when those agents land — consider writing a small `scripts/deploy-agent.sh` to formalize this.
 
 **Minor follow-up** (low-priority):
 - [ ] `.github/workflows/check.yml`: bump `actions/checkout` and `actions/setup-node` to v5 when stable, to avoid Node 20 deprecation warning (deadline Sep 2026).

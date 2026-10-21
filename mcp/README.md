@@ -82,7 +82,7 @@ or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
       "args": ["run", "/path/to/home-ops/mcp/server.py"],
       "env": {
         "INGEST_URL": "http://elitedesk.<tailnet>.ts.net:64421/api/ingest",
-        "INGEST_TOKEN": "<paste from ~/logs-stack/.env on elitedesk>"
+        "INGEST_TOKEN": "<paste from ~/code/logs-stack/.env on elitedesk>"
       }
     }
   }

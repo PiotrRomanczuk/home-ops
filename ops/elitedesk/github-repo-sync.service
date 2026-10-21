@@ -5,9 +5,9 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-WorkingDirectory=%h/logs-stack
-EnvironmentFile=%h/logs-stack/ops/elitedesk/github-repo-sync.env
-ExecStart=/usr/bin/python3 %h/logs-stack/ops/elitedesk/github-repo-sync.py
+WorkingDirectory=%h/code/logs-stack
+EnvironmentFile=%h/code/logs-stack/ops/elitedesk/github-repo-sync.env
+ExecStart=/usr/bin/python3 %h/code/logs-stack/ops/elitedesk/github-repo-sync.py
 # Stream stdout/stderr to journald — elitedesk-watcher picks it up into host_logs.
 StandardOutput=journal
 StandardError=journal

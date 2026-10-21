@@ -5,9 +5,9 @@ Wants=remote-fs.target
 
 [Service]
 Type=oneshot
-# Run from the repo clone; the script does its own cd-less work via $BACKUP_DIR.
-WorkingDirectory=%h/logs-stack
-ExecStart=%h/logs-stack/ops/elitedesk/pg-backup.sh
+# Run from the repo clone; the script stages the dump in a temp dir and scp's it to the NAS.
+WorkingDirectory=%h/code/logs-stack
+ExecStart=%h/code/logs-stack/ops/elitedesk/pg-backup.sh
 # Stream stdout/stderr to journald — gets picked up by elitedesk-watcher and lands in host_logs.
 StandardOutput=journal
 StandardError=journal
