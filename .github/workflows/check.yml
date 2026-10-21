@@ -64,6 +64,7 @@ jobs:
             ops/elitedesk/seo_db.py \
             ops/elitedesk/seo_plan.py \
             ops/elitedesk/seo_decide.py \
+            ops/elitedesk/pr_decide.py \
             ops/elitedesk/seo_plan_db.py \
             ops/elitedesk/seo_drift.py \
             ops/elitedesk/seo_opps.py \
