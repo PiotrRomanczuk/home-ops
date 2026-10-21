@@ -5,7 +5,8 @@
 # seo_analysis_daily, hands them to headless Claude Code *inside a clone of the
 # gitara-lekcje repo*, lets it edit the site (titles, FAQ, district / metro
 # sections, a new poradnik article…), runs the repo's quality gates and opens a
-# pull request. It never merges: Piotr reviews every PR.
+# pull request. It never merges on its own: it asks in home-ops Decisions
+# (seo_decide.py) and merges only after a "yes".
 #
 # Safety rails: fresh branch from origin/main every run; skip when an open
 # `seo-auto` PR already exists; failed gates → changes discarded, PR not opened;
@@ -33,6 +34,8 @@ if [[ ! -d "$REPO/.git" ]]; then
   log "cloning $GIT_URL → $REPO"; git clone -q "$GIT_URL" "$REPO"
 fi
 cd "$REPO"
+# Answers first: a "yes" from Decisions merges last week's PR, so this run is not blocked by it.
+python3 "$SCRIPT_DIR/seo_decide.py" || log "seo_decide failed — continuing"
 if [[ -n "$(gh pr list --label "$LABEL" --state open --json number --jq '.[].number')" ]]; then
   log "an open $LABEL PR already exists — not stacking another; exit 0"; exit 0
 fi
@@ -121,6 +124,7 @@ gh label create "$LABEL" --color 1D76DB --description "automatyczna propozycja S
 { printf '%s\n\n## Werdykt sędziego\n\n```json\n%s\n```\n' "$(cat "$BRIEF")" "$VERDICT"; } > "${BRIEF}.pr"
 PR_URL="$(gh pr create --label "$LABEL" --title "SEO: propozycje z tygodnia do ${TODAY}" --body-file "${BRIEF}.pr")"
 log "PR opened: $PR_URL"
+python3 "$SCRIPT_DIR/seo_decide.py" || log "seo_decide failed — PR opened but not asked about"
 if [[ -n "$READY_IDS" ]]; then
   docker exec -i "$CONTAINER" psql -U "$DB_USER" -d "$DB" -X -q -c \
     "UPDATE seo_plan SET status='in_pr', pr_url='${PR_URL}', updated_at=now() WHERE id IN (${READY_IDS}) AND status='ready'"
