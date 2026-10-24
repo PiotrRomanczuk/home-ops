@@ -125,3 +125,6 @@ class Gmail:
 
     def create_filter(self, criteria: dict, action: dict) -> dict:
         return self.call('POST', '/settings/filters', body={'criteria': criteria, 'action': action})
+
+    def delete_filter(self, filter_id: str) -> None:
+        self.call('DELETE', f'/settings/filters/{filter_id}')
