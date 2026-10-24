@@ -1,8 +1,9 @@
-"""gmail_apply.py — write category labels to Gmail, journaled and reversible.
+"""gmail_apply.py — journaled, reversible label changes in Gmail.
 
-Only ever ADDS user labels. No archiving, no read/unread changes, no trash.
-Every batch is appended to a JSONL journal so `undo` can strip exactly the
-labels this tool added.
+`apply_categories` only ADDS user labels. `move` archives (drop INBOX) or
+trashes (add TRASH; Gmail purges after 30 days) an explicit id list. Every
+batch is appended to a JSONL journal so `undo` restores exactly what changed.
+Never permanently deletes.
 """
 from __future__ import annotations
 
@@ -44,13 +45,34 @@ def apply_categories(gmail: Gmail, mapping: dict[str, list[str]], journal: Path,
     return done
 
 
+def move(gmail: Gmail, op: str, ids: list[str], inbox_ids: set[str], journal: Path,
+         note: str = '', log=print) -> int:
+    """op='trash' → add TRASH; op='archive' → remove INBOX. inbox_ids lets undo restore INBOX."""
+    if op not in ('trash', 'archive'):
+        raise ValueError(op)
+    if op == 'trash':
+        gmail.batch_modify(ids, add=['TRASH'])
+    else:
+        gmail.batch_modify(ids, remove=['INBOX'])
+    journal.parent.mkdir(parents=True, exist_ok=True)
+    with journal.open('a') as j:
+        j.write(json.dumps({'ts': int(time.time()), 'op': op, 'note': note, 'ids': ids,
+                            'inbox_ids': sorted(inbox_ids & set(ids))}) + '\n')
+    log(f'  {op} {note}: {len(ids)}')
+    return len(ids)
+
+
 def undo(gmail: Gmail, journal: Path, log=print) -> int:
-    """Reverse every 'add' entry in the journal (newest first)."""
+    """Reverse every entry in the journal (newest first)."""
     entries = [json.loads(line) for line in journal.read_text().splitlines() if line.strip()]
     undone = 0
     for e in reversed(entries):
         if e['op'] == 'add':
             gmail.batch_modify(e['ids'], remove=[e['label_id']])
-            undone += len(e['ids'])
-            log(f'  removed {e["label"]} from {len(e["ids"])}')
+        elif e['op'] == 'trash':
+            gmail.batch_modify(e['ids'], remove=['TRASH'])
+        if e['op'] in ('trash', 'archive') and e['inbox_ids']:
+            gmail.batch_modify(e['inbox_ids'], add=['INBOX'])
+        undone += len(e['ids'])
+        log(f'  undone {e["op"]} {e.get("label") or e.get("note", "")}: {len(e["ids"])}')
     return undone

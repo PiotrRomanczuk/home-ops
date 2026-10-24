@@ -72,6 +72,7 @@ jobs:
             ops/elitedesk/gmail_classify.py \
             ops/elitedesk/gmail_apply.py \
             ops/elitedesk/gmail_imap.py \
+            ops/elitedesk/gmail_unsub.py \
             ops/elitedesk/seo_plan_db.py \
             ops/elitedesk/seo_drift.py \
             ops/elitedesk/seo_opps.py \

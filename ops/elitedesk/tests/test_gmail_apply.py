@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from gmail_apply import apply_categories, ensure_labels, undo  # noqa: E402
+from gmail_apply import apply_categories, ensure_labels, move, undo  # noqa: E402
 
 
 class FakeGmail:
@@ -48,6 +48,23 @@ class ApplyTest(unittest.TestCase):
             self.assertEqual(undo(g, journal, log=lambda *_: None), 3)
             self.assertEqual(sorted(g.modified), [(('a', 'b'), (), ('id-Promocje',)),
                                                   (('c',), (), ('id-Ludzie',))])
+
+
+    def test_trash_and_archive_undo_restore_inbox(self):
+        g = FakeGmail()
+        with tempfile.TemporaryDirectory() as d:
+            journal = Path(d) / 'j.jsonl'
+            move(g, 'trash', ['a', 'b'], {'a'}, journal, 'x', log=lambda *_: None)
+            move(g, 'archive', ['c'], {'c'}, journal, 'y', log=lambda *_: None)
+            self.assertEqual(g.modified, [(('a', 'b'), ('TRASH',), ()), (('c',), (), ('INBOX',))])
+            g.modified.clear()
+            undo(g, journal, log=lambda *_: None)
+            self.assertEqual(g.modified, [(('c',), ('INBOX',), ()),
+                                          (('a', 'b'), (), ('TRASH',)), (('a',), ('INBOX',), ())])
+
+    def test_move_rejects_unknown_op(self):
+        with self.assertRaises(ValueError):
+            move(FakeGmail(), 'delete', ['a'], set(), Path('/dev/null'))
 
 
 if __name__ == '__main__':
