@@ -62,6 +62,16 @@ class ApplyTest(unittest.TestCase):
             self.assertEqual(g.modified, [(('c',), ('INBOX',), ()),
                                           (('a', 'b'), (), ('TRASH',)), (('a',), ('INBOX',), ())])
 
+    def test_read_undo_restores_unread_only_where_it_was(self):
+        g = FakeGmail()
+        with tempfile.TemporaryDirectory() as d:
+            journal = Path(d) / 'j.jsonl'
+            move(g, 'read', ['a', 'b'], {'b'}, journal, log=lambda *_: None)
+            self.assertEqual(g.modified, [(('a', 'b'), (), ('UNREAD',))])
+            g.modified.clear()
+            undo(g, journal, log=lambda *_: None)
+            self.assertEqual(g.modified, [(('b',), ('UNREAD',), ())])
+
     def test_move_rejects_unknown_op(self):
         with self.assertRaises(ValueError):
             move(FakeGmail(), 'delete', ['a'], set(), Path('/dev/null'))

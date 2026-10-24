@@ -45,19 +45,24 @@ def apply_categories(gmail: Gmail, mapping: dict[str, list[str]], journal: Path,
     return done
 
 
-def move(gmail: Gmail, op: str, ids: list[str], inbox_ids: set[str], journal: Path,
+OPS = {'trash': (['TRASH'], []), 'archive': ([], ['INBOX']), 'read': ([], ['UNREAD'])}
+
+
+def move(gmail: Gmail, op: str, ids: list[str], restore_ids: set[str], journal: Path,
          note: str = '', log=print) -> int:
-    """op='trash' → add TRASH; op='archive' → remove INBOX. inbox_ids lets undo restore INBOX."""
-    if op not in ('trash', 'archive'):
+    """trash → add TRASH; archive → remove INBOX; read → remove UNREAD.
+
+    restore_ids = messages that had INBOX (trash/archive) or UNREAD (read) before,
+    so undo puts back exactly that state.
+    """
+    if op not in OPS:
         raise ValueError(op)
-    if op == 'trash':
-        gmail.batch_modify(ids, add=['TRASH'])
-    else:
-        gmail.batch_modify(ids, remove=['INBOX'])
+    add, remove = OPS[op]
+    gmail.batch_modify(ids, add=add, remove=remove)
     journal.parent.mkdir(parents=True, exist_ok=True)
     with journal.open('a') as j:
         j.write(json.dumps({'ts': int(time.time()), 'op': op, 'note': note, 'ids': ids,
-                            'inbox_ids': sorted(inbox_ids & set(ids))}) + '\n')
+                            'inbox_ids': sorted(restore_ids & set(ids))}) + '\n')
     log(f'  {op} {note}: {len(ids)}')
     return len(ids)
 
@@ -73,6 +78,8 @@ def undo(gmail: Gmail, journal: Path, log=print) -> int:
             gmail.batch_modify(e['ids'], remove=['TRASH'])
         if e['op'] in ('trash', 'archive') and e['inbox_ids']:
             gmail.batch_modify(e['inbox_ids'], add=['INBOX'])
+        elif e['op'] == 'read' and e['inbox_ids']:
+            gmail.batch_modify(e['inbox_ids'], add=['UNREAD'])
         undone += len(e['ids'])
         log(f'  undone {e["op"]} {e.get("label") or e.get("note", "")}: {len(e["ids"])}')
     return undone
