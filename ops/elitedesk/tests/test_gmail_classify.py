@@ -8,7 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import gmail_inventory  # noqa: E402
-from gmail_classify import EXAMPLE_RULES, FALLBACK, classify, classify_all, load_rules, report  # noqa: E402
+from gmail_classify import EXAMPLE_RULES, FALLBACK, classify, classify_all, is_protected, load_rules, report  # noqa: E402
 
 CFG = load_rules(Path(__file__).resolve().parent / 'fixtures' / 'gmail_rules.test.json')
 ME = 'p.romanczuk@gmail.com'
@@ -59,6 +59,18 @@ class ClassifyTest(unittest.TestCase):
         self.assertEqual(self.label(row('a@list.pl', unsub=1, labels='CATEGORY_UPDATES')), 'Newslettery')
         self.assertEqual(self.label(row('a@bot.pl', labels='CATEGORY_UPDATES')), 'Powiadomienia')
         self.assertEqual(self.label(row('a@bot.pl', labels='INBOX')), FALLBACK)
+
+
+class ProtectTest(unittest.TestCase):
+    CFG = {**CFG, 'protect_labels': ('Praca', 'Ludzie'),
+           'protect_subject': __import__('re').compile(r'(payslip|umow[ay])', __import__('re').I)}
+
+    def test_protected(self):
+        self.assertTrue(is_protected('Praca/Zatrudnienie', 'x', '', self.CFG))
+        self.assertTrue(is_protected('Promocje', 'Payslip Week 22', '', self.CFG))
+        self.assertTrue(is_protected('Promocje', 'x', 'INBOX,STARRED', self.CFG))
+        self.assertFalse(is_protected('Promocje', '-50% na wszystko', 'INBOX', self.CFG))
+        self.assertFalse(is_protected('Pracownia', 'x', '', self.CFG))  # prefix must be a whole segment
 
 
 class ExampleRulesTest(unittest.TestCase):

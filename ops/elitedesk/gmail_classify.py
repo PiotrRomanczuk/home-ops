@@ -56,7 +56,20 @@ def load_rules(path: Path = RULES_PATH) -> dict:
     rules = [Rule(r['label'], tuple(s.lower() for s in r.get('from', [])),
                   re.compile(r['subject'], re.I) if r.get('subject') else None)
              for r in raw['rules']]
-    return {'rules': rules, 'me': set(raw['me']), 'freemail': set(raw['freemail'])}
+    protect = raw.get('protect', {})
+    return {'rules': rules, 'me': set(raw['me']), 'freemail': set(raw['freemail']),
+            'protect_labels': tuple(protect.get('labels', ())),
+            'protect_subject': re.compile(protect['subject'], re.I) if protect.get('subject') else None}
+
+
+def is_protected(label: str, subject: str, labels: str, cfg: dict) -> bool:
+    """True when a message must never be trashed (starred, protected category, or document-like subject)."""
+    if 'STARRED' in (labels or ''):
+        return True
+    if any(label == p or label.startswith(p + '/') for p in cfg.get('protect_labels', ())):
+        return True
+    rx = cfg.get('protect_subject')
+    return bool(rx and rx.search(subject or ''))
 
 
 def correspondents(db: sqlite3.Connection, me: set[str]) -> set[str]:

@@ -109,5 +109,16 @@
     "groupon.pl"
    ]
   }
- ]
+ ],
+ "protect": {
+  "_doc": "Never trash: category label prefixes or subject regex (payslips, tax, contracts, legal).",
+  "labels": [
+   "Ludzie",
+   "Praca/Zatrudnienie",
+   "Prawne",
+   "Urzędy",
+   "Finanse"
+  ],
+  "subject": "(payslip|\\bP60\\b|\\bP45\\b|HMRC|umow[ay]|faktur|invoice|PIT-|zaświadcz|wezwani)"
+ }
 }
