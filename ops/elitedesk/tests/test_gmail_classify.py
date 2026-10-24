@@ -8,7 +8,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import gmail_inventory  # noqa: E402
-from gmail_classify import EXAMPLE_RULES, FALLBACK, classify, classify_all, is_protected, load_rules, report  # noqa: E402
+from gmail_report import report  # noqa: E402
+from gmail_classify import EXAMPLE_RULES, FALLBACK, Rule, classify, classify_all, is_protected, load_rules, subcategory  # noqa: E402
 
 CFG = load_rules(Path(__file__).resolve().parent / 'fixtures' / 'gmail_rules.test.json')
 ME = 'p.romanczuk@gmail.com'
@@ -71,6 +72,17 @@ class ProtectTest(unittest.TestCase):
         self.assertTrue(is_protected('Promocje', 'x', 'INBOX,STARRED', self.CFG))
         self.assertFalse(is_protected('Promocje', '-50% na wszystko', 'INBOX', self.CFG))
         self.assertFalse(is_protected('Pracownia', 'x', '', self.CFG))  # prefix must be a whole segment
+
+
+class SubcategoryTest(unittest.TestCase):
+    CFG = {**CFG, 'subrules': [('Dev/GitHub', Rule('Dev/GitHub/CI', subject=__import__('re').compile('run failed', 2)))]}
+
+    def test_child_label_added_alongside_parent(self):
+        self.assertEqual(subcategory('Dev/GitHub', row('n@github.com', 'Run failed: E2E'), self.CFG), 'Dev/GitHub/CI')
+        self.assertIsNone(subcategory('Dev/GitHub', row('n@github.com', 'PR merged'), self.CFG))
+        self.assertEqual(subcategory('Ludzie', row('ania@wp.pl'), self.CFG), 'Ludzie/Znajomi')
+        self.assertEqual(subcategory('Ludzie', row('jan@firma.pl'), self.CFG), 'Ludzie/Firmy')
+        self.assertIsNone(subcategory('Ludzie', row('ania@wp.pl'), CFG))  # no subrules configured → flat
 
 
 class ExampleRulesTest(unittest.TestCase):

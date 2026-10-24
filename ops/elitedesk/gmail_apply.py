@@ -48,6 +48,30 @@ def apply_categories(gmail: Gmail, mapping: dict[str, list[str]], journal: Path,
 OPS = {'trash': (['TRASH'], []), 'archive': ([], ['INBOX']), 'read': ([], ['UNREAD'])}
 
 
+def reconcile(gmail: Gmail, old: dict[str, list[str]], new: dict[str, list[str]], journal: Path,
+              log=print) -> int:
+    """Strip labels a message no longer belongs to (old mapping) and add its new ones."""
+    old_of: dict[str, set[str]] = {}
+    for name, ids in old.items():
+        for i in ids:
+            old_of.setdefault(i, set()).add(name)
+    stale: dict[str, list[str]] = {}
+    for name, ids in new.items():
+        for i in ids:
+            for prev in old_of.get(i, ()):  # a parent stays valid if still in new
+                if i not in set(new.get(prev, ())):
+                    stale.setdefault(prev, []).append(i)
+    ids_by_label = ensure_labels(gmail, sorted(set(stale) | set(new)), log)
+    for name, ids in stale.items():
+        ids = sorted(set(ids))
+        gmail.batch_modify(ids, remove=[ids_by_label[name]])
+        with journal.open('a') as j:
+            j.write(json.dumps({'ts': int(time.time()), 'op': 'remove', 'label': name,
+                                'label_id': ids_by_label[name], 'ids': ids}) + '\n')
+        log(f'  -{name}: {len(ids)}')
+    return apply_categories(gmail, new, journal, log) + sum(len(v) for v in stale.values())
+
+
 def move(gmail: Gmail, op: str, ids: list[str], restore_ids: set[str], journal: Path,
          note: str = '', log=print) -> int:
     """trash → add TRASH; archive → remove INBOX; read → remove UNREAD.
@@ -74,6 +98,8 @@ def undo(gmail: Gmail, journal: Path, log=print) -> int:
     for e in reversed(entries):
         if e['op'] == 'add':
             gmail.batch_modify(e['ids'], remove=[e['label_id']])
+        elif e['op'] == 'remove':
+            gmail.batch_modify(e['ids'], add=[e['label_id']])
         elif e['op'] == 'trash':
             gmail.batch_modify(e['ids'], remove=['TRASH'])
         if e['op'] in ('trash', 'archive') and e['inbox_ids']:

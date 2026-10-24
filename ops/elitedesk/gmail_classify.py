@@ -15,7 +15,7 @@ import json
 import os
 import re
 import sqlite3
-from collections import Counter, defaultdict
+from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -57,7 +57,10 @@ def load_rules(path: Path = RULES_PATH) -> dict:
                   re.compile(r['subject'], re.I) if r.get('subject') else None)
              for r in raw['rules']]
     protect = raw.get('protect', {})
-    return {'rules': rules, 'me': set(raw['me']), 'freemail': set(raw['freemail']),
+    subrules = [(r['parent'], Rule(r['label'], tuple(x.lower() for x in r.get('from', [])),
+                                   re.compile(r['subject'], re.I) if r.get('subject') else None))
+                for r in raw.get('subrules', [])]
+    return {'rules': rules, 'subrules': subrules, 'me': set(raw['me']), 'freemail': set(raw['freemail']),
             'protect_labels': tuple(protect.get('labels', ())),
             'protect_subject': re.compile(protect['subject'], re.I) if protect.get('subject') else None}
 
@@ -109,33 +112,26 @@ def classify(row: dict, cfg: dict, people: set[str]) -> tuple[str, str]:
     return FALLBACK, 'none'
 
 
-def classify_all(db: sqlite3.Connection, cfg: dict) -> dict[str, list[str]]:
-    """label -> message ids, covering every row in the inventory."""
+def subcategory(label: str, row, cfg: dict) -> str | None:
+    """Optional child label refining `label` (first matching subrule of that parent)."""
+    addr, subject = row['from_addr'] or '', row['subject'] or ''
+    for parent, rule in cfg.get('subrules', ()):
+        if parent == label and rule.hits(addr, subject):
+            return rule.label
+    if label == 'Ludzie' and cfg.get('subrules'):
+        return 'Ludzie/Znajomi' if addr.rpartition('@')[2] in cfg['freemail'] else 'Ludzie/Firmy'
+    return None
+
+
+def classify_all(db: sqlite3.Connection, cfg: dict, *, with_sub: bool = False) -> dict[str, list[str]]:
+    """label -> message ids, covering every row. with_sub also maps child labels (a message then has parent + child)."""
     db.row_factory = sqlite3.Row
     people = correspondents(db, cfg['me'])
     out: dict[str, list[str]] = defaultdict(list)
     for row in db.execute('SELECT * FROM messages'):
-        out[classify(row, cfg, people)[0]].append(row['id'])
+        label = classify(row, cfg, people)[0]
+        out[label].append(row['id'])
+        child = subcategory(label, row, cfg) if with_sub else None
+        if child:
+            out[child].append(row['id'])
     return dict(out)
-
-
-def report(db: sqlite3.Connection, cfg: dict, top: int = 8) -> str:
-    """Markdown coverage report: per label count, reasons, top senders."""
-    db.row_factory = sqlite3.Row
-    people = correspondents(db, cfg['me'])
-    counts: Counter = Counter()
-    reasons: dict[str, Counter] = defaultdict(Counter)
-    senders: dict[str, Counter] = defaultdict(Counter)
-    for row in db.execute('SELECT from_addr, subject, labels, to_addrs, has_unsub FROM messages'):
-        label, why = classify(row, cfg, people)
-        counts[label] += 1
-        reasons[label][why] += 1
-        senders[label][row['from_addr']] += 1
-    total = sum(counts.values()) or 1
-    lines = [f'# Kategoryzacja — {total} wiadomości', '',
-             '| Kategoria | Maili | % | Skąd | Top nadawcy |', '|---|---:|---:|---|---|']
-    for label, n in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0])):
-        why = ', '.join(f'{k} {v}' for k, v in reasons[label].most_common())
-        tops = ', '.join(f'{a} ({c})' for a, c in senders[label].most_common(top))
-        lines.append(f'| {label} | {n} | {100 * n / total:.1f} | {why} | {tops} |')
-    return '\n'.join(lines)

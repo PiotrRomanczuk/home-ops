@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from gmail_apply import apply_categories, ensure_labels, move, undo  # noqa: E402
+from gmail_apply import apply_categories, ensure_labels, move, reconcile, undo  # noqa: E402
 
 
 class FakeGmail:
@@ -71,6 +71,19 @@ class ApplyTest(unittest.TestCase):
             g.modified.clear()
             undo(g, journal, log=lambda *_: None)
             self.assertEqual(g.modified, [(('b',), ('UNREAD',), ())])
+
+    def test_reconcile_moves_message_between_categories(self):
+        g = FakeGmail(labels=['Praca/Szukanie-pracy', 'Promocje'])
+        old = {'Praca/Szukanie-pracy': ['a', 'b'], 'Promocje': ['c']}
+        new = {'Praca/Zatrudnienie': ['a'], 'Praca/Szukanie-pracy': ['b'], 'Promocje': ['c']}
+        with tempfile.TemporaryDirectory() as d:
+            journal = Path(d) / 'j.jsonl'
+            reconcile(g, old, new, journal, log=lambda *_: None)
+            self.assertIn((('a',), (), ('id-Praca/Szukanie-pracy',)), g.modified)
+            self.assertIn((('a',), ('id-Praca/Zatrudnienie',), ()), g.modified)
+            g.modified.clear()
+            undo(g, journal, log=lambda *_: None)
+            self.assertIn((('a',), ('id-Praca/Szukanie-pracy',), ()), g.modified)
 
     def test_move_rejects_unknown_op(self):
         with self.assertRaises(ValueError):

@@ -12,7 +12,8 @@ from urllib.parse import parse_qs, urlparse
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import gmail_inventory  # noqa: E402
-from gmail_api import Gmail, GmailError, RateLimiter  # noqa: E402
+from gmail_api import Gmail, GmailError  # noqa: E402
+from gmail_ratelimit import RateLimiter  # noqa: E402
 
 
 class FakeOpener:

@@ -23,6 +23,7 @@ import gmail_auth  # noqa: E402
 import gmail_classify  # noqa: E402
 import gmail_imap  # noqa: E402
 import gmail_inventory  # noqa: E402
+import gmail_report  # noqa: E402
 from gmail_api import Gmail  # noqa: E402
 
 
@@ -47,7 +48,7 @@ def cmd_senders(args: argparse.Namespace) -> None:
 
 def cmd_classify(args: argparse.Namespace) -> None:
     db = gmail_inventory.connect()
-    md = gmail_classify.report(db, gmail_classify.load_rules(), top=args.top)
+    md = gmail_report.report(db, gmail_classify.load_rules(), top=args.top)
     out = gmail_inventory.STATE_DIR / 'classify-report.md'
     out.write_text(md + '\n')
     print(md)
