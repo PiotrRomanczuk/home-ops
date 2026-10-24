@@ -40,3 +40,7 @@ ops/elitedesk/digest.d/
 
 # Playwright MCP session output
 .playwright-mcp/
+# Gmail cleanup OAuth client/token (live in ~/.config/home-ops, never in repo)
+gmail-client*.json
+gmail-token*.json
+client_secret*.json

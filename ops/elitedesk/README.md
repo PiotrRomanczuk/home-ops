@@ -11,6 +11,7 @@ stack. They're version-controlled here; installed by symlinking into
 
 | File | What | Install pattern |
 | --- | --- | --- |
+| `gmail_cleanup.py` (+ `gmail_*.py`, `gmail_rules.json`) | Personal Gmail cleanup CLI: IMAP inventory → SQLite, rule-based categorisation of every message, add-only labelling with undo journal. Token/client in `~/.config/home-ops/gmail-*.json`, state in `~/.local/state/home-ops/gmail/`. Runs on the Mac for now (no unit yet) | `python3 gmail_cleanup.py -h` |
 | `pg-backup.sh` | Nightly `pg_dump -Fc` of `home_ops` → NAS over scp (`/share/MD0_DATA/Backups/home-ops/`) | `chmod +x` |
 | `pg-backup.service` | Oneshot unit that runs `pg-backup.sh` | `systemctl --user link` |
 | `pg-backup.timer` | Fires `pg-backup.service` daily at 04:30 | `systemctl --user enable --now` |

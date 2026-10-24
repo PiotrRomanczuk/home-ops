@@ -1,0 +1,113 @@
+{
+ "_doc": "EXAMPLE ONLY. The real rules live in ~/.config/home-ops/gmail-rules.json (private, never committed; override with GMAIL_RULES). Rules are ordered: first match wins. 'from' entries: full address, '@domain' (exact) or 'domain' (incl. subdomains). 'subject' is a case-insensitive regex; with 'from' both must match, alone it matches any sender. See gmail_classify.py.",
+ "me": [
+  "me@example.com"
+ ],
+ "freemail": [
+  "gmail.com",
+  "googlemail.com",
+  "wp.pl",
+  "o2.pl",
+  "onet.pl",
+  "interia.pl",
+  "outlook.com",
+  "hotmail.com",
+  "yahoo.com",
+  "icloud.com"
+ ],
+ "rules": [
+  {
+   "label": "Dev/Zwroty-poczty",
+   "from": [
+    "mailer-daemon@googlemail.com"
+   ],
+   "subject": "^(Delivery Status Notification|Undeliver)"
+  },
+  {
+   "label": "Konta",
+   "subject": "(new sign-?in|security alert|verify your (email|account)|password reset)"
+  },
+  {
+   "label": "Urzędy",
+   "from": [
+    "gov.pl",
+    "zus.pl"
+   ]
+  },
+  {
+   "label": "Finanse/Faktury",
+   "subject": "(faktur|invoice|receipt|rachunek)"
+  },
+  {
+   "label": "Finanse/Bank",
+   "from": [
+    "revolut.com",
+    "mbank.pl",
+    "wise.com"
+   ]
+  },
+  {
+   "label": "Praca/Szukanie-pracy",
+   "from": [
+    "indeed.com",
+    "pracuj.pl",
+    "jobs-noreply@linkedin.com"
+   ]
+  },
+  {
+   "label": "Praca/Rekrutacja",
+   "from": [
+    "linkedin.com"
+   ],
+   "subject": "(rekrutac|recruit|interview|rozmow)"
+  },
+  {
+   "label": "Dev/GitHub",
+   "from": [
+    "github.com"
+   ]
+  },
+  {
+   "label": "Dev/Vercel",
+   "from": [
+    "vercel.com"
+   ]
+  },
+  {
+   "label": "Zakupy",
+   "from": [
+    "allegro.pl",
+    "amazon.com",
+    "inpost.pl"
+   ]
+  },
+  {
+   "label": "Podróże",
+   "from": [
+    "booking.com",
+    "ryanair.com",
+    "uber.com"
+   ]
+  },
+  {
+   "label": "Społecznościowe",
+   "from": [
+    "facebookmail.com",
+    "instagram.com"
+   ]
+  },
+  {
+   "label": "Newslettery/Dev",
+   "from": [
+    "cooperpress.com",
+    "daily.dev"
+   ]
+  },
+  {
+   "label": "Promocje",
+   "from": [
+    "groupon.pl"
+   ]
+  }
+ ]
+}
