@@ -1,0 +1,21 @@
+[Unit]
+Description=home-ops gmail-daily — inventory new mail, categorise, label (never deletes)
+After=docker.service network-online.target
+Wants=network-online.target
+OnFailure=unit-failure-mail@%n.service
+StartLimitIntervalSec=2h
+StartLimitBurst=3
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/code/logs-stack
+EnvironmentFile=%h/code/logs-stack/ops/elitedesk/gmail-daily.env
+ExecStartPre=/usr/bin/bash %h/code/logs-stack/ops/elitedesk/wait-for-postgres.sh
+ExecStart=/usr/bin/python3 %h/code/logs-stack/ops/elitedesk/gmail-daily.py
+Restart=on-failure
+RestartSec=10min
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

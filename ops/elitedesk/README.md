@@ -11,6 +11,10 @@ stack. They're version-controlled here; installed by symlinking into
 
 | File | What | Install pattern |
 | --- | --- | --- |
+| `gmail_cleanup.py` (+ `gmail_*.py`) | Personal Gmail cleanup CLI: IMAP inventory → SQLite, rule-based categorisation of every message, add-only labelling with undo journal. Token/client in `~/.config/home-ops/gmail-*.json`, state in `~/.local/state/home-ops/gmail/` | `python3 gmail_cleanup.py -h` |
+| `gmail_db.py` + `gmail_import.py` | Schema `gmail` (migration 025): headers, rules as rows, applied-ops log, current category per message. `gmail_import.py all` backfills from the SQLite + journals + rules JSON | see "Gmail routine" below |
+| `gmail-daily.py` / `.service` / `.timer` | 06:40 — inventory new mail over IMAP, classify with `gmail.rules_json()`, reconcile category labels (never trashes), rewrite `gmail.message_state`, one digest card | `systemctl --user link` / `enable --now` |
+| `gmail-daily.env.example` | Template for `gmail-daily.env` (ingest token, `GMAIL_RULES=db`) | copy, `chmod 600` |
 | `pg-backup.sh` | Nightly `pg_dump -Fc` of `home_ops` → NAS over scp (`/share/MD0_DATA/Backups/home-ops/`) | `chmod +x` |
 | `pg-backup.service` | Oneshot unit that runs `pg-backup.sh` | `systemctl --user link` |
 | `pg-backup.timer` | Fires `pg-backup.service` daily at 04:30 | `systemctl --user enable --now` |
@@ -415,3 +419,42 @@ Re-send everything (harmless, upserts): `rm ~/.local/state/home-ops/brief-pull.s
 A malformed brief is skipped and logged as `agent:brief-pull` error (visible in
 the „Dziś” tab under Problemy); network/5xx failures retry on the next tick.
 
+
+
+---
+
+# Gmail routine (gmail-daily)
+
+_Added 2026-10-26._ ADR: `docs/adr/2026-10-26-gmail-postgres.md`. The mailbox
+catalogue lives in schema `gmail` of `home_ops`; the routine only adds/removes
+*category* labels and journals every batch (`~/.local/state/home-ops/gmail/journal-daily-*.jsonl`
++ `gmail.applied`). Trash/archive are never automated.
+
+## One-time setup (elitedesk)
+
+```bash
+cd ~/code/logs-stack && git pull && scripts/apply-migrations.sh      # 025_gmail.sql
+# OAuth client + refresh token made on the Mac (`gmail_cleanup.py auth`; GCP consent screen must be *In production*):
+#   scp ~/.config/home-ops/gmail-{client,token}.json uwh:~/.config/home-ops/   (then chmod 600 on the host)
+# Backfill from the Mac-side state (inventory.sqlite, journal-*.jsonl, gmail-rules.json copied to the same paths):
+python3 ops/elitedesk/gmail_import.py all
+cp ops/elitedesk/gmail-daily.env.example ops/elitedesk/gmail-daily.env && chmod 600 ops/elitedesk/gmail-daily.env   # fill INGEST_TOKEN
+systemctl --user link ~/code/logs-stack/ops/elitedesk/gmail-daily.service ~/code/logs-stack/ops/elitedesk/gmail-daily.timer
+systemctl --user enable --now gmail-daily.timer
+```
+
+## Verify
+
+```bash
+systemctl --user start gmail-daily.service && journalctl --user -u gmail-daily -n 20
+docker exec home-ops-postgres-1 psql -U postgres -d home_ops \
+  -c "SELECT category, sum(messages), sum(in_inbox), sum(unread) FROM gmail.category_summary GROUP BY 1 ORDER BY 2 DESC"
+```
+
+## Editing rules
+
+Rules are rows in `gmail.rule` (first match wins by `position`; `kind='subrule'`
+refines `parent`). `gmail.rules_json()` is what the classifier reads. Export /
+re-import from a JSON file: `gmail_import.py rules path.json`. A rule change
+takes effect on the next run, which also moves already-labelled messages
+(reconcile), journaled as usual.
