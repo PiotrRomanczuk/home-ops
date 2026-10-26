@@ -44,3 +44,4 @@ ops/elitedesk/digest.d/
 gmail-client*.json
 gmail-token*.json
 client_secret*.json
+ops/elitedesk/gmail-daily.env

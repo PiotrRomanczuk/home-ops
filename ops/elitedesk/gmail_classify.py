@@ -57,7 +57,15 @@ def _sender_match(addr: str, pattern: str) -> bool:
 
 
 def load_rules(path: Path = RULES_PATH) -> dict:
-    raw = json.loads(path.read_text())
+    """Rules from the JSON file, or from Postgres (gmail.rules_json) when GMAIL_RULES=db."""
+    if str(path) == 'db':
+        import gmail_db
+        return rules_from_dict(gmail_db.load_rules())
+    return rules_from_dict(json.loads(path.read_text()))
+
+
+def rules_from_dict(raw: dict) -> dict:
+    """Compile the rules JSON shape (file or gmail.rules_json()) into regex-backed Rule objects."""
     rules = [Rule(r['label'], tuple(s.lower() for s in r.get('from', [])),
                   re.compile(r['subject'], re.I) if r.get('subject') else None,
                   bool(r.get('automated_only')))
