@@ -111,3 +111,12 @@ class CoverageTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+def test_automated_only_subject_rule_skips_people():
+    from gmail_classify import Rule
+    import re
+    rule = Rule('Zakupy', subject=re.compile('order', re.I), automated_only=True)
+    assert rule.hits('sklep@x.pl', 'Your order') is True
+    assert rule.hits('anna.kowalska@x.pl', 'Re: order') is False
+    assert rule.hits('', 'order') is True

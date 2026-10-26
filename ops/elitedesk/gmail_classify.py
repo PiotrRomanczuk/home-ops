@@ -27,7 +27,9 @@ FALLBACK = 'Inne/Do-przejrzenia'
 AUTOMATED = re.compile(r'^(no-?reply|noreply|do-?not-?reply|donotreply|mailer-daemon|postmaster|'
                        r'notifications?|notify|alerts?|info|newsletters?|marketing|news|promo|hello|'
                        r'team|support|admin|e-?mail|mail|updates?|service|automat|system|bounces?|'
-                       r'jobs?|careers?|messages?|account|accounts|security|billing|invoice)([+.\-_]|$)')
+                       r'jobs?|careers?|messages?|account|accounts|security|billing|invoice|sklep|shop|store|orders?|'
+                       r'zam[oó]wienia|rejestracja|registration|customerservice|customerhelp|webmaster|post|bok|'
+                       r'contact|kontakt|replies?\d*|digest|calendar-notification)([+.\-_]|$)')
 
 
 @dataclass(frozen=True)
@@ -35,9 +37,12 @@ class Rule:
     label: str
     senders: tuple[str, ...] = ()   # 'addr@x.pl', '@x.pl' (exact domain) or 'x.pl' (domain + subdomains)
     subject: re.Pattern | None = None
+    automated_only: bool = False    # subject rule applies only to bot-like local parts (never to a person)
 
     def hits(self, addr: str, subject: str) -> bool:
         if self.senders and not any(_sender_match(addr, s) for s in self.senders):
+            return False
+        if self.automated_only and not (addr == '' or AUTOMATED.match(addr.partition('@')[0])):
             return False
         return self.subject.search(subject or '') is not None if self.subject else bool(self.senders)
 
@@ -54,7 +59,8 @@ def _sender_match(addr: str, pattern: str) -> bool:
 def load_rules(path: Path = RULES_PATH) -> dict:
     raw = json.loads(path.read_text())
     rules = [Rule(r['label'], tuple(s.lower() for s in r.get('from', [])),
-                  re.compile(r['subject'], re.I) if r.get('subject') else None)
+                  re.compile(r['subject'], re.I) if r.get('subject') else None,
+                  bool(r.get('automated_only')))
              for r in raw['rules']]
     protect = raw.get('protect', {})
     subrules = [(r['parent'], Rule(r['label'], tuple(x.lower() for x in r.get('from', [])),
