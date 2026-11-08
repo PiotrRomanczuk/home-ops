@@ -2,7 +2,7 @@
 
 Runs are keyed by INVOCATION_ID. Output joins its run by invocation, then by
 _STREAM_ID; a line whose process died before journald read its unit goes to
-the one oneshot running then, or nowhere if two overlap (no log beats a wrong
+the one oneshot (or <10 s old service) running then, or nowhere if two overlap (no log beats a wrong
 log). A unit failing again within LOOP_WINDOW_S folds into its first failed
 run's repeat_count, so a crash loop is one row.
 """
@@ -20,7 +20,7 @@ MSG_EXITED = '98e322203f7a4ed290d09fe03c09fe15'       # "Main process exited" (E
 MSG_UNIT_FAILED = 'd9b373ed55a64feb8242e02dbe79a49c'  # "Failed with result" (UNIT_RESULT)
 MSG_DEACTIVATED = '7ad2d189f7e94e70a38c781354912448'
 MSG_RESOURCES = 'ae8f7b866b0347b9af31fe1c80b127c0'   # "Consumed" (CPU_USAGE_NSEC, MEMORY_PEAK)
-LOOP_WINDOW_S, GRACE_S, ORPHAN_SLACK_S, STALE_OPEN_S, TAIL = 600, 120, 2, 86400, 30
+LOOP_WINDOW_S, GRACE_S, ORPHAN_SLACK_S, YOUNG_S, STALE_OPEN_S, TAIL = 600, 120, 2, 10, 86400, 30
 _ANSI = re.compile(r'\x1b\[[0-9;?]*[A-Za-z]')
 PUBLIC = ('kind', 'unit', 'invocation_id', 'project_slug', 'result', 'exit_code', 'cpu_ms', 'mem_peak_mb', 'repeat_count', 'detail')
 
@@ -112,9 +112,9 @@ class RunTracker:
         run = self.runs.get(inv) if inv else None
         if run is None and stream in self.streams:
             run = self.runs.get(self.streams[stream])
-        if run is None and not rec.get('_SYSTEMD_USER_UNIT') and not rec.get('_SYSTEMD_UNIT'):
-            near = [r for r in self.runs.values() if r['_oneshot'] and r['_start'] <= t
-                    and (r['_end'] is None or t <= r['_end'] + ORPHAN_SLACK_S)]
+        if run is None and rec.get('_TRANSPORT') == 'stdout' and not rec.get('_SYSTEMD_USER_UNIT'):
+            near = [r for r in self.runs.values() if (r['_oneshot'] or t - r['_start'] <= YOUNG_S)
+                    and r['_start'] <= t and (r['_end'] is None or t <= r['_end'] + ORPHAN_SLACK_S)]
             run = near[0] if len(near) == 1 else None
         if run is None:
             return

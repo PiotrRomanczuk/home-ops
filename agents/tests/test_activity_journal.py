@@ -12,6 +12,7 @@ import importlib.util
 import sys
 import tempfile
 import unittest
+from collections import deque
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -41,7 +42,8 @@ def sd(mid: str, unit: str, inv: str, t: float, **extra) -> dict:
 
 def out(msg: str, t: float, **extra) -> dict:
     """A program output line (no unit fields unless given)."""
-    return {'MESSAGE': msg, 'SYSLOG_IDENTIFIER': 'sh', '__REALTIME_TIMESTAMP': str(int(t * 1e6)), **extra}
+    return {'MESSAGE': msg, 'SYSLOG_IDENTIFIER': 'sh', '_TRANSPORT': 'stdout',
+            '__REALTIME_TIMESTAMP': str(int(t * 1e6)), **extra}
 
 
 def oneshot_ok(unit: str, inv: str, t: float, lines: list[dict] | None = None) -> list[dict]:
@@ -159,6 +161,26 @@ class RunTrackerTest(TrackerCase):
         self.assertEqual(held, [])
         runs = self.feed(crash(u, 'c1', T0 + 23)[1:])
         self.assertEqual([(r['invocation_id'], r['repeat_count']) for r in runs], [('c0', 2)])
+
+    def test_crash_loop_keeps_the_crash_message(self) -> None:
+        u = 'stano-backfill.service'
+        cycle = crash(u, 'c0', T0)
+        cycle.insert(1, out('Error: OPENAI_API_KEY missing', T0 + 0.8, _STREAM_ID='x'))
+        (r,) = self.feed(cycle)
+        self.assertEqual(r['log_tail'], ['Error: OPENAI_API_KEY missing'])
+
+    def test_syslog_lines_from_other_daemons_are_not_orphans(self) -> None:
+        recs = [sd(aj.MSG_STARTING, 'brief-pull.service', 'bp', T0),
+                out('Disconnected from user piotr', T0 + 0.1, SYSLOG_IDENTIFIER='sshd-session', _TRANSPORT='syslog')]
+        (r,) = self.feed(recs)
+        self.assertEqual(r['log_tail'], [])
+
+    def test_long_running_service_does_not_soak_up_orphans(self) -> None:
+        self.feed([sd(aj.MSG_STARTED, 'stano-backfill.service', 'svc', T0, JOB_RESULT='done')])
+        self.feed([sd(aj.MSG_STARTING, 'brief-pull.service', 'bp', T0 + 600),
+                   out('from brief-pull', T0 + 600.2)])
+        self.assertEqual(self.tr.runs['bp']['_tail'], deque(['from brief-pull']))
+        self.assertEqual(list(self.tr.runs['svc']['_tail']), [])
 
     def test_failure_after_a_quiet_gap_starts_a_new_row(self) -> None:
         u = 'stano-backfill.service'

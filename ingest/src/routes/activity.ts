@@ -73,14 +73,15 @@ export function registerActivityRoutes(app: Hono): void {
       pool.query(`SELECT host, ts, snapshot FROM public.activity_now ORDER BY host`),
       pool.query(`SELECT count(*)::int AS runs, coalesce(sum(repeat_count) FILTER (WHERE result = 'failed'), 0)::int AS failed,
           coalesce(array_agg(DISTINCT unit) FILTER (WHERE result = 'failed'), '{}') AS failing_units
-        FROM public.unit_runs WHERE started_at > now() - interval '24 hours'`),
+        FROM public.unit_runs WHERE coalesce(finished_at, now()) > now() - interval '24 hours'`),
     ]);
     return c.json({ hosts: now.rows, summary_24h: sum.rows[0] });
   });
 
   app.get('/api/activity/runs', async (c) => {
     const q = c.req.query();
-    const where = ['started_at > now() - make_interval(hours => $1)'];
+    // Overlaps the window: a crash loop that began days ago but still fails is in.
+    const where = ['coalesce(finished_at, now()) > now() - make_interval(hours => $1)'];
     const args: unknown[] = [clampInt(q.since_h, 24, 1, 24 * 90)];
     const add = (sql: string, v: unknown) => {
       args.push(v);
@@ -93,7 +94,8 @@ export function registerActivityRoutes(app: Hono): void {
     args.push(clampInt(q.limit, 500, 1, 5000));
     const r = await pool.query(
       `SELECT ${RUN_COLS} FROM public.unit_runs WHERE ${where.join(' AND ')}
-       ORDER BY started_at DESC LIMIT $${args.length}`,
+       ORDER BY CASE WHEN repeat_count > 1 THEN coalesce(finished_at, now()) ELSE started_at END DESC
+       LIMIT $${args.length}`,
       args,
     );
     return c.json({ runs: r.rows });

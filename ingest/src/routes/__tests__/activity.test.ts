@@ -96,6 +96,23 @@ describe.skipIf(skip)('activity routes', () => {
     expect(day.runs).toHaveLength(2);
   });
 
+  it('a crash loop that began before the window but still fails is in it', async () => {
+    await postRuns([
+      run({
+        invocation_id: 'loop',
+        unit: 'stano-backfill.service',
+        result: 'failed',
+        started_at: ago(60 * 24 * 6),
+        finished_at: ago(1),
+        repeat_count: 9000,
+      }),
+    ]);
+    const day = await json(await req('GET', '/api/activity/runs?result=failed'));
+    expect(day.runs.map((r: Json) => r.invocation_id)).toEqual(['loop']);
+    const now = await json(await req('GET', '/api/activity/now'));
+    expect(now.summary_24h).toMatchObject({ failed: 9000, failing_units: ['stano-backfill.service'] });
+  });
+
   it('the snapshot is one row per host, overwritten', async () => {
     await req('POST', '/api/activity/now', { host: 'elitedesk', snapshot: { running: ['a'] } });
     await req('POST', '/api/activity/now', { host: 'elitedesk', snapshot: { running: [] } });
