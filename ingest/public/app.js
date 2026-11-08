@@ -121,7 +121,8 @@ const TABS = [
   { id: 'projects', label: 'Projects', key: '4', ico: icoProj },
   { id: 'logs',     label: 'Logs',     key: '5', ico: icoLogs },
   { id: 'hosts',    label: 'Hosts',    key: '6', ico: icoHosts },
-  { id: 'evals',    label: 'Evals',    key: '7', ico: icoEvals, hidden: true },
+  { id: 'server',   label: 'Serwer',   key: '7', ico: icoServer },
+  { id: 'evals',    label: 'Evals',    key: '',  ico: icoEvals, hidden: true },
   { id: 'board',    label: 'Board',    key: '8', ico: icoBoard },
   { id: 'scores',   label: 'Scores',   key: '9', ico: icoScores, hidden: true },
   { id: 'decisions', label: 'Decisions', key: '0', ico: icoDecisions, hidden: true },
@@ -141,6 +142,7 @@ function icoProj()  { return icon('<rect x="2.5" y="2.5" width="4.5" height="4.5
 function icoLogs()  { return icon('<path d="M3 4h10M3 7h10M3 10h7M3 13h4"/>'); }
 function icoHosts() { return icon('<rect x="2.5" y="3" width="11" height="3.2"/><rect x="2.5" y="8.5" width="11" height="3.2"/><circle cx="5" cy="4.6" r="0.4" fill="currentColor"/><circle cx="5" cy="10.1" r="0.4" fill="currentColor"/>'); }
 function icoEvals() { return icon('<rect x="2.5" y="2.5" width="3.4" height="7"/><rect x="6.4" y="2.5" width="3.4" height="10.5"/><rect x="10.3" y="2.5" width="3.4" height="5"/>'); }
+function icoServer() { return icon('<rect x="2.5" y="2.5" width="11" height="11" rx="1.5"/><path d="M4.5 10.5l2-3 2 2 3-4.5"/>'); }
 function icoBoard() { return icon('<rect x="2.5" y="2.5" width="3.2" height="11"/><rect x="6.4" y="2.5" width="3.2" height="7"/><rect x="10.3" y="2.5" width="3.2" height="9"/>'); }
 function icoScores() { return icon('<path d="M2.5 8.5l3 3 5-6.5"/><circle cx="12.5" cy="4" r="1.3"/>'); }
 function icoDecisions() { return icon('<rect x="2.5" y="3" width="11" height="10" rx="1.5"/><path d="M5 8.2l2 2 4-4"/>'); }
@@ -158,13 +160,15 @@ function renderChrome() {
     board: (window.Board?.items || []).filter(t => t.column_key === 'now' && !t.done).length,
     // Questions routines filed that still wait for an answer.
     decisions: Math.max(window.Decisions?.openCount?.() || 0, window.Today?.model?.decisions?.length || 0),
+    // Units that failed in the last 24 h (activity-watcher).
+    server: window.Server?.failingCount?.() || 0,
     // Open Now tasks across hot/warm projects + Board.
     today: window.Today?.openCount?.() || 0,
   };
   const tabs = TABS.filter(t => isTabShown(t, st)).map(t => h('button', {
     class: 'tab' + (st.tab === t.id ? ' on' : ''),
     onclick: () => setState({ tab: t.id, conv: null, slug: null, eval: null }),
-    title: `${t.label}  (press ${t.key})`,
+    title: t.key ? `${t.label}  (press ${t.key})` : t.label,
   },
     h('span', { class: 'ico', html: t.ico() }),
     h('span', { class: 'label-hide' }, t.label),
@@ -276,7 +280,7 @@ document.addEventListener('keydown', (e) => {
   const typing = /^(INPUT|TEXTAREA)$/.test(document.activeElement?.tagName) || document.activeElement?.isContentEditable;
   if (typing) return;
   const st = getState();
-  const keyTab = !e.metaKey && !e.ctrlKey && !e.altKey && TABS.find(t => t.key === e.key);
+  const keyTab = !e.metaKey && !e.ctrlKey && !e.altKey && TABS.find(t => t.key && t.key === e.key);
   if (keyTab) { setState({ tab: keyTab.id, conv: null, slug: null, eval: null }); e.preventDefault(); }
   else if (e.key === 'c') { openCapture(); e.preventDefault(); }
   else if (e.key === 't') { toggleTimeMode(); }
