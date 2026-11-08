@@ -86,7 +86,7 @@ describe.skipIf(skip)('activity routes', () => {
     await postRuns([
       run({ invocation_id: 'a', result: 'ok', finished_at: ago(9) }),
       run({ invocation_id: 'b', project_slug: 'strummy', kind: 'gha', unit: 'Nightly E2E / Desktop Chrome' }),
-      run({ invocation_id: 'c', result: 'failed', started_at: ago(60 * 30) }),
+      run({ invocation_id: 'c', result: 'failed', started_at: ago(60 * 30), finished_at: ago(60 * 30 - 1) }),
     ]);
     const byProject = await json(await req('GET', '/api/activity/runs?project=strummy'));
     expect(byProject.runs.map((r: Json) => r.invocation_id)).toEqual(['b']);
