@@ -191,6 +191,12 @@ jobs:
           # needs pg_cron, so apply the file without that last statement.
           sed '/^SELECT cron.schedule(/,$d' postgres/migrations/003_host_metrics.sql \
             | psql -h 127.0.0.1 -U postgres -d home_ops -v ON_ERROR_STOP=1
+          # unit_runs / activity_now (026) — same trailing cron.schedule strip,
+          # applied twice to prove idempotency.
+          for i in 1 2; do
+            sed '/^SELECT cron.schedule(/,$d' postgres/migrations/026_activity.sql \
+              | psql -h 127.0.0.1 -U postgres -d home_ops -v ON_ERROR_STOP=1
+          done
 
       - name: integration tests
         working-directory: ingest
@@ -198,7 +204,7 @@ jobs:
           DATABASE_URL: postgresql://postgres:ci-placeholder@127.0.0.1:5432/home_ops
           INGEST_TOKEN: ci-token
           LOGS_PASSWORD: ci-password
-        run: npm test -- --run src/routes/__tests__/jobs-state-machine.test.ts src/routes/__tests__/decisions.test.ts src/routes/__tests__/briefs-today.test.ts src/routes/__tests__/queue.test.ts
+        run: npm test -- --run src/routes/__tests__/jobs-state-machine.test.ts src/routes/__tests__/decisions.test.ts src/routes/__tests__/briefs-today.test.ts src/routes/__tests__/queue.test.ts src/routes/__tests__/activity.test.ts
 
   tests-seo-ingest:
     name: tests (seo ingest upsert contract vs real postgres)

@@ -25,6 +25,7 @@ graph TB
     pg[("Postgres 17<br/>host_logs · host_metrics<br/>gpu_jobs · projects")]
     ingest["ingest API<br/>(Hono / Node)<br/>:64421"]
     elitedesk_watcher["elitedesk-watcher<br/>journald + docker"]
+    activity_watcher["activity-watcher<br/>unit runs + GHA jobs + now"]
     planner_sync["planner-sync<br/>vault → projects"]
     pg_cron["pg_cron<br/>30-day prune"]
     git_bare[("git/planner.git<br/>(bare)")]
@@ -55,6 +56,7 @@ graph TB
 
   %% ─── Log + metric shipping (batched, 2s window) ───
   elitedesk_watcher --> ingest
+  activity_watcher --> ingest
   win10_watcher --> ingest
   ollama_watcher --> ingest
   rpi_watcher --> ingest
@@ -79,7 +81,7 @@ graph TB
   classDef human fill:#21283a,stroke:#58a6ff,color:#f0f3f6
   class pg,git_bare,vault store
   class browser human
-  class ingest,elitedesk_watcher,planner_sync,pg_cron,backup,ollama,gpu_sched,win10_watcher,ollama_watcher,rpi_watcher,kuma,beszel service
+  class ingest,elitedesk_watcher,activity_watcher,planner_sync,pg_cron,backup,ollama,gpu_sched,win10_watcher,ollama_watcher,rpi_watcher,kuma,beszel service
 ```
 
 ## What each piece does
@@ -89,6 +91,7 @@ graph TB
 | `ingest` | elitedesk | HTTP API in front of Postgres. Routes: `/api/{ingest,metrics,logs,jobs,projects,sources,health}`. Auth: ingest-token for machines, cookie for browser. | Docker compose, healthcheck on `/api/health` |
 | `postgres` | elitedesk | Single Postgres. 4 tables, all jsonb-heavy. 30-day retention on logs+metrics, indefinite on failed/cancelled jobs. | Docker compose |
 | `elitedesk-watcher` | elitedesk | Tails journald units (cloudflared, docker, ssh) + named docker container logs. Also samples host_metrics every 30s. | systemd-user |
+| `activity-watcher` | elitedesk | Reads the `--user` journal every 30s and turns systemd lifecycle messages into one row per unit run (`unit_runs`, with its log tail; crash loops fold into `repeat_count`), adds GitHub Actions jobs from the self-hosted runners (via `gh`), and posts a "right now" snapshot (CPU per owning unit/container from cgroups, running units, next timers) to `activity_now`. Feeds the Serwer tab. | systemd-user |
 | `planner-sync` | elitedesk | Pulls planner repo every 60s, parses `projects/*.md` frontmatter + sections, POSTs full snapshot to `/api/projects/sync` (upsert + delete-others). | systemd-user |
 | `pg_cron` | elitedesk | Nightly prune of host_logs > 30d, gpu_jobs (done) > 30d. Inside the postgres container; no host-level cron. | pg_cron extension |
 | `pg-backup` | elitedesk | `pg_dump -Fc` → NAS SMB share, 04:30 local, 14-day retention. | systemd-user timer |

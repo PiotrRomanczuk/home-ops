@@ -2,6 +2,7 @@ import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { logger } from 'hono/logger';
 import { env } from './env.ts';
+import { registerActivityRoutes } from './routes/activity.ts';
 import { registerAuthRoutes } from './routes/auth.ts';
 import { registerBoardRoutes } from './routes/board.ts';
 import { registerBriefsRoutes } from './routes/briefs.ts';
@@ -44,6 +45,7 @@ registerSeoRoutes(app);
 registerStatusRoutes(app);
 registerBriefsRoutes(app);
 registerQueueRoutes(app);
+registerActivityRoutes(app);
 registerTodayRoutes(app);
 registerAuthRoutes(app);
 
