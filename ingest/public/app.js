@@ -124,7 +124,8 @@ const TABS = [
   { id: 'server',   label: 'Serwer',   key: '7', ico: icoServer },
   { id: 'evals',    label: 'Evals',    key: '',  ico: icoEvals, hidden: true },
   { id: 'board',    label: 'Board',    key: '8', ico: icoBoard },
-  { id: 'scores',   label: 'Scores',   key: '9', ico: icoScores, hidden: true },
+  { id: 'progress', label: 'Postęp',   key: '9', ico: icoProgress },
+  { id: 'scores',   label: 'Scores',   key: '',  ico: icoScores, hidden: true },
   { id: 'decisions', label: 'Decisions', key: '0', ico: icoDecisions, hidden: true },
 ];
 // hidden: dead since the local-LLM lane closed (2026-10-20 tab analysis, K6) —
@@ -143,6 +144,7 @@ function icoLogs()  { return icon('<path d="M3 4h10M3 7h10M3 10h7M3 13h4"/>'); }
 function icoHosts() { return icon('<rect x="2.5" y="3" width="11" height="3.2"/><rect x="2.5" y="8.5" width="11" height="3.2"/><circle cx="5" cy="4.6" r="0.4" fill="currentColor"/><circle cx="5" cy="10.1" r="0.4" fill="currentColor"/>'); }
 function icoEvals() { return icon('<rect x="2.5" y="2.5" width="3.4" height="7"/><rect x="6.4" y="2.5" width="3.4" height="10.5"/><rect x="10.3" y="2.5" width="3.4" height="5"/>'); }
 function icoServer() { return icon('<rect x="2.5" y="2.5" width="11" height="11" rx="1.5"/><path d="M4.5 10.5l2-3 2 2 3-4.5"/>'); }
+function icoProgress() { return icon('<rect x="2.5" y="9" width="2.6" height="4.5"/><rect x="6.7" y="6" width="2.6" height="7.5"/><rect x="10.9" y="2.5" width="2.6" height="11"/>'); }
 function icoBoard() { return icon('<rect x="2.5" y="2.5" width="3.2" height="11"/><rect x="6.4" y="2.5" width="3.2" height="7"/><rect x="10.3" y="2.5" width="3.2" height="9"/>'); }
 function icoScores() { return icon('<path d="M2.5 8.5l3 3 5-6.5"/><circle cx="12.5" cy="4" r="1.3"/>'); }
 function icoDecisions() { return icon('<rect x="2.5" y="3" width="11" height="10" rx="1.5"/><path d="M5 8.2l2 2 4-4"/>'); }
@@ -162,6 +164,8 @@ function renderChrome() {
     decisions: Math.max(window.Decisions?.openCount?.() || 0, window.Today?.model?.decisions?.length || 0),
     // Units that failed in the last 24 h (activity-watcher).
     server: window.Server?.failingCount?.() || 0,
+    // Hot projects that have not moved for 14 days.
+    progress: window.Progress?.stalledCount?.() || 0,
     // Open Now tasks across hot/warm projects + Board.
     today: window.Today?.openCount?.() || 0,
   };
