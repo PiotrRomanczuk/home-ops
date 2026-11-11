@@ -76,3 +76,45 @@ async function getJson<T>(path: string): Promise<T> {
 
 export const fetchMap = () => getJson<MapResponse>('/api/map');
 export const fetchPressure = () => getJson<PressureResponse>('/api/pressure');
+
+// BPMN processes (migration 029) and saves back to the vault (030).
+export interface ProcessDetail {
+  slug: string;
+  title: string;
+  trigger: string | null;
+  schedule: string | null;
+  summary: string | null;
+  projects: string[];
+  lanes: string[];
+  bpmn_xml: string | null;
+  bpmn_hash: string | null;
+  path: string | null;
+  warnings: string[];
+}
+
+export type WriteStatus = 'queued' | 'applied' | 'conflict' | 'failed';
+
+export interface ProcessWrite {
+  id: number;
+  slug: string;
+  status: WriteStatus;
+  error: string | null;
+}
+
+export const fetchProcess = (slug: string) =>
+  getJson<{ process: ProcessDetail }>(`/api/processes/${encodeURIComponent(slug)}`).then((r) => r.process);
+
+export const fetchWrite = (slug: string, id: number) =>
+  getJson<{ write: ProcessWrite }>(`/api/processes/${encodeURIComponent(slug)}/writes/${id}`).then((r) => r.write);
+
+export async function saveProcess(slug: string, bpmnXml: string, baseHash: string): Promise<ProcessWrite> {
+  const r = await fetch(`/api/processes/${encodeURIComponent(slug)}/writes`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ bpmn_xml: bpmnXml, base_hash: baseHash }),
+  });
+  const body = (await r.json().catch(() => ({}))) as { write?: ProcessWrite; error?: string };
+  if (!r.ok || !body.write) throw new Error(body.error ?? `HTTP ${r.status}`);
+  return body.write;
+}
