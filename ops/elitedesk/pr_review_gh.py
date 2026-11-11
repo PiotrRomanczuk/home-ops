@@ -12,6 +12,8 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+import pr_gate
+
 OWNER = os.environ.get('PR_OWNER', 'PiotrRomanczuk')
 CACHE = Path(os.environ.get('PR_REVIEW_CACHE', '~/.cache/pr-review')).expanduser()
 SKIP = ('docs/manual-tests/*.html', '**/package-lock.json', '**/pnpm-lock.yaml', '**/yarn.lock', '**/uv.lock')
@@ -64,11 +66,14 @@ def render(review: dict[str, Any], sha: str) -> str:
 
 
 def publish(run, repo: str, number: int, review: dict[str, Any], sha: str) -> str:
-    """Comment + swap the review:* label; returns the comment URL."""
-    url = run(['pr', 'comment', str(number), '-R', f'{OWNER}/{repo}', '--body', render(review, sha)]).strip()
-    for label, color in {LABELS['ok'], LABELS['zmiany']}:  # both must exist before add/remove
-        run(['label', 'create', label, '-R', f'{OWNER}/{repo}', '--color', color, '--force'])
-    name = LABELS[review['verdict']][0]
+    """Post the review comment; returns its URL. Labels are a separate, non-fatal step (label())."""
+    return run(['pr', 'comment', str(number), '-R', f'{OWNER}/{repo}', '--body', render(review, sha)]).strip()
+
+
+def label(run, repo: str, number: int, verdict: str) -> None:
+    """Swap review:ok / review:zmiany (both created first so the add never fails on a new repo)."""
+    for name, color in {LABELS['ok'], LABELS['zmiany']}:
+        run(['label', 'create', name, '-R', f'{OWNER}/{repo}', '--color', color, '--force'])
+    name = LABELS[verdict][0]
     other = 'review:zmiany' if name == 'review:ok' else 'review:ok'
-    run(['pr', 'edit', str(number), '-R', f'{OWNER}/{repo}', '--add-label', name, '--remove-label', other])
-    return url
+    pr_gate.set_labels(run, OWNER, repo, number, add=(name,), remove=(other,))

@@ -8,6 +8,7 @@ Szukaj, w tej kolejności:
 3. **Testy**: czy zmienione zachowanie ma testy; czy testy faktycznie sprawdzają to, co deklarują.
 4. **Reguły właściciela** (z sekcji „Reguły”): rozmiar plików i funkcji, typy, zakaz stylów inline w projektach z Tailwindem, raport testów ręcznych przy większej zmianie, brak linii współautora Claude w commitach, daty w dokumentach.
 5. **Zakres**: czy PR robi to, co mówi opis, i nic więcej (niezapowiedziane zmiany, przypadkowe pliki).
+6. **Co zobaczą ludzie po scaleniu**: treści oznaczone w kodzie jako szkic / DRAFT / TODO / „do przeglądu”, które po scaleniu trafią do użytkowników, wyszukiwarek (sitemap, hreflang) albo klientów — przeszukaj zmienione pliki (Grep) pod kątem takich znaczników. To zwykle co najmniej `ważne`.
 
 Zasady:
 - Zgłaszaj tylko rzeczy, które potrafisz wskazać w kodzie (plik, linia, dowód). Bez spekulacji, bez uwag o stylu, którego reguły nie wymagają, bez pochwał.

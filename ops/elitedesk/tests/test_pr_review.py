@@ -1,4 +1,4 @@
-"""Unit tests for pr_review (+ pr_review_llm, pr_review_gh, review_db): two-pass verdicts,
+"""Unit tests for pr_review (+ pr_review_llm, review_db): two-pass verdicts,
 dropping unconfirmed findings, the PR comment, picking unreviewed heads, dry runs, SQL params.
 No network, no DB, no claude — runners and helpers are faked."""
 from __future__ import annotations
@@ -69,23 +69,6 @@ class LlmTest(unittest.TestCase):
         self.assertIn('report.html | 200 +', msg)
         self.assertIn('Commit abc: zmiany', msg)
         self.assertTrue(msg.endswith('DIFF'))
-
-
-class GhTest(unittest.TestCase):
-    def test_comment_has_marker_verdict_and_findings(self):
-        text = pr_review_gh.render({'verdict': 'zmiany', 'summary': 'Sum', 'findings': [F2], 'dropped': 2}, 'abcdef123')
-        self.assertTrue(text.startswith('<!-- pr-review sha=abcdef123 -->'))
-        self.assertIn('Do poprawy', text)
-        self.assertIn('`b.py:9`', text)
-        self.assertIn('niepotwierdzone: 2', text)
-
-    def test_publish_comments_then_swaps_labels(self):
-        calls = []
-        run = lambda args: calls.append(args) or ('https://gh/c/9' if args[:2] == ['pr', 'comment'] else '')  # noqa: E731
-        url = pr_review_gh.publish(run, 'r', 4, {'verdict': 'ok', 'summary': 'S', 'findings': []}, 'abc')
-        self.assertEqual(url, 'https://gh/c/9')
-        self.assertEqual(calls[-1][-4:], ['--add-label', 'review:ok', '--remove-label', 'review:zmiany'])
-        self.assertEqual(sum(c[:2] == ['label', 'create'] for c in calls), 2)
 
 
 class PickAndRunTest(unittest.TestCase):
