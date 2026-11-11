@@ -15,7 +15,9 @@ import { registerHealthRoutes } from './routes/health.ts';
 import { registerIngestRoutes } from './routes/ingest.ts';
 import { registerJobsRoutes } from './routes/jobs.ts';
 import { registerLogsRoutes } from './routes/logs.ts';
+import { registerMapRoutes } from './routes/map.ts';
 import { registerMetricsRoutes } from './routes/metrics.ts';
+import { registerProcessesRoutes } from './routes/processes.ts';
 import { registerProgressRoutes } from './routes/progress.ts';
 import { registerProjectsRoutes } from './routes/projects.ts';
 import { registerQueueRoutes } from './routes/queue.ts';
@@ -48,6 +50,8 @@ registerBriefsRoutes(app);
 registerQueueRoutes(app);
 registerActivityRoutes(app);
 registerProgressRoutes(app);
+registerProcessesRoutes(app);
+registerMapRoutes(app);
 registerTodayRoutes(app);
 registerAuthRoutes(app);
 

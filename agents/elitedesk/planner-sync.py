@@ -41,6 +41,8 @@ sys.path.insert(0, str(_here.parent))
 from _common import IngestClient, Shutdown  # noqa: E402
 from queue_md import parse_queue_md  # noqa: E402
 from task_ticks import TickTracker  # noqa: E402
+from vault_parse import parse_frontmatter  # noqa: E402
+from vault_processes import find_processes  # noqa: E402
 
 HOST_NAME = os.environ.get('HOST_NAME', 'elitedesk')
 PLANNER_REMOTE = os.environ.get('PLANNER_REMOTE', '')
@@ -60,6 +62,7 @@ BOARD_SLUG = os.environ.get('BOARD_SLUG', 'home-ops')
 QUEUE_URL = INGEST_BASE + '/api/queue/sync'
 QUEUE_FILE = os.environ.get('QUEUE_FILE', 'QUEUE.md')
 SIGNALS_URL = INGEST_BASE + '/api/progress/signals'
+PROCESSES_URL = INGEST_BASE + '/api/processes/sync'
 
 
 def post_log(level: str, message: str, data: dict[str, Any] | None = None) -> None:
@@ -110,27 +113,8 @@ _TITLE_RE = re.compile(r'^# +(.+?)\s*$', re.MULTILINE)
 
 
 def _parse_frontmatter(block: str) -> dict[str, Any]:
-    """Minimal YAML: flat key/value, optional quoted strings, no nesting."""
-    out: dict[str, Any] = {}
-    for raw in block.splitlines():
-        line = raw.rstrip()
-        if not line or line.startswith('#'):
-            continue
-        if ':' not in line:
-            continue
-        key, _, val = line.partition(':')
-        key = key.strip()
-        val = val.strip()
-        if val.startswith('"') and val.endswith('"'):
-            val = val[1:-1]
-        elif val.startswith("'") and val.endswith("'"):
-            val = val[1:-1]
-        # cast bare ints
-        if val.isdigit() or (val.startswith('-') and val[1:].isdigit()):
-            out[key] = int(val)
-        else:
-            out[key] = val
-    return out
+    """Flat key/value plus lists (`hosts`, `depends_on`, …) — see vault_parse."""
+    return parse_frontmatter(block)
 
 
 def _split_sections(body: str) -> dict[str, str]:
@@ -694,6 +678,33 @@ def sync_once() -> None:
         ticks_sync_once(records)
     except (OSError, ValueError) as e:
         post_log('error', f'ticks-sync raised: {type(e).__name__}', {'err': str(e)[:500]})
+
+    try:
+        process_sync_once()
+    except (OSError, ValueError) as e:
+        post_log('error', f'process-sync raised: {type(e).__name__}', {'err': str(e)[:500]})
+
+
+_process_sync_state: dict[str, Any] = {'status': None, 'problems': None}
+
+
+def process_sync_once() -> None:
+    """Mapa tab: BPMN process notes (`type: process`) → /api/processes/sync.
+    Logs only when the outcome changes — the payload is re-sent every tick."""
+    records, problems = find_processes(PLANNER_DIR, PROJECT_DIRS)
+    status, body = ic.request(PROCESSES_URL, {'processes': records}, timeout=15)
+    if problems != _process_sync_state['problems']:
+        _process_sync_state['problems'] = problems
+        for p in problems:
+            post_log('warn', f'process notes: {p}')
+    if status == _process_sync_state['status']:
+        return
+    _process_sync_state['status'] = status
+    if status == 200:
+        post_log('info', 'process sync ok', {'upserted': (body or {}).get('upserted'),
+                                             'removed': (body or {}).get('removed')})
+    else:
+        post_log('warn', f'process sync failed: status={status}', {'processes': len(records)})
 
 
 _ticks = TickTracker(Path(f'{PLANNER_DIR}.ticks.json'))
