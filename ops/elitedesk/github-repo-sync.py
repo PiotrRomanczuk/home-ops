@@ -27,6 +27,10 @@ every GitHub project it also counts daily progress over PROGRESS_DAYS
 (github_signals.py) and REPLACES that window in /api/progress/signals, and
 puts the latest CI run + last Production deploy into repo_meta.
 
+For the Mapa pressure queue it also stores open issues (`repo_meta.issues`:
+open / bugs / oldest_days) and open blueprint gap IDs (`repo_meta.gaps`,
+parsed from docs/BLUEPRINT.md + docs/app-blueprint/ by gaps_parse.py).
+
 Env:
   GITHUB_TOKEN   PAT with read access to the owner's repos (including
                  private ones). Optional: when unset, `gh auth token` is used
@@ -62,6 +66,7 @@ sys.path.insert(0, str(_here.parent.parent))
 sys.path.insert(0, str(_here))
 from agents._common import IngestClient, check_url  # noqa: E402
 from github_signals import GH_SIGNALS, collect, to_rows  # noqa: E402
+from repo_health import blueprint_gaps, issues_summary  # noqa: E402
 from repo_projects import merged_mapping, vault_entries  # noqa: E402
 
 HOST_NAME = os.environ.get('HOST_NAME', 'elitedesk')
@@ -282,6 +287,8 @@ def main() -> int:
             if meta.get('github_repo') and 'error' not in meta:
                 counts, summary = collect(_gh_request, meta['github_repo'], meta['default_branch'], since)
                 meta.update(summary)
+                meta['issues'] = issues_summary(_gh_request, meta['github_repo'])
+                meta['gaps'] = blueprint_gaps(_gh_request, meta['github_repo'], meta['default_branch'])
                 rows += to_rows(slug, counts)
                 counted.append(slug)
         except Exception as e:  # noqa: BLE001 — one project's bug must not drop the batch

@@ -37,6 +37,7 @@ The killer flow:
 | `cancel_job`           | kill a queued/running job                                               |
 | `list_projects`        | all vault-derived projects, filter by status                            |
 | `get_project`          | full project state with Now/Next/Later raw markdown                     |
+| `get_pressure`         | projects ranked by attention needed (Mapa „Presja”), with score parts  |
 | `get_host_metrics`     | latest metric sample(s) — incl. process attribution in `data` jsonb     |
 | `models_loaded`        | what's resident in win10 VRAM right now                                 |
 | `list_eval_tasks`      | Evals board — lifecycle cards + pass-rate stats per eval task           |
