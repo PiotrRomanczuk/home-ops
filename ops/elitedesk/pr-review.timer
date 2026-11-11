@@ -1,0 +1,10 @@
+[Unit]
+Description=home-ops pr-review every hour 07–23 (before pr-decide asks at 08:05 and 19:05)
+
+[Timer]
+OnCalendar=*-*-* 07..23:20:00
+Persistent=true
+RandomizedDelaySec=3min
+
+[Install]
+WantedBy=timers.target

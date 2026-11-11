@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>pr-review — druga para oczu (raport 2026-11-11)</title>
+<style>
+  :root { --ink:#1d2433; --muted:#5b6475; --line:#e3e6ec; --bg:#fafbfc; --ok:#1f7a4d; --warn:#9a5b00; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.55 -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 900px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 1.6rem; margin: 0 0 4px; } h2 { margin-top: 2rem; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+  .meta { color: var(--muted); font-size: .9rem; }
+  code, pre { font-family: ui-monospace, Menlo, monospace; font-size: .86rem; }
+  pre { background:#fff; border:1px solid var(--line); border-radius:8px; padding:12px 14px; overflow-x:auto; }
+  table { border-collapse: collapse; width: 100%; font-size: .92rem; }
+  th, td { text-align:left; border-bottom:1px solid var(--line); padding:7px 6px; vertical-align: top; }
+  .ok { color: var(--ok); font-weight: 600; } .warn { color: var(--warn); font-weight: 600; }
+</style>
+</head>
+<body>
+<main>
+<h1>pr-review — „druga para oczu” dla wszystkich PR</h1>
+<p class="meta">Data: 2026-11-11 · Gałąź: <code>feat/pr-review</code> · Zakres: R1 (recenzent), R2 (pr-decide), R5 (migracja 028)</p>
+
+<h2>1. Co zostało zrobione</h2>
+<p>Zasada z pracy Piotra: <b>autor zmiany nie może jej zaakceptować</b>. Do tej pory <code>pr-decide</code> pytał na „Dziś” o każdy
+otwarty PR i po „Scal” scalał go bez żadnej recenzji. Teraz:</p>
+<ul>
+  <li><b><code>pr_review.py</code></b> (timer co godzinę 07–23): każdy otwarty PR, którego <b>bieżący commit</b> nie ma recenzji, dostaje
+  niezależną recenzję — świeży <code>claude -p</code> (Opus, subskrypcja), tylko narzędzia odczytu w checkoutcie PR, bez wiedzy o sesji,
+  która pisała kod. Dwa przebiegi: znajdź uwagi → zweryfikuj każdą w kodzie (niepotwierdzone odpadają). Wynik: komentarz w PR
+  (z markerem SHA), etykieta <code>review:ok</code>/<code>review:zmiany</code>, wiersz w <code>pr_reviews</code>, karta na „Dziś”. Maks. 3 PR na przebieg.</li>
+  <li><b><code>pr_decide.py</code> + <code>pr_gate.py</code></b>: pyta o PR dopiero po recenzji jego bieżącego commitu. Opcje wg recenzji:
+  ok → <i>Scal / Odrzuć / Później</i>; uwagi → <i>Popraw / Scal mimo to / Odrzuć / Później</i>; po 2 rundach poprawek bez „Popraw”.
+  „Popraw” = etykieta <code>fix-requested</code> dla <code>pr-agent</code> (osobny PR w repo infrastructure). Pytanie niesie SHA zrecenzowanego
+  commitu, a scalenie idzie z <code>--match-head-commit</code> — odpowiedź nigdy nie scali nowszego, nieprzejrzanego kodu. Pytanie o starszy
+  commit jest automatycznie zastępowane (nie dubluje się na „Dziś”).</li>
+  <li><b>Migracja 028</b> <code>pr_reviews</code> (lokalny Postgres home-ops), numer 028, bo 025 i 027 są zajęte na innych gałęziach.</li>
+  <li>Diff dla recenzenta pomija raporty HTML ze zrzutami i pliki blokad (vectordigital#7: 4 MB z 4,3 MB to base64) i mówi, co pominął.</li>
+  <li>Reguła dla sesji Claude (vault, <code>branch-hygiene.md</code>): sesja-autor nigdy nie scala ani nie zatwierdza PR.</li>
+</ul>
+
+<h2>2. Co sprawdziłem</h2>
+<table>
+  <tr><th>Sprawdzenie</th><th>Wynik</th></tr>
+  <tr><td><code>python3 -m unittest discover -s ops/elitedesk/tests</code> — 84 testy (nowe: opcje wg werdyktu, pytanie tylko o zrecenzowany SHA,
+  zastępowanie starego pytania, scalanie tylko zrecenzowanego SHA, „Popraw” → etykieta, weryfikator odrzuca niepotwierdzone, komentarz z markerem,
+  dry-run nie dotyka bazy, parametry SQL przez <code>psql -v</code>)</td><td class="ok">OK</td></tr>
+  <tr><td>Próba na Macu, job-radar#7: przebieg 1 — <i>ok</i>, 2 drobne uwagi (189 s, 1,31 $); weryfikacja odrzuciła 1 (29 s, 0,35 $)</td><td class="ok">trafne</td></tr>
+  <tr><td>Próba na Macu, vectordigital#7: <i>zmiany</i>, 6 uwag (317 s, 2,63 $), wszystkie potwierdzone (69 s, 0,49 $) — m.in. <b>ważne</b>: angielska
+  polityka prywatności oznaczona w kodzie „DRAFT for Piotr's review” trafia po scaleniu do sitemapy z hreflang; test „bez polskich słów”
+  nie łapie małego „ń”; <code>aria-label</code> przełącznika języka łamie WCAG 2.5.3</td><td class="ok">trafne</td></tr>
+  <tr><td>Wbudowany <code>/code-review</code> przez <code>claude -p</code> — nie porównany: błąd w moim skrypcie próby (<code>--allowedTools</code> połknął polecenie).
+  Wybrany własny recenzent, bo pr-decide potrzebuje ustrukturyzowanego werdyktu i listy uwag</td><td class="warn">pominięte świadomie</td></tr>
+  <tr><td>uwh (claude 2.1.302, gh, klon SSH, reguły z <code>planner-mirror</code>): <code>pr_review.py --dry-run --pr job-radar#7</code> → <i>ok</i>, 1 trafna uwaga
+  (<code>detail: true</code> bez pobierania szczegółów — do puli trafiają ucięte opisy), model <code>claude-opus-5-5</code>, 0,42 $; katalog testowy usunięty</td><td class="ok">działa</td></tr>
+</table>
+
+<h2>3. Jak przetestować ręcznie (po scaleniu)</h2>
+<pre>ssh uwh
+cd ~/code/logs-stack && git pull
+docker exec -i home-ops-postgres-1 psql -U postgres -d home_ops -v ON_ERROR_STOP=1 &lt; postgres/migrations/028_pr_reviews.sql
+python3 ops/elitedesk/pr_review.py --dry-run --pr vectordigital#7     # plik w ~/.cache/pr-review/dry/, nic na GitHubie, nic w bazie
+cp ops/elitedesk/pr-review.{service,timer} ~/.config/systemd/user/ &amp;&amp; systemctl --user daemon-reload
+systemctl --user enable --now pr-review.timer
+systemctl --user start pr-review.service &amp;&amp; journalctl --user -u pr-review -n 30</pre>
+<ol>
+  <li>Na GitHubie: 3 najstarsze otwarte PR mają komentarz „Recenzja automatyczna — …” i etykietę <code>review:ok</code> albo <code>review:zmiany</code>.</li>
+  <li><code>SELECT repo, number, left(head_sha,7), verdict, dropped, cost_usd FROM pr_reviews ORDER BY created_at DESC;</code> — 3 wiersze.</li>
+  <li>Na „Dziś”: karta <code>pr-review</code>; po najbliższym <code>pr-decide</code> (08:05/19:05) pytania tylko o zrecenzowane PR, z opcjami wg werdyktu
+  i streszczeniem recenzji w szczegółach.</li>
+  <li>Nowy commit na zrecenzowanym PR → kolejny przebieg recenzuje nowy SHA; stare pytanie znika (odpowiedź „Później”, powód
+  „zastąpione nowym commitem”), pojawia się nowe.</li>
+  <li>„Scal” po dopchnięciu commitu bez recenzji → w logu <code>head moved … not merging unreviewed code</code>, PR zostaje otwarty.</li>
+</ol>
+
+<h2>4. Ograniczenia i ryzyka</h2>
+<ul>
+  <li>Zaległość: 27 otwartych PR → ok. 9 przebiegów (1 dzień); stare PR warto najpierw zamknąć, żeby nie zużywać subskrypcji.</li>
+  <li>Recenzja jest niedeterministyczna (dwa przebiegi na tym samym PR dały różne drobne uwagi); dlatego decyzję podejmuje Piotr, a weryfikator odsiewa fałszywe alarmy.</li>
+  <li>Treść PR może zawierać próbę wstrzyknięcia poleceń — recenzent ma tylko odczyt w checkoutcie, publikuje skrypt (nie sesja).</li>
+  <li>„Popraw” działa dopiero po wdrożeniu <code>pr-agent</code> (osobny PR w infrastructure + konfiguracja użytkownika przez Piotra).</li>
+</ul>
+</main>
+</body>
+</html>

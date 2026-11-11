@@ -15,11 +15,14 @@ CONTAINER = os.environ.get('CONTAINER', 'home-ops-postgres-1')
 DB, DB_USER = os.environ.get('DB', 'home_ops'), os.environ.get('DB_USER', 'postgres')
 
 
-def psql_json(sql: str) -> list[dict[str, Any]]:
-    """Run SQL wrapped in json_agg through the compose container; [] when empty."""
+def psql_json(sql: str, params: dict[str, str] | None = None) -> list[dict[str, Any]]:
+    """Run SQL wrapped in json_agg through the compose container; [] when empty.
+    `params` become psql -v variables (use :'name' in the SQL), never string-interpolated."""
     wrapped = f"SELECT COALESCE(json_agg(t), '[]'::json) FROM ({sql}) t"
-    r = subprocess.run(['docker', 'exec', '-i', CONTAINER, 'psql', '-U', DB_USER, '-d', DB, '-X', '-q', '-t', '-A'],
-                       input=wrapped, capture_output=True, text=True, check=True)
+    cmd = ['docker', 'exec', '-i', CONTAINER, 'psql', '-U', DB_USER, '-d', DB, '-X', '-q', '-t', '-A']
+    for k, v in (params or {}).items():
+        cmd += ['-v', f'{k}={v}']
+    r = subprocess.run(cmd, input=wrapped, capture_output=True, text=True, check=True)
     return json.loads(r.stdout.strip() or '[]')
 
 

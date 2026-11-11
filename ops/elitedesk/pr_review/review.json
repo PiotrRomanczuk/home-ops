@@ -1,0 +1,26 @@
+{
+  "type": "object",
+  "properties": {
+    "verdict": {"type": "string", "enum": ["ok", "zmiany", "bloker"]},
+    "summary": {"type": "string"},
+    "findings": {
+      "type": "array",
+      "maxItems": 10,
+      "items": {
+        "type": "object",
+        "properties": {
+          "severity": {"type": "string", "enum": ["bloker", "ważne", "drobne"]},
+          "file": {"type": "string"},
+          "line": {"type": "integer"},
+          "problem": {"type": "string"},
+          "evidence": {"type": "string"},
+          "suggestion": {"type": "string"}
+        },
+        "required": ["severity", "file", "line", "problem", "evidence", "suggestion"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["verdict", "summary", "findings"],
+  "additionalProperties": false
+}
