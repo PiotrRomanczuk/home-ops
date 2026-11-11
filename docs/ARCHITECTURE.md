@@ -1,6 +1,6 @@
 ---
 created: 2026-06-08
-updated: 2026-06-08
+updated: 2026-11-11
 ---
 
 # home-ops — architecture at a glance
@@ -88,11 +88,11 @@ graph TB
 
 | Component | Host | Role | Lifecycle |
 | --- | --- | --- | --- |
-| `ingest` | elitedesk | HTTP API in front of Postgres. Routes: `/api/{ingest,metrics,logs,jobs,projects,sources,health}`. Auth: ingest-token for machines, cookie for browser. | Docker compose, healthcheck on `/api/health` |
+| `ingest` | elitedesk | HTTP API in front of Postgres. Routes: `/api/{ingest,metrics,logs,jobs,projects,sources,health}`; `/api/map` (project graph: `depends_on` / `feeds` / `hosts` + blast radius, `map-model.ts`) and `/api/processes` for the Mapa tab. Auth: ingest-token for machines, cookie for browser. | Docker compose, healthcheck on `/api/health` |
 | `postgres` | elitedesk | Single Postgres. 4 tables, all jsonb-heavy. 30-day retention on logs+metrics, indefinite on failed/cancelled jobs. | Docker compose |
 | `elitedesk-watcher` | elitedesk | Tails journald units (cloudflared, docker, ssh) + named docker container logs. Also samples host_metrics every 30s. | systemd-user |
 | `activity-watcher` | elitedesk | Reads the `--user` journal every 30s and turns systemd lifecycle messages into one row per unit run (`unit_runs`, with its log tail; crash loops fold into `repeat_count`), adds GitHub Actions jobs from the self-hosted runners (via `gh`), and posts a "right now" snapshot (CPU per owning unit/container from cgroups, running units, next timers) to `activity_now`. Feeds the Serwer tab. | systemd-user |
-| `planner-sync` | elitedesk | Pulls planner repo every 60s, parses `projects/*.md` frontmatter + sections, POSTs full snapshot to `/api/projects/sync` (upsert + delete-others). | systemd-user |
+| `planner-sync` | elitedesk | Pulls planner repo every 60s, parses project notes (frontmatter incl. lists — `hosts`, `depends_on`, `feeds` via `vault_parse.py` — + sections), POSTs full snapshot to `/api/projects/sync` (upsert + delete-others). Also mirrors BPMN process notes (`type: process` + `.bpmn`, `vault_processes.py`) to `/api/processes/sync` (029). | systemd-user |
 | `pg_cron` | elitedesk | Nightly prune of host_logs > 30d, gpu_jobs (done) > 30d. Inside the postgres container; no host-level cron. | pg_cron extension |
 | `pg-backup` | elitedesk | `pg_dump -Fc` → NAS SMB share, 04:30 local, 14-day retention. | systemd-user timer |
 | `gpu-scheduler` | win10 | Claims jobs from queue. Gaming-detect via GPU 3D-engine util + foreground exe. Streams partials every ~250ms during generation. Honours user cancel in ~1s. | WinSW service |

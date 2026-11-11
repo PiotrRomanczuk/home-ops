@@ -1,0 +1,84 @@
+<!doctype html><html lang="pl"><head><meta charset="utf-8"><title>Manual test: Mapa — model relacji i procesów</title>
+<style>body{margin:0;background:#f5f5f7;color:#1d1d1f;font:15px/1.55 -apple-system,Helvetica,Arial,sans-serif;padding:32px 16px}main{max-width:920px;margin:0 auto}h1{font-size:28px;margin:0 0 4px}h2{font-size:20px;margin:32px 0 10px}.meta{color:#6e6e73;font-size:13px}code,pre{font:13px ui-monospace,Menlo,monospace;background:#fff;padding:1px 5px;border-radius:5px}pre{padding:12px;overflow-x:auto;border:1px solid #e5e5ea}table{border-collapse:collapse;width:100%;background:#fff}td,th{text-align:left;padding:8px 10px;border-bottom:1px solid #eee;font-size:14px;vertical-align:top}.warn{color:#b25000;font-weight:600}.ok{color:#1a7f37;font-weight:600}</style></head><body><main>
+<h1>Mapa ekosystemu — model relacji i procesów (PR 1 z 4)</h1>
+<p class="meta">Data: 2026-11-11 · Gałąź: <code>feat/mapa-model</code> · Plan: <code>~/.claude/plans/zastanawiam-sie-na-stworzeniem-cheerful-crane.md</code>. Zmiana backendowa, bez UI. Weryfikacja: testy jednostkowe, testy integracyjne na jednorazowym Postgresie 17 w Dockerze i przebieg end-to-end na prawdziwym vaulcie. Zrzutów ekranu nie ma, bo nie ma czego pokazać w przeglądarce.</p>
+
+<h2>Co zostało zrobione</h2>
+<ul>
+<li><b>Relacje żyją w vaulcie</b> (commit <code>82a5bb6</code> w plannerze). Notatki projektów mają <code>depends_on</code> (bez tego projekt przestaje działać) i <code>feeds</code> (wysyła dane, logi albo leady). Wartości to wikilinki. Cel, który nie jest notatką (np. <code>[[ollama]]</code>), staje się węzłem zewnętrznym.</li>
+<li><b><code>agents/elitedesk/vault_parse.py</code></b>: parser frontmattera rozumie teraz listy:
+  <ul>
+  <li>flow <code>[a, b]</code> i blokowe <code>- a</code> (tak zapisuje edytor Properties w Obsidianie);</li>
+  <li>wikilinki w listach są zamieniane na cel (<code>[[1-Projekty/job-radar|JR]]</code> → <code>job-radar</code>).</li>
+  </ul>
+  Wartości skalarne zachowują się dokładnie jak wcześniej, więc <code>repo</code>, <code>deployed</code>, <code>health</code> i <code>stack</code> czytane przez innych się nie zmieniają. <code>planner-sync._parse_frontmatter</code> deleguje do nowego modułu.</li>
+<li><b><code>agents/elitedesk/vault_processes.py</code></b>: notatki <code>type: process</code> razem z plikiem <code>.bpmn</code> obok:
+  <ul>
+  <li>odczytuje nazwy lanes z BPMN;</li>
+  <li>porównuje je z <code>projects:</code>; rozjazd to ostrzeżenie, a nie błąd;</li>
+  <li>pomija diagram ponad 512 KB;</li>
+  <li><code>bpmn:</code> może wskazywać tylko plik w tym samym folderze.</li>
+  </ul></li>
+<li><b>planner-sync</b> co tick wysyła procesy na <code>POST /api/processes/sync</code>. Loguje tylko zmianę wyniku, żeby nie spamować <code>host_logs</code> co minutę.</li>
+<li><b>Migracja 029 <code>processes</code></b>: lustro notatek procesów. Sync robi upsert i usuwa resztę, tak jak dla projektów.</li>
+<li><b>API</b>:
+  <ul>
+  <li><code>GET /api/processes</code>: lista bez XML;</li>
+  <li><code>GET /api/processes/:slug</code>: z diagramem;</li>
+  <li><code>GET /api/map</code> (<code>map-model.ts</code>): węzły (projekty, zewnętrzne, hosty), krawędzie (<code>depends_on</code>, <code>feeds</code>, <code>runs_on</code>), dla każdego węzła <code>dependents</code> („jeśli padnie”, przechodnio, tylko po <code>depends_on</code>) oraz lista procesów z lanes.</li>
+  </ul>
+  Mapa przyjmuje też stary kształt list jako jednego stringa (sprzed wdrożenia nowego planner-sync). Bez migracji 029 działa dalej, tylko bez procesów.</li>
+</ul>
+
+<h2>Wynik end-to-end na prawdziwym vaulcie</h2>
+<p>Lokalny ingest (ta gałąź) na pustym Postgresie z migracjami 001/004/005/016/029. <code>parse_project_file</code> i <code>process_sync_once</code> z planner-sync czytały <code>~/Obsidian/MainCV-Planner</code>.</p>
+<table>
+<tr><th>Sprawdzenie</th><th>Wynik</th></tr>
+<tr><td>Sync projektów / procesów</td><td class="ok">200 · 39 projektów · 5 procesów, 0 ostrzeżeń lanes</td></tr>
+<tr><td>Węzły / krawędzie</td><td>39 projektów, 7 hostów, 3 zewnętrzne (instagram-api, ollama, supabase-studentproduction) · 11 <code>depends_on</code>, 9 <code>feeds</code>, 84 <code>runs_on</code></td></tr>
+<tr><td>Jeśli padnie <code>home-ops</code></td><td>d4-build-agent, job-radar, natalia-cv</td></tr>
+<tr><td>Jeśli padnie <code>ollama</code></td><td>lesson-notes, strummy, szczerze-mowiac</td></tr>
+<tr><td>Jeśli padnie <code>instagram-api</code></td><td>lesson-notes, social-hub, szczerze-mowiac</td></tr>
+<tr><td>Jeśli padnie <code>olx-scraper</code></td><td>job-radar, natalia-cv (przechodnio)</td></tr>
+<tr><td><code>GET /api/processes/pr-flow</code></td><td>lanes claude-session, home-ops, piotr, github · XML 7186 znaków</td></tr>
+<tr><td>Bez tokena / cookie</td><td class="ok"><code>/api/map</code> → 401 · <code>POST /api/processes/sync</code> → 401</td></tr>
+</table>
+<p>Hosty nie mają „jeśli padnie”, bo <code>hosts:</code> miesza miejsca uruchomienia (uwh, vercel) z miejscami pracy (mac, github). Widok infrastruktury w PR 3 pokaże je osobno.</p>
+
+<h2>Jak przetestować ręcznie</h2>
+<h3>1. Testy</h3>
+<pre>python3 -m unittest discover -s agents/tests -p 'test_*.py'          # 108 OK (w tym vault_parse, vault_processes)
+cd ingest &amp;&amp; npm run check &amp;&amp; npm test -- --run                   # unit: map-model, process-model</pre>
+<h3>2. Integracja na jednorazowym Postgresie</h3>
+<pre>docker run -d --rm --name mapa-test-pg -e POSTGRES_PASSWORD=ci-placeholder -e POSTGRES_DB=home_ops \
+  -p 127.0.0.1:55499:5432 postgres:17-alpine
+for f in 001_init 004_cancelling_status 005_projects 016_project_repo_meta 029_processes 029_processes; do
+  docker exec -i mapa-test-pg psql -q -U postgres -d home_ops -v ON_ERROR_STOP=1 &lt; postgres/migrations/$f.sql; done
+cd ingest &amp;&amp; DATABASE_URL=postgresql://postgres:ci-placeholder@127.0.0.1:55499/home_ops INGEST_TOKEN=ci-token \
+  LOGS_PASSWORD=ci-password npx vitest --run src/routes/__tests__/processes-map.test.ts     # 5 passed
+docker stop mapa-test-pg</pre>
+<p>Oczekiwane: sync bez tokena daje 401; drugi sync usuwa nieobecny slug (<code>removed: 1</code>); lista nie ma <code>bpmn_xml</code>, a szczegół go ma; zły payload daje 400 i tabeli nie rusza; mapa łączy projekty, zewnętrzne, hosty i procesy.</p>
+<h3>3. Po wdrożeniu na uwh</h3>
+<p class="warn">Kolejność: najpierw ingest i migracja, potem planner-sync. W odwrotnej kolejności planner-sync zaloguje jeden raz „process sync failed: status=404” i zamilknie do zmiany wyniku.</p>
+<pre>ssh uwh 'cd ~/code/logs-stack &amp;&amp; git pull &amp;&amp; scripts/apply-migrations.sh &amp;&amp; docker compose up -d --build ingest'
+scripts/deploy-agent.sh elitedesk planner-sync          # kopiuje też vault_parse.py / vault_processes.py do ~/bin
+curl -s -H "X-Ingest-Token: $INGEST_TOKEN" http://192.168.1.75:64421/api/map | jq '.processes | length'   # 5
+curl -s -H "X-Ingest-Token: $INGEST_TOKEN" http://192.168.1.75:64421/api/map \
+  | jq -r '.nodes[] | select(.dependents|length&gt;0) | "\(.id) → \(.dependents|join(", "))"'</pre>
+<p>W zakładce Logs, źródło <code>agent:planner-sync</code>, ma się pojawić jedno „process sync ok”, a stary „sync ok” dla projektów dalej co minutę. Strummy prod nie jest dotykany (przebudowa dotyczy tylko kontenera ingest). Kontrola z reguły i tak obowiązuje: 10 kontenerów <code>supabase_*_StudentProduction</code> Up, <code>curl -sI https://strummy.online</code> → 200.</p>
+<h3>4. Pętla „vault jest źródłem prawdy”</h3>
+<ol>
+<li>W Obsidianie dopisz w dowolnej notatce projektu <code>depends_on: ["[[home-ops]]"]</code> (albo przez panel Properties jako listę).</li>
+<li>Po pushu obsidian-git (do 5 min) i jednym ticku planner-sync (60 s) <code>/api/map</code> pokazuje nową krawędź, a <code>home-ops.dependents</code> zawiera ten projekt.</li>
+<li>Zmień nazwę lane w <code>procesy/*.bpmn</code> na nieznaną → <code>/api/processes</code> zwraca ostrzeżenie „lanes missing from projects: …”.</li>
+</ol>
+
+<h2>Przypadki brzegowe pokryte testami</h2>
+<ul>
+<li>Skalary z przecinkiem (<code>stack: Python, uv</code>) i cytowany <code>"[a, b]"</code> zostają stringami. Goły <code>[[x]]</code> to skalar, nie lista.</li>
+<li>Pozycja listy z dwukropkiem (URL) nie staje się kluczem. Komentarz <code># …</code> na końcu pozycji jest ucinany.</li>
+<li>Cykle w <code>depends_on</code> nie zawieszają liczenia blast radius.</li>
+<li>Duplikat sluga procesu: pierwszy wygrywa, drugi trafia do ostrzeżeń planner-sync.</li>
+<li><code>bpmn: ../../../x.bpmn</code> nie wychodzi poza folder notatki.</li>
+</ul>
+</main></body></html>
