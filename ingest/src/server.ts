@@ -16,6 +16,7 @@ import { registerIngestRoutes } from './routes/ingest.ts';
 import { registerJobsRoutes } from './routes/jobs.ts';
 import { registerLogsRoutes } from './routes/logs.ts';
 import { registerMapRoutes } from './routes/map.ts';
+import { registerMapaRoutes } from './routes/mapa.ts';
 import { registerMetricsRoutes } from './routes/metrics.ts';
 import { registerPressureRoutes } from './routes/pressure.ts';
 import { registerProcessesRoutes } from './routes/processes.ts';
@@ -54,6 +55,7 @@ registerProgressRoutes(app);
 registerProcessesRoutes(app);
 registerMapRoutes(app);
 registerPressureRoutes(app);
+registerMapaRoutes(app);
 registerTodayRoutes(app);
 registerAuthRoutes(app);
 

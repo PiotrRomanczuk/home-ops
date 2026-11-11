@@ -29,6 +29,26 @@ jobs:
         working-directory: ingest
         run: npm run check
 
+  web:
+    name: web (Mapa SPA — typecheck + lint + test + build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: ingest/web/package-lock.json
+
+      - name: install
+        working-directory: ingest/web
+        run: npm ci
+
+      - name: check + test + build
+        working-directory: ingest/web
+        run: npm run check && npm test -- --run && npm run build
+
   python:
     name: python (compile agents/ scheduler/ clients/)
     runs-on: ubuntu-latest
