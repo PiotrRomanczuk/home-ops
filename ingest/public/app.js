@@ -125,6 +125,8 @@ const TABS = [
   { id: 'evals',    label: 'Evals',    key: '',  ico: icoEvals, hidden: true },
   { id: 'board',    label: 'Board',    key: '8', ico: icoBoard },
   { id: 'progress', label: 'Postęp',   key: '9', ico: icoProgress },
+  // Mapa is its own page (React SPA under /mapa/, ingest/web) — the tab just links there.
+  { id: 'mapa',     label: 'Mapa',     key: 'm', ico: icoMap, href: '/mapa/' },
   { id: 'scores',   label: 'Scores',   key: '',  ico: icoScores, hidden: true },
   { id: 'decisions', label: 'Decisions', key: '0', ico: icoDecisions, hidden: true },
 ];
@@ -139,6 +141,7 @@ function icon(p) { return `<svg class="ico" viewBox="0 0 16 16" fill="none" stro
 function icoToday()  { return icon('<rect x="2.5" y="3.5" width="11" height="10" rx="1.5"/><path d="M2.5 6.5h11M5.5 2v3M10.5 2v3"/><circle cx="8" cy="10" r="1" fill="currentColor"/>'); }
 function icoStatus() { return icon('<circle cx="8" cy="8" r="5.5"/><path d="M5 8.3l2 2 4-4.5"/>'); }
 function icoChat()  { return icon('<path d="M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z"/>'); }
+function icoMap()   { return icon('<circle cx="4" cy="4.5" r="1.6"/><circle cx="12" cy="4.5" r="1.6"/><circle cx="8" cy="11.5" r="1.6"/><path d="M5.4 5.4l1.6 4.8M10.6 5.4L9 10.2M5.6 4.5h4.8"/>'); }
 function icoProj()  { return icon('<rect x="2.5" y="2.5" width="4.5" height="4.5"/><rect x="9" y="2.5" width="4.5" height="4.5"/><rect x="2.5" y="9" width="4.5" height="4.5"/><rect x="9" y="9" width="4.5" height="4.5"/>'); }
 function icoLogs()  { return icon('<path d="M3 4h10M3 7h10M3 10h7M3 13h4"/>'); }
 function icoHosts() { return icon('<rect x="2.5" y="3" width="11" height="3.2"/><rect x="2.5" y="8.5" width="11" height="3.2"/><circle cx="5" cy="4.6" r="0.4" fill="currentColor"/><circle cx="5" cy="10.1" r="0.4" fill="currentColor"/>'); }
@@ -171,7 +174,7 @@ function renderChrome() {
   };
   const tabs = TABS.filter(t => isTabShown(t, st)).map(t => h('button', {
     class: 'tab' + (st.tab === t.id ? ' on' : ''),
-    onclick: () => setState({ tab: t.id, conv: null, slug: null, eval: null }),
+    onclick: () => t.href ? (location.href = t.href) : setState({ tab: t.id, conv: null, slug: null, eval: null }),
     title: t.key ? `${t.label}  (press ${t.key})` : t.label,
   },
     h('span', { class: 'ico', html: t.ico() }),
@@ -285,7 +288,8 @@ document.addEventListener('keydown', (e) => {
   if (typing) return;
   const st = getState();
   const keyTab = !e.metaKey && !e.ctrlKey && !e.altKey && TABS.find(t => t.key && t.key === e.key);
-  if (keyTab) { setState({ tab: keyTab.id, conv: null, slug: null, eval: null }); e.preventDefault(); }
+  if (keyTab?.href) { location.href = keyTab.href; e.preventDefault(); }
+  else if (keyTab) { setState({ tab: keyTab.id, conv: null, slug: null, eval: null }); e.preventDefault(); }
   else if (e.key === 'c') { openCapture(); e.preventDefault(); }
   else if (e.key === 't') { toggleTimeMode(); }
   else if (e.key === 'Escape' && (st.conv || st.slug || st.eval)) { setState({ conv: null, slug: null, eval: null }); }
