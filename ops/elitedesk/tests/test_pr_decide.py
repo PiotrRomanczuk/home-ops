@@ -154,7 +154,8 @@ class ActTest(unittest.TestCase):
         r = FakeReporter([{'id': 1, 'ref': 'a#1@s', 'answer': 'fix'}, {'id': 2, 'ref': 'b#2@s', 'answer': 'no', 'reason': 'stare'}])
         g = FakeGh()
         self.assertEqual(act(r, g, lambda m: None), {'a#1', 'b#2'})
-        self.assertIn(['pr', 'edit', '1', '-R', 'PiotrRomanczuk/a', '--add-label', 'fix-requested'], g.calls)
+        self.assertIn(['api', '-X', 'POST', 'repos/PiotrRomanczuk/a/issues/1/labels', '-f', 'labels[]=fix-requested'], g.calls)
+        self.assertFalse(any(c[:2] == ['pr', 'edit'] for c in g.calls))  # gh 2.46 on uwh breaks on pr edit
         self.assertIn('Odrzucone w home-ops Decisions: stare', [c for c in g.calls if c[:2] == ['pr', 'close']][0])
 
     def test_failed_merge_is_consumed_and_logged(self):

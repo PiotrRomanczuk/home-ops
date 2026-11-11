@@ -75,7 +75,11 @@ def review_one(p: dict[str, Any], v: dict[str, Any], dry: bool) -> dict[str, Any
         log(f'{repo}#{num} {sha[:7]}: {row["verdict"]} (dry run → {out})')
         return row
     row['comment_url'] = pr_review_gh.publish(pr_decide.gh, repo, num, row, sha)
-    review_db.save(row)
+    review_db.save(row)  # before labels: a failed label must not cause a second review + comment
+    try:
+        pr_review_gh.label(pr_decide.gh, repo, num, row['verdict'])
+    except subprocess.CalledProcessError as exc:
+        log(f'{repo}#{num}: label failed ({str(exc.stderr or exc)[:150]}) — review saved, label skipped')
     log(f'{repo}#{num} {sha[:7]}: {row["verdict"]}, {len(row["findings"])} uwag, odrzucone {row["dropped"]}')
     return row
 

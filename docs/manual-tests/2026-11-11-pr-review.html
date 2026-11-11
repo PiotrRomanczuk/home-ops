@@ -75,6 +75,18 @@ systemctl --user start pr-review.service &amp;&amp; journalctl --user -u pr-revi
   <li>„Scal” po dopchnięciu commitu bez recenzji → w logu <code>head moved … not merging unreviewed code</code>, PR zostaje otwarty.</li>
 </ol>
 
+<h2>3a. Poprawka po pierwszym prawdziwym przebiegu (2026-11-11, gałąź <code>fix/pr-review-labels</code>)</h2>
+<ul>
+  <li>Pierwsza prawdziwa recenzja na uwh (vectordigital#7) opublikowała komentarz, ale <code>gh pr edit --add-label</code> padł:
+  <i>„GraphQL: Projects (classic) is being deprecated…”</i> — na uwh jest <code>gh</code> 2.46.0 (pakiet Ubuntu), który w <code>pr edit</code>
+  odpytuje wycofane Projects classic. Przez wyjątek nie zapisał się wiersz w <code>pr_reviews</code>, więc timer recenzowałby ten PR co godzinę.</li>
+  <li>Naprawa: etykiety przez REST (<code>gh api …/issues/N/labels</code>, <code>pr_gate.set_labels</code>), także „Popraw” w <code>pr_decide</code>
+  i <code>pr-agent/run-fix.sh</code> (osobny PR w home-infra-docs); kolejność <b>komentarz → zapis w bazie → etykieta</b>, błąd etykiety tylko w logu.</li>
+  <li>Recenzja vectordigital#7 w tym przebiegu: <i>ok</i>, 1 drobna uwaga — próba wcześniej dała <i>zmiany</i> z ważną uwagą o polityce prywatności
+  oznaczonej „DRAFT”. Do promptu doszedł punkt 6: treści oznaczone jako szkic/DRAFT/TODO, które po scaleniu zobaczą ludzie albo wyszukiwarki.</li>
+  <li>Testy: 93 OK (nowe: etykiety przez REST, 404 przy usuwaniu nie jest błędem, błąd etykiety nie blokuje zapisu, „Popraw” bez <code>pr edit</code>).</li>
+</ul>
+
 <h2>4. Ograniczenia i ryzyka</h2>
 <ul>
   <li>Zaległość: 27 otwartych PR → ok. 9 przebiegów (1 dzień); stare PR warto najpierw zamknąć, żeby nie zużywać subskrypcji.</li>

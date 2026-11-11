@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 from typing import Any, Callable
 
 OWNER_DEFAULT = 'PiotrRomanczuk'
@@ -69,6 +70,21 @@ def merge_reviewed(run: Gh, owner: str, repo: str, num: str, sha: str | None, lo
     else:
         run(['pr', 'merge', num, '-R', f'{owner}/{repo}', '--squash', '--delete-branch', '--match-head-commit', sha])
         log(f'{repo}#{num} merged at {sha[:7]}')
+
+
+def set_labels(run: Gh, owner: str, repo: str, number: int | str, add: tuple[str, ...] = (),
+               remove: tuple[str, ...] = ()) -> None:
+    """Labels through the REST issues API. Not `gh pr edit`: gh 2.46 (Ubuntu on uwh) queries the
+    sunset Projects (classic) there and fails (2026-11-11). Removing an absent label is not an error."""
+    path = f'repos/{owner}/{repo}/issues/{number}/labels'
+    if add:
+        run(['api', '-X', 'POST', path, *(arg for name in add for arg in ('-f', f'labels[]={name}'))])
+    for name in remove:
+        try:
+            run(['api', '-X', 'DELETE', f'{path}/{name}'])
+        except subprocess.CalledProcessError as exc:
+            if '404' not in f'{exc.stderr or ""}{exc.stdout or ""}':
+                raise
 
 
 def rounds(labels: list[dict[str, Any]]) -> int:

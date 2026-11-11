@@ -66,7 +66,7 @@ def act(r: Reporter, run: Gh, log: Log) -> set[str]:
                 pr_gate.merge_reviewed(run, OWNER, *parts, log)
             elif parts and answer == 'fix':
                 run(['label', 'create', 'fix-requested', '-R', f'{OWNER}/{parts[0]}', '--color', '0969da', '--force'])
-                run(['pr', 'edit', parts[1], '-R', f'{OWNER}/{parts[0]}', '--add-label', 'fix-requested'])
+                pr_gate.set_labels(run, OWNER, parts[0], parts[1], add=('fix-requested',))
                 log(f'{ref}: fix requested')
             elif parts and answer == 'no':
                 why = d.get('reason') or 'bez powodu'
