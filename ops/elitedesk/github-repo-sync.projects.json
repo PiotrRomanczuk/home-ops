@@ -1,13 +1,11 @@
 {
-  "_comment": "slug -> where github-repo-sync.py finds repo/stack/deploy data. slug must match the vault projects/*.md frontmatter 'project:' key (same join key as the vault sync path). owner_repo: GitHub API. local_git_dir: a bare/working repo reachable by `git --git-dir=<path> log` directly from elitedesk (no GitHub involved). unsupported: no remote (or no .git at all) — github-repo-sync.py records repo_meta={source:'github-api', unsupported: <reason>} and moves on, it does not error.",
+  "_comment": "OVERRIDES ONLY (2026-11-08): repos now come from the vault frontmatter `repo:`; list a slug here only to add deploy_url/manifest or to point it at a local bare repo / mark it unsupported. slug must match the vault project slug. owner_repo: GitHub API. local_git_dir: a bare/working repo reachable by `git --git-dir=<path> log` directly from elitedesk (no GitHub involved). unsupported: no remote (or no .git at all) — github-repo-sync.py records repo_meta={source:'github-api', unsupported: <reason>} and moves on, it does not error.",
 
   "strummy": { "owner_repo": "PiotrRomanczuk/strummy", "manifest": "node", "deploy_url": "strummy.vercel.app" },
   "landing-portfolio": { "owner_repo": "PiotrRomanczuk/landing-portfolio", "manifest": "node", "deploy_url": "romanczuk.vercel.app" },
   "inborr": { "owner_repo": "PiotrRomanczuk/INBORR---LandingPage", "manifest": "node", "deploy_url": "inborr.pl" },
   "instagram-stories-webhook": { "owner_repo": "PiotrRomanczuk/instagram-stories-webhook", "manifest": "node" },
   "fanpage_cleaner": { "owner_repo": "PiotrRomanczuk/fanpage-cleaner", "manifest": "node" },
-  "shortscannon": { "owner_repo": "PiotrRomanczuk/ShortsCannon", "manifest": "dotnet" },
-  "contentforge": { "owner_repo": "PiotrRomanczuk/ContentForge", "manifest": "dotnet" },
   "justmeandguitars": { "owner_repo": "PiotrRomanczuk/justmeandguitars-overlay-app", "manifest": "node", "_note": "vault slug covers two nested repos (overlay-app + planning); overlay-app is primary since it's the shippable Next.js piece" },
   "job-search": { "owner_repo": "PiotrRomanczuk/job-search", "manifest": "python" },
   "PiotrRomanczuk": { "owner_repo": "PiotrRomanczuk/PiotrRomanczuk", "manifest": "none" },

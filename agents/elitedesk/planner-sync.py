@@ -31,6 +31,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -39,6 +40,7 @@ sys.path.insert(0, str(_here))
 sys.path.insert(0, str(_here.parent))
 from _common import IngestClient, Shutdown  # noqa: E402
 from queue_md import parse_queue_md  # noqa: E402
+from task_ticks import TickTracker  # noqa: E402
 
 HOST_NAME = os.environ.get('HOST_NAME', 'elitedesk')
 PLANNER_REMOTE = os.environ.get('PLANNER_REMOTE', '')
@@ -57,6 +59,7 @@ BOARD_IMPORT_URL = INGEST_BASE + '/api/board/import'
 BOARD_SLUG = os.environ.get('BOARD_SLUG', 'home-ops')
 QUEUE_URL = INGEST_BASE + '/api/queue/sync'
 QUEUE_FILE = os.environ.get('QUEUE_FILE', 'QUEUE.md')
+SIGNALS_URL = INGEST_BASE + '/api/progress/signals'
 
 
 def post_log(level: str, message: str, data: dict[str, Any] | None = None) -> None:
@@ -686,6 +689,26 @@ def sync_once() -> None:
         queue_sync_once()
     except (OSError, ValueError) as e:
         post_log('error', f'queue-sync raised: {type(e).__name__}', {'err': str(e)[:500]})
+
+    try:
+        ticks_sync_once(records)
+    except (OSError, ValueError) as e:
+        post_log('error', f'ticks-sync raised: {type(e).__name__}', {'err': str(e)[:500]})
+
+
+_ticks = TickTracker(Path(f'{PLANNER_DIR}.ticks.json'))
+
+
+def ticks_sync_once(records: list[dict[str, Any]]) -> None:
+    """Postęp tab: tasks ticked/added since the last snapshot → project_signals."""
+    rows, snap = _ticks.pending(records, date.today().isoformat())
+    if rows:
+        status, _ = ic.request(SIGNALS_URL, {'rows': rows}, timeout=15)
+        if status != 200:
+            post_log('warn', f'ticks POST failed: status={status}', {'rows': len(rows)})
+            return
+        post_log('info', 'vault ticks', {'rows': rows})
+    _ticks.commit(snap)
 
 
 def main() -> None:
