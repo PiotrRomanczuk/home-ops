@@ -3,7 +3,7 @@
 // The vault is the source of truth; nothing here edits it.
 
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { GraphCanvas } from '@/components/GraphCanvas';
 import { NodeSheet } from '@/components/NodeSheet';
 import { PressureTable } from '@/components/PressureTable';
@@ -12,9 +12,13 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { fetchMap, fetchPressure } from '@/lib/api';
 import { ecosystemSpec, impactOf, infraSpec, visibleIds } from '@/lib/graph';
 
+// bpmn-js (~600 kB) loads only when the Procesy tab is opened.
+const ProcessesView = lazy(() => import('@/components/ProcessesView').then((m) => ({ default: m.ProcessesView })));
+
 const VIEWS = [
   { id: 'ekosystem', label: 'Ekosystem' },
   { id: 'infrastruktura', label: 'Infrastruktura' },
+  { id: 'procesy', label: 'Procesy' },
   { id: 'presja', label: 'Presja' },
 ] as const;
 type View = (typeof VIEWS)[number]['id'];
@@ -25,6 +29,7 @@ export function App() {
   const [view, setView] = useState<View>(readView);
   const [showQuiet, setShowQuiet] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
+  const [processSlug, setProcessSlug] = useState<string | null>(null);
   const mapQ = useQuery({ queryKey: ['map'], queryFn: fetchMap, refetchInterval: 60_000 });
   const pressureQ = useQuery({ queryKey: ['pressure'], queryFn: fetchPressure, refetchInterval: 60_000 });
   const map = mapQ.data;
@@ -32,7 +37,7 @@ export function App() {
   useEffect(() => window.history.replaceState(null, '', `#${view}`), [view]);
 
   const spec = useMemo(() => {
-    if (!map || view === 'presja') return null;
+    if (!map || view === 'presja' || view === 'procesy') return null;
     return view === 'infrastruktura' ? infraSpec(map, showQuiet) : ecosystemSpec(map, showQuiet);
   }, [map, view, showQuiet]);
   const highlight = useMemo(() => (map && selected ? impactOf(map, selected) : null), [map, selected]);
@@ -78,6 +83,11 @@ export function App() {
         {error && <div className="p-6 text-sm text-bad">Nie udało się pobrać danych: {String(error)}</div>}
         {!error && !map && <div className="p-6 text-sm text-muted-foreground">Ładuję mapę…</div>}
         {spec && <GraphCanvas spec={spec} selected={selected} highlight={highlight} onSelect={setSelected} />}
+        {map && view === 'procesy' && (
+          <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Ładuję edytor BPMN…</div>}>
+            <ProcessesView map={map} slug={processSlug} onOpen={setProcessSlug} onSelect={setSelected} />
+          </Suspense>
+        )}
         {view === 'presja' && (
           <div className="h-full overflow-auto px-4 py-3">
             <p className="mb-3 max-w-3xl text-xs text-muted-foreground">
@@ -89,7 +99,16 @@ export function App() {
         )}
       </main>
       {map && (
-        <NodeSheet map={map} pressure={pressureQ.data?.projects ?? []} selected={selected} onSelect={setSelected} />
+        <NodeSheet
+          map={map}
+          pressure={pressureQ.data?.projects ?? []}
+          selected={selected}
+          onSelect={setSelected}
+          onOpenProcess={(slug) => {
+            setProcessSlug(slug);
+            setView('procesy');
+          }}
+        />
       )}
     </div>
   );
