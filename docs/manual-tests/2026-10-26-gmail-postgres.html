@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="pl"><head><meta charset="utf-8"><title>Manual test — Gmail → Postgres (migracja 025, gmail-daily)</title>
+<style>
+body{font:15px/1.5 -apple-system,system-ui,sans-serif;max-width:900px;margin:32px auto;padding:0 16px;color:#1a1a1a}
+h1{font-size:24px}h2{font-size:18px;margin-top:28px;border-bottom:1px solid #ddd;padding-bottom:4px}
+code,pre{font:13px ui-monospace,monospace;background:#f4f4f6;border-radius:4px}code{padding:1px 5px}pre{padding:10px 12px;overflow:auto}
+table{border-collapse:collapse;width:100%;font-size:14px}th,td{border-bottom:1px solid #e3e3e3;padding:5px 8px;text-align:left;vertical-align:top}th{background:#f4f4f6}
+.ok{color:#1b7f3b}.meta{color:#666}
+</style></head><body>
+<h1>Gmail → Postgres: schemat <code>gmail</code> + rutyna <code>gmail-daily</code></h1>
+<p class="meta"><b>Date</b>: 2026-10-26 · branch <code>feat/gmail-cleanup</code> · ADR <code>docs/adr/2026-10-26-gmail-postgres.md</code></p>
+
+<h2>Co zostało zrobione</h2>
+<ul>
+<li><b>Migracja <code>025_gmail.sql</code></b>: schemat <code>gmail</code> z tabelami <code>message</code> (nagłówki, klucz = REST id), <code>rule</code> + <code>config</code> (reguły kategoryzacji jako wiersze), <code>applied</code> (każda linia dziennika undo → jeden wiersz na wiadomość), <code>message_state</code> (aktualna kategoria/podkategoria/flagi), funkcja <code>gmail.rules_json()</code> (reguły w kształcie JSON, który klasyfikator już czyta) i widok <code>gmail.category_summary</code>. Idempotentna.</li>
+<li><b><code>gmail_db.py</code></b>: transport <code>docker exec psql</code> jak w <code>seo_db.py</code>; ładowanie masowe przez <code>COPY FROM STDIN</code> do tabeli tymczasowej + upsert. Czyste helpery (<code>message_row</code>, <code>journal_rows</code>, <code>copy_block</code>) mają testy.</li>
+<li><b><code>gmail_import.py</code></b>: jednorazowy backfill <code>messages | journals | rules | state | all</code> ze stanu z Maca.</li>
+<li><b><code>gmail_classify.rules_from_dict()</code></b>: jeden parser dla pliku JSON i dla <code>gmail.rules_json()</code>; <code>GMAIL_RULES=db</code> wybiera Postgres. Nowa flaga <code>automated_only</code> (reguła tematu tylko dla nadawców botowych) i szerszy regex nadawców automatycznych.</li>
+<li><b><code>gmail-daily.py</code> + unit/timer 06:40</b>: inwentarz nowych maili przez IMAP → klasyfikacja → reconcile etykiet kategorii (nigdy Kosz) → <code>message_state</code> → karta w digestcie.</li>
+<li>README (sekcja „Gmail routine”), ADR, CI <code>py_compile</code> dla nowych plików, <code>.gitignore</code> dla <code>gmail-daily.env</code>.</li>
+</ul>
+
+<h2>Wynik testu backfillu (uwh, baza jednorazowa <code>gmail_test</code>, 2026-10-26 20:15)</h2>
+<pre>DB=gmail_test python3 gmail_import.py all        # 33 s
+ msgs   | applied | rules | state  | in_trash
+ 107288 |  342926 |    90 | 107288 |    74391
+rules_json(): 67 rules, 23 subrules</pre>
+<p class="ok">✓ migracja zastosowana dwa razy bez błędu (idempotencja) · ✓ 107 288 nagłówków · ✓ 19 dzienników → 342 926 wierszy <code>applied</code> · ✓ 90 reguł odtwarzalne przez <code>rules_json()</code> · ✓ stan: 74 391 w Koszu zgodne z dziennikami</p>
+<p>Testy jednostkowe: <code>uv run --with pytest python -m pytest ops/elitedesk/tests/test_gmail_*.py</code> → 47 passed.</p>
+
+<h2>Jak przetestować ręcznie</h2>
+<table>
+<tr><th>#</th><th>Krok</th><th>Oczekiwany wynik</th></tr>
+<tr><td>1</td><td>Na uwh: <code>cd ~/code/logs-stack && git pull && scripts/apply-migrations.sh</code></td><td><code>025_gmail.sql</code> na liście zastosowanych; drugi run „already applied”.</td></tr>
+<tr><td>2</td><td><code>python3 ops/elitedesk/gmail_import.py all</code> (SQLite + dzienniki + reguły skopiowane z Maca do tych samych ścieżek)</td><td>Liczby jak wyżej; <code>SELECT count(*) FROM gmail.message</code> = liczba wierszy w <code>inventory.sqlite</code>.</td></tr>
+<tr><td>3</td><td><code>SELECT gmail.rules_json() = (plik JSON)</code> — np. <code>jsonb_array_length(gmail.rules_json()->'rules')</code></td><td>Tyle samo reguł co w pliku; klasyfikator z <code>GMAIL_RULES=db</code> daje te same kategorie co z pliku (<code>gmail_cleanup.py classify</code> z obiema wartościami → identyczny raport).</td></tr>
+<tr><td>4</td><td>Skopiować <code>gmail-client.json</code> + <code>gmail-token.json</code> na uwh (0600), <code>gmail-daily.env</code> z tokenem ingest, <code>systemctl --user start gmail-daily.service</code></td><td>W journalu linia „N nowych, A etykiet dodanych, R zdjętych, INBOX 0, do przejrzenia …”; nowy <code>journal-daily-*.jsonl</code>; karta <code>gmail-daily</code> w porannym mailu.</td></tr>
+<tr><td>5</td><td>Edge: zmienić jedną regułę w <code>gmail.rule</code> (np. <code>UPDATE gmail.rule SET label='Dom/Usługi' WHERE label='Dom/Zdrowie' AND 'booksy.com' = ANY(senders)</code>) i odpalić rutynę</td><td>Maile tego nadawcy tracą starą etykietę, dostają nową; obie operacje w dzienniku i w <code>gmail.applied</code>.</td></tr>
+<tr><td>6</td><td>Edge: token wygasły / brak sieci</td><td>Unit kończy się błędem, <code>OnFailure</code> wysyła mail z logiem; Postgres nietknięty (COPY w transakcji).</td></tr>
+<tr><td>7</td><td>Bezpieczeństwo: <code>grep -rn "trash\|batchDelete" ops/elitedesk/gmail-daily.py</code></td><td>Rutyna nie woła <code>trash</code> ani <code>batchDelete</code>; <code>gmail_api</code> nadal nie ma <code>batchDelete</code>.</td></tr>
+</table>
+
+<h2>Czego ten test nie obejmuje</h2>
+<ul><li>Uruchomienia timera na uwh (wymaga publikacji aplikacji OAuth w GCP i skopiowania tokenu — po stronie Piotra).</li>
+<li>Widoku kategorii w konsoli (następny krok; dziś tylko widok SQL <code>gmail.category_summary</code>).</li></ul>
+</body></html>

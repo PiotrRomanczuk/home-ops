@@ -1,0 +1,15 @@
+{
+ "me": ["p.romanczuk@gmail.com"],
+ "freemail": ["gmail.com", "wp.pl"],
+ "rules": [
+  {"label": "Dev/Zwroty-poczty", "from": ["mailer-daemon@googlemail.com"], "subject": "^Delivery Status Notification"},
+  {"label": "Gitara/Strummy-system", "subject": "^(Daily Notification Summary|Morning Briefing)"},
+  {"label": "Prawne", "from": ["kancelaria-example.pl"]},
+  {"label": "Finanse/Faktury", "subject": "(faktur|invoice)"},
+  {"label": "Praca/Szukanie-pracy", "from": ["jobs-noreply@linkedin.com"]},
+  {"label": "Praca/Rekrutacja", "from": ["linkedin.com"], "subject": "(rekrutac|interview|rozmow)"},
+  {"label": "Dev/GitHub", "from": ["github.com"]},
+  {"label": "Dev/Vercel", "from": ["vercel.com"]},
+  {"label": "Newslettery/Dev", "from": ["cooperpress.com"]}
+ ]
+}

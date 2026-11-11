@@ -65,6 +65,19 @@ jobs:
             ops/elitedesk/seo_plan.py \
             ops/elitedesk/seo_decide.py \
             ops/elitedesk/pr_decide.py \
+            ops/elitedesk/gmail_auth.py \
+            ops/elitedesk/gmail_api.py \
+            ops/elitedesk/gmail_inventory.py \
+            ops/elitedesk/gmail_cleanup.py \
+            ops/elitedesk/gmail_classify.py \
+            ops/elitedesk/gmail_apply.py \
+            ops/elitedesk/gmail_imap.py \
+            ops/elitedesk/gmail_unsub.py \
+            ops/elitedesk/gmail_report.py \
+            ops/elitedesk/gmail_ratelimit.py \
+            ops/elitedesk/gmail_db.py \
+            ops/elitedesk/gmail_import.py \
+            ops/elitedesk/gmail-daily.py \
             ops/elitedesk/seo_plan_db.py \
             ops/elitedesk/seo_drift.py \
             ops/elitedesk/seo_opps.py \

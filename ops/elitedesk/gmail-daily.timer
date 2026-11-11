@@ -1,0 +1,11 @@
+[Unit]
+Description=Fire home-ops gmail-daily at 06:40 (before the 07:00 digest)
+
+[Timer]
+OnCalendar=*-*-* 06:40:00
+RandomizedDelaySec=120
+Persistent=true
+Unit=gmail-daily.service
+
+[Install]
+WantedBy=timers.target
