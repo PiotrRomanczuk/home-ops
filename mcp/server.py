@@ -296,6 +296,26 @@ def get_project(slug: str) -> str:
 
 
 @mcp.tool()
+def get_pressure(limit: int = 10) -> str:
+    """Projects ranked by how much attention they need (the Mapa "Presja" view).
+
+    score = base × blast × status weight. base adds vault tasks by §8 class
+    (🔴 4, 💰 2, other classes 1, unclassed 0.25), pain points, open blueprint
+    gaps (capped), GitHub issues (bugs ×3) and runtime (error patterns in 24 h,
+    failed CI, deploy down); blast grows with every project that depends_on it.
+    Each row carries its `parts`, so explain a ranking from them. A suggestion
+    for QUEUE.md / /task-review — never a decision on its own.
+
+    Args:
+      limit: how many top projects to return (default 10)
+    """
+    code, body = _request("GET", "/api/pressure")
+    if code != 200 or not isinstance(body, dict):
+        return json.dumps({"error": f"HTTP {code}", "body": body})
+    return json.dumps({"projects": (body.get("projects") or [])[: max(1, limit)], "weights": body.get("weights")})
+
+
+@mcp.tool()
 def get_host_metrics(host: str | None = None) -> str:
     """Latest metric sample(s) for hosts.
 

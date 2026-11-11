@@ -1,0 +1,65 @@
+<!doctype html><html lang="pl"><head><meta charset="utf-8"><title>Manual test: Mapa — kolejka presji</title>
+<style>body{margin:0;background:#f5f5f7;color:#1d1d1f;font:15px/1.55 -apple-system,Helvetica,Arial,sans-serif;padding:32px 16px}main{max-width:960px;margin:0 auto}h1{font-size:28px;margin:0 0 4px}h2{font-size:20px;margin:32px 0 10px}.meta{color:#6e6e73;font-size:13px}code,pre{font:13px ui-monospace,Menlo,monospace;background:#fff;padding:1px 5px;border-radius:5px}pre{padding:12px;overflow-x:auto;border:1px solid #e5e5ea}table{border-collapse:collapse;width:100%;background:#fff}td,th{text-align:left;padding:7px 9px;border-bottom:1px solid #eee;font-size:14px;vertical-align:top}td.n{text-align:right;font-variant-numeric:tabular-nums}.warn{color:#b25000;font-weight:600}.ok{color:#1a7f37;font-weight:600}</style></head><body><main>
+<h1>Mapa ekosystemu — kolejka presji (PR 2 z 4)</h1>
+<p class="meta">Data: 2026-11-11 · Gałąź: <code>feat/mapa-pressure</code> (na <code>feat/mapa-model</code>, PR #74) · Zmiana backendowa i MCP, bez UI. Weryfikacja: testy jednostkowe, testy integracyjne na Postgresie 17 w Dockerze i pełny przebieg na prawdziwych danych. Ten przebieg to vault, projekty i procesy przez parsery planner-sync oraz <b>prawdziwy</b> <code>github-repo-sync.py</code> z GitHub API (tylko odczyt, token z <code>gh auth token</code>), wszystko zapisane do lokalnego ingest z tej gałęzi.</p>
+
+<h2>Co zostało zrobione</h2>
+<ul>
+<li><b><code>ops/elitedesk/gaps_parse.py</code></b>: otwarte ID luk z blueprintów w czterech formatach:
+  <ul>
+  <li>nagłówki <code>### SKL-1 ·</code> (Strummy);</li>
+  <li>punkty <code>- **LN-5 …**</code> (lesson-notes, daily-news, monitor-manager);</li>
+  <li>tabele <code>| BLD-1 |</code> (d4, roadmapa Strummy);</li>
+  <li>tabela <code>| CORE-1 |</code> w „Luki” (social-hub).</li>
+  </ul>
+  Liczą się tylko sekcje Gaps/Luki i <code>90-roadmap.md</code>. Pliki 91+ (strategia testów, runbooki, audyty) są pomijane. ID z notatek <code>_Shipped …_</code>, także zawiniętych na kilka linii, oraz przekreślone są uznane za zrobione.</li>
+<li><b><code>ops/elitedesk/repo_health.py</code></b> i <b>github-repo-sync</b> zapisują w <code>repo_meta</code> dwa nowe pola:
+  <ul>
+  <li><code>issues</code>: otwarte issues bez PR, ile ma etykietę z „bug”, wiek najstarszego;</li>
+  <li><code>gaps</code>: ID luk z <code>docs/BLUEPRINT.md</code> i <code>docs/app-blueprint/</code>.</li>
+  </ul>
+  Repo bez blueprintu daje <code>null</code>, a nie zero.</li>
+<li><b><code>ingest/src/pressure-model.ts</code></b> (czysta funkcja, wagi w jednym <code>WEIGHTS</code>):
+  <ul>
+  <li><b>wynik = baza × blast × waga statusu</b>;</li>
+  <li><b>baza</b> = zadania z Now/Next wg klasy §8 (🔴 4 · 💰 2 · 🎯/🧹/💡 1 · bez klasy 0,25) + 2 × pain point + luki (limit 15) + issues (bug × 3, reszta × 1) + runtime (2 × wzorzec błędu w 24 h, +5 czerwone CI, +5 deploy DOWN z rpi-sentinel);</li>
+  <li><b>blast</b> = 1 + 0,25 × liczba projektów zależnych przechodnio;</li>
+  <li><b>waga statusu</b>: hot 1 · stalled 0,8 · warm 0,7 · dormant 0,3;</li>
+  <li>projekty z werdyktem archiwum, usunięty lub scalany wypadają.</li>
+  </ul>
+  Odczyt zadań i pain points jest w <code>vault-tasks.ts</code>, wikilinki w <code>vault-links.ts</code>.</li>
+<li><b><code>GET /api/pressure</code></b> zwraca ranking z rozbiciem <code>parts</code> i wagami. <code>/api/map</code> dokłada <code>pressure</code> do każdego węzła projektu. Wyciszenia z digestu (<code>MUTED</code>) obowiązują; wiersze rpi-sentinel liczą się jako „down”, a nie jako błąd.</li>
+<li><b>MCP <code>get_pressure</code></b>: ranking dla <code>/task-review</code> i innych sesji Claude.</li>
+</ul>
+
+<h2>Wynik na prawdziwych danych (2026-11-11)</h2>
+<p><code>github-repo-sync.py</code>: „synced 28/28 projects, 537 progress rows for 22 repos” (2 min 41 s, ok. 300 zapytań GET do GitHuba).</p>
+<table>
+<tr><th>#</th><th>Projekt</th><th>Wynik</th><th>Baza</th><th>Blast</th><th>Zadania 🔴/💰/kl./bez</th><th>Pain</th><th>Luki</th><th>Issues (bug)</th><th>Runtime</th></tr>
+<tr><td>1</td><td>strummy</td><td class="n">97,3</td><td class="n">97,3</td><td class="n">1</td><td>2/1/3/5</td><td class="n">18</td><td class="n">42</td><td>27 (0)</td><td>CI ✗</td></tr>
+<tr><td>2</td><td>social-hub</td><td class="n">80</td><td class="n">64</td><td class="n">1,25</td><td>7/0/0/84</td><td class="n">0</td><td class="n">24</td><td>0</td><td></td></tr>
+<tr><td>3</td><td>lesson-notes</td><td class="n">31,8</td><td class="n">31,8</td><td class="n">1</td><td>0/0/0/51</td><td class="n">4</td><td class="n">11</td><td>0</td><td></td></tr>
+<tr><td>4</td><td>home-ops</td><td class="n">21,4</td><td class="n">12,3</td><td class="n">1,75</td><td>0/0/7/21</td><td class="n">0</td><td>—</td><td>0</td><td></td></tr>
+<tr><td>5</td><td>gitara-lekcje</td><td class="n">13,5</td><td class="n">13,5</td><td class="n">1</td><td>0/0/1/42</td><td class="n">1</td><td>—</td><td>0</td><td></td></tr>
+<tr><td>6</td><td>api-keys-lab</td><td class="n">11,2</td><td class="n">16</td><td class="n">1</td><td>0/0/4/0</td><td class="n">6</td><td>—</td><td>0</td><td></td></tr>
+<tr><td>7</td><td>instagram-stories-webhook</td><td class="n">6,3</td><td class="n">21</td><td class="n">1</td><td>0</td><td class="n">0</td><td>—</td><td>13 (4)</td><td></td></tr>
+</table>
+<p>„—” to brak blueprintu w repo. Luki z GitHuba zgadzają się z lokalnym przebiegiem parsera: Strummy 42, social-hub 24, lesson-notes 11, d4 6, monitor-manager 4, daily-news 4. Runtime jest pusty, bo lokalna baza nie ma <code>host_logs</code> z produkcji. Ten fragment pokrywa test integracyjny.</p>
+<p class="warn">Do strojenia po pierwszym oglądzie: social-hub ma w Now/Next 84 zadania bez klasy §8, a waga 0,25 daje im 21 pkt. Jeśli ranking ma mówić „co się pali”, a nie „gdzie jest długa lista”, można obniżyć <code>unclassed</code> albo ograniczyć jego wkład.</p>
+
+<h2>Jak przetestować ręcznie</h2>
+<h3>1. Testy</h3>
+<pre>python3 -m unittest discover -s ops/elitedesk/tests -p 'test_*.py'   # 98 OK (w tym test_repo_health: 4 formaty, Shipped, PR-y ≠ issues)
+cd ingest &amp;&amp; npm run check &amp;&amp; npm test -- --run                    # pressure-model, map-model, vault-*</pre>
+<h3>2. Integracja (Postgres w Dockerze, migracje 001/004/005/016/029)</h3>
+<pre>DATABASE_URL=postgresql://postgres:ci-placeholder@127.0.0.1:55499/home_ops INGEST_TOKEN=ci-token LOGS_PASSWORD=ci-password \
+  npx vitest --run src/routes/__tests__/processes-map.test.ts      # 7 passed</pre>
+<p>Test „pressure” wkłada do <code>host_logs</code> dwa błędy tego samego wzorca (liczą się jako 1), jeden wyciszony („gpu queue stalled”) i parę wpisów rpi-sentinel (DOWN → RECOVERED, czyli nie down; świeży DOWN, czyli down). Oczekiwane: home-ops = (4 + 3 + 4 + 12) × 1,25 = <b>28,8</b>, job-radar = 0.</p>
+<h3>3. Po wdrożeniu na uwh (po PR #74)</h3>
+<pre>ssh uwh 'cd ~/code/logs-stack &amp;&amp; git pull &amp;&amp; docker compose up -d --build ingest &amp;&amp; systemctl --user start github-repo-sync.service'
+curl -s -H "X-Ingest-Token: $INGEST_TOKEN" http://192.168.1.75:64421/api/pressure \
+  | jq -r '.projects[:10][] | "\(.score)\t\(.slug)\t luki=\(.parts.gaps.n) issues=\(.parts.issues.open) runtime=\(.parts.runtime.points)"'</pre>
+<p>Migracji tu nie ma. github-repo-sync działa z checkoutu repo, więc wystarczy <code>git pull</code>. Sprawdź jeszcze, że błędy z <code>app:&lt;slug&gt;</code> z ostatniej doby podbijają <code>runtime.errorPatterns</code> właściwego projektu. Strummy prod nie jest dotykany; standardowa kontrola: 10 kontenerów <code>StudentProduction</code> Up, <code>strummy.online</code> → 200.</p>
+<h3>4. MCP</h3>
+<p>W sesji Claude z serwerem home-ops: „który projekt potrzebuje uwagi?” → <code>get_pressure(limit=5)</code>. Odpowiedź ma się opierać na <code>parts</code>, np. „Strummy: 27 issues, 42 luki, czerwone CI”.</p>
+</main></body></html>
