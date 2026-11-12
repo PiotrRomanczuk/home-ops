@@ -21,6 +21,7 @@ import { registerProjectsRoutes } from './routes/projects.ts';
 import { registerQueueRoutes } from './routes/queue.ts';
 import { registerSeoRoutes } from './routes/seo.ts';
 import { registerStatusRoutes } from './routes/status.ts';
+import { registerStorageRoutes } from './routes/storage.ts';
 import { registerTodayRoutes } from './routes/today.ts';
 
 const app = new Hono();
@@ -48,6 +49,7 @@ registerBriefsRoutes(app);
 registerQueueRoutes(app);
 registerActivityRoutes(app);
 registerProgressRoutes(app);
+registerStorageRoutes(app);
 registerTodayRoutes(app);
 registerAuthRoutes(app);
 
