@@ -207,7 +207,8 @@ jobs:
           for i in 1 2; do
             psql -h 127.0.0.1 -U postgres -d home_ops -v ON_ERROR_STOP=1 \
               -f postgres/migrations/016_project_repo_meta.sql \
-              -f postgres/migrations/027_project_signals.sql
+              -f postgres/migrations/027_project_signals.sql \
+              -f postgres/migrations/029_storage_places.sql
           done
 
       - name: integration tests
@@ -218,7 +219,7 @@ jobs:
           LOGS_PASSWORD: ci-password
         # One file at a time: they share this database (activity + progress both
         # write unit_runs), so parallel files would race each other's cleanup.
-        run: npm test -- --run --no-file-parallelism src/routes/__tests__/jobs-state-machine.test.ts src/routes/__tests__/decisions.test.ts src/routes/__tests__/briefs-today.test.ts src/routes/__tests__/queue.test.ts src/routes/__tests__/activity.test.ts src/routes/__tests__/progress.test.ts
+        run: npm test -- --run --no-file-parallelism src/routes/__tests__/jobs-state-machine.test.ts src/routes/__tests__/decisions.test.ts src/routes/__tests__/briefs-today.test.ts src/routes/__tests__/queue.test.ts src/routes/__tests__/activity.test.ts src/routes/__tests__/progress.test.ts src/routes/__tests__/storage.test.ts
 
   tests-seo-ingest:
     name: tests (seo ingest upsert contract vs real postgres)

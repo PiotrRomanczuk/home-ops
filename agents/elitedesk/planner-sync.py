@@ -6,7 +6,9 @@ Runs on elitedesk (where the planner bare repo lives anyway). Pulls every
 SYNC_INTERVAL seconds, parses projects/*.md frontmatter + Now/Next/Later
 sections, POSTs the full set. The server-side handler upserts each row
 and deletes any slug missing from the payload, so vault deletes
-propagate without a separate command.
+propagate without a separate command. The storage register (place notes in
+2-Obszary/mapy/miejsca/) goes the same way to /api/storage/sync, but only
+when the notes change.
 
 Env:
   INGEST_URL       (required) e.g. http://127.0.0.1:64421/api/ingest
@@ -40,6 +42,7 @@ sys.path.insert(0, str(_here))
 sys.path.insert(0, str(_here.parent))
 from _common import IngestClient, Shutdown  # noqa: E402
 from queue_md import parse_queue_md  # noqa: E402
+from storage_md import parse_places  # noqa: E402
 from task_ticks import TickTracker  # noqa: E402
 
 HOST_NAME = os.environ.get('HOST_NAME', 'elitedesk')
@@ -60,6 +63,7 @@ BOARD_SLUG = os.environ.get('BOARD_SLUG', 'home-ops')
 QUEUE_URL = INGEST_BASE + '/api/queue/sync'
 QUEUE_FILE = os.environ.get('QUEUE_FILE', 'QUEUE.md')
 SIGNALS_URL = INGEST_BASE + '/api/progress/signals'
+STORAGE_URL = INGEST_BASE + '/api/storage/sync'
 
 
 def post_log(level: str, message: str, data: dict[str, Any] | None = None) -> None:
@@ -630,6 +634,34 @@ def queue_sync_once() -> None:
         post_log('error', 'queue sync failed', {'status': status, 'error': (body or {}).get('error')})
 
 
+# ── storage sync (vault place notes → storage_places, read-only mirror) ─
+
+_storage_last_hash: str | None = None
+
+
+def storage_sync_once() -> None:
+    """POST the place notes once per change. Rejected rows are logged with
+    their note paths and not re-posted until a note changes."""
+    global _storage_last_hash
+    places = parse_places(PLANNER_DIR)
+    if not places:
+        return  # no register in this vault — nothing to mirror
+    digest = _hash(json.dumps(places, sort_keys=True, ensure_ascii=False))
+    if digest == _storage_last_hash:
+        return
+    status, body = ic.request(STORAGE_URL, {'places': places}, timeout=15)
+    body = body or {}
+    if status != 200:
+        post_log('error', 'storage sync failed', {'status': status, 'error': body.get('error')})
+        return
+    _storage_last_hash = digest
+    rejected = [{'note': places[r['index']]['note_path'], 'reason': r['reason']}
+                for r in body.get('rejected') or [] if 0 <= r.get('index', -1) < len(places)]
+    post_log('warn' if rejected else 'info', 'storage sync ok', {
+        'upserted': body.get('upserted'), 'removed': body.get('removed'), 'rejected': rejected,
+    })
+
+
 # ── main loop ─────────────────────────────────────────────────────────
 
 def sync_once() -> None:
@@ -689,6 +721,11 @@ def sync_once() -> None:
         queue_sync_once()
     except (OSError, ValueError) as e:
         post_log('error', f'queue-sync raised: {type(e).__name__}', {'err': str(e)[:500]})
+
+    try:
+        storage_sync_once()
+    except (OSError, ValueError) as e:
+        post_log('error', f'storage-sync raised: {type(e).__name__}', {'err': str(e)[:500]})
 
     try:
         ticks_sync_once(records)

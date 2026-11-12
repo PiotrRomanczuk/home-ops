@@ -1,0 +1,43 @@
+<!doctype html><html lang="pl"><head><meta charset="utf-8"><title>Manual test — rejestr miejsc w Postgresie (2026-11-12)</title>
+<style>body{font:14px/1.5 -apple-system,Segoe UI,sans-serif;max-width:960px;margin:32px auto;padding:0 16px;color:#222}h1{font-size:22px}h2{font-size:17px;margin-top:28px}code,pre{font-family:ui-monospace,Menlo,monospace;font-size:12.5px}pre{background:#f4f4f4;padding:10px;border-radius:6px;overflow:auto}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ddd;padding:6px 8px;text-align:left;vertical-align:top}th{background:#f4f4f4}img{max-width:100%;border:1px solid #ddd;border-radius:6px}.ok{color:#1a7f37}.todo{color:#9a6700}</style></head><body>
+<h1>Rejestr miejsc (<code>storage_places</code>) — lustro notatek vaulta w Postgresie</h1>
+<p><b>Data:</b> 2026-11-12 · <b>Gałąź:</b> <code>feat/storage-places</code> · <b>ADR:</b> <code>docs/adr/2026-11-12-storage-places.md</code> · <b>Plan w vaulcie:</b> <code>3-Zasoby/analysis/2026-11-12-porzadek-wszystkich-miejsc.md</code></p>
+
+<h2>Co zostało zrobione</h2>
+<p>Rejestr miejsc z danymi (<code>STORAGE.md</code>) był jedną tabelą markdown. Od dziś każde miejsce to osobna notatka w <code>2-Obszary/mapy/miejsca/</code> z polami we frontmatterze (78 notatek). Ta zmiana dokłada lustro w Postgresie, tak jak dla notatek projektów:</p>
+<ul>
+<li><b>Migracja 029</b> — tabela <code>storage_places</code> (klucz <code>id</code> = numer miejsca), statusy jako CHECK: <code>porzadek</code> ok / do-poprawy / problem / niesprawdzone, <code>backup</code> to samo + nie-wymaga / brak-oceny, <code>stan</code> aktywne / usuniete; daty <code>sprawdzone</code> i <code>test_odtworzenia</code>; <code>sprawdzenie</code> = polecenie do audytu.</li>
+<li><b><code>agents/elitedesk/storage_md.py</code></b> — parser notatek (tylko <code>type: miejsce</code>), wartości przechodzą bez zgadywania.</li>
+<li><b>planner-sync</b> — nowy krok <code>storage_sync_once()</code>: wysyła komplet na <code>POST /api/storage/sync</code> tylko gdy notatki się zmieniły (md5); odrzucone notatki loguje ze ścieżką.</li>
+<li><b><code>POST /api/storage/sync</code></b> (token) — walidacja w <code>storage-model.ts</code>, upsert po <code>id</code>, usunięcie id, których nie ma już w vaulcie, w jednej transakcji; pusty zestaw → 400, żeby zepsuty klon nie wyczyścił tabeli.</li>
+<li><b><code>GET /api/storage</code></b> (podgląd lub token) — miejsca wg <code>id</code>, filtry <code>stan</code>, <code>porzadek</code>, <code>backup</code>, <code>gdzie</code>, liczniki statusów.</li>
+<li>CI: migracja 029 w zestawie integracyjnym + <code>storage.test.ts</code>.</li>
+</ul>
+
+<h2>Bramki (lokalnie, 2026-11-12)</h2>
+<table><tr><th>Bramka</th><th>Wynik</th></tr>
+<tr><td><code>npm run check</code> (tsc + biome)</td><td class="ok">zielone</td></tr>
+<tr><td><code>npx vitest --run src/__tests__/storage-model.test.ts</code></td><td class="ok">6 passed</td></tr>
+<tr><td><code>storage.test.ts</code> na Postgresie 17 (kontener <code>postgres:17-alpine</code>, migracja 029 nałożona dwa razy — idempotentna)</td><td class="ok">3 passed</td></tr>
+<tr><td><code>python3 -m unittest discover -s agents/tests</code></td><td class="ok">94 OK (6 nowych w <code>test_storage_md.py</code>)</td></tr>
+<tr><td>Prawdziwy vault: 78 notatek → parser → <code>POST /api/storage/sync</code> → baza</td><td class="ok"><code>{"upserted":78,"removed":0,"rejected":[]}</code>; aktywnych 76; porządek: ok 30, do-poprawy 9, problem 4, niesprawdzone 33; backup „problem” w 26 miejscach</td></tr></table>
+
+<h2>Jak przetestować ręcznie</h2>
+<ol>
+<li><b>Parser na prawdziwym vaulcie</b> (Mac, bez hosta):<pre>cd home-ops && python3 -c "
+import importlib.util,pathlib,collections
+s=importlib.util.spec_from_file_location('m','agents/elitedesk/storage_md.py');m=importlib.util.module_from_spec(s);s.loader.exec_module(m)
+p=m.parse_places(pathlib.Path.home()/'Obsidian/MainCV-Planner')
+print(len(p), collections.Counter(x['backup'] for x in p))"</pre>Oczekiwane: <code>78</code> i liczniki backupu (26 × <code>problem</code>).</li>
+<li><b>Deploy na uwh</b> (po merge, z czystego main): <pre>git pull
+scripts/apply-migrations.sh                     # 029_storage_places
+docker compose up -d --build ingest
+scripts/deploy-agent.sh elitedesk planner-sync   # planner-sync.py + storage_md.py</pre></li>
+<li><b>Sync</b>: w logach planner-sync (źródło <code>agent:planner-sync</code>) w ciągu 60 s linia <code>storage sync ok</code> z <code>upserted: 78</code>. Potem <pre>curl -s -H "X-Ingest-Token: …" "http://192.168.1.75:64421/api/storage?backup=problem" | jq '.summary'</pre>Oczekiwane: <code>total</code> 26.</li>
+<li><b>Zmiana w Obsidianie</b>: w notatce <code>74-onedrive.md</code> zmienić <code>backup: niesprawdzone</code> → <code>backup: ok</code>. Po ≤ 60 s (pull lustra + tick) GET pokazuje nową wartość; bez zmian w notatkach kolejne ticki nie wysyłają nic (brak nowych linii <code>storage sync ok</code>).</li>
+<li><b>Brzegi</b>: wpisać <code>porzadek: 🟢</code> w jednej notatce → linia <code>storage sync ok</code> na poziomie <code>warn</code> z <code>rejected: [{note: …, reason: "bad status value"}]</code>, reszta miejsc się zapisuje; usunąć notatkę → jej <code>id</code> znika z tabeli (<code>removed: 1</code>); <code>POST</code> bez tokena → 401; <code>{"places": []}</code> → 400.</li>
+</ol>
+
+<h2>Poza zakresem (świadomie)</h2>
+<p>Tabela historii audytu <code>storage_checks</code> i sam cotygodniowy audyt (wykonanie poleceń z <code>sprawdzenie</code>) — osobny PR. Karta na stronie „Dziś” — gdy audyt zacznie produkować odchylenia. Zapis z konsoli do vaulta — nie, vault zostaje jedynym edytorem.</p>
+</body></html>
