@@ -32,20 +32,30 @@ the next morning.
    archive through `gmail_apply.move` (journaled, `undo` restores INBOX); protected mail
    (starred, protected categories, document-like subjects) is never archived.
 4. **Claude, not a local model — by measurement.** `gmail_llm_eval.py` replays the existing
-   rules as gold (senders labelled by a single rule; the model never sees the rules, and the
-   example senders shown per category never come from a domain in the same batch). Local
-   models on wfh reached 26 % (`qwen3.5:9b`) and ~45 % (`gemma4:12b`) exact agreement with
-   flat confidence. Claude with per-category examples, 588 gold senders: Sonnet 59 % exact /
-   63 % same branch, **Opus 64 % / 68 %**, and Opus's confidence is calibrated (≥ 0.9 → 94 %
-   right, 90 senders). Misses are mostly neighbouring categories of the owner's taxonomy.
-   Piotr chose Claude (2026-11-13); default model `opus`. Details in the vault:
+   rules as gold (588 senders labelled by a single rule; the model never sees the rules, and the
+   example senders shown per category never come from a domain in the same batch):
+
+   | Setup | exact | same branch | confidence ≥ 0.9 → right |
+   |---|---:|---:|---|
+   | local `qwen3.5:9b` (wfh) | 26 % | 31 % | flat |
+   | Sonnet | 59 % | 63 % | 126 → 80 % |
+   | Opus | 64 % | 68 % | 90 → 94 % |
+   | **Sonnet + guide written by Fable** | **66 %** | **70 %** | **157 → 87 %** |
+
+   Misses are mostly neighbouring categories of the owner's taxonomy. Details in the vault:
    `3-Zasoby/analysis/2026-11-13-gmail-llm-ewaluacja.md`.
-6. **Review only, no auto mode.** 64–68 % agreement is below the 80 % bar; every proposal goes
-   through a human. Auto acceptance (e.g. confidence ≥ 0.9) only after real review statistics.
-5. **Headless `claude -p` on the Max subscription**, as `seo_llm.py` already does: batches of
+5. **Fable writes the guide, Sonnet follows it** (Piotr, 2026-11-14). The strongest model reads
+   the categories with their rule-filed senders once and writes a category guide (what belongs
+   where, tie-breaks between neighbours, default inbox policy; no sender or domain names). It is
+   stored in `gmail.config` (`llm_guide`, private), rewritten when older than 30 days, and goes into
+   Sonnet's system prompt. In the evaluation the guide was written from senders *outside* the
+   sample (leak check: none named). Cost: ~1 $ per guide, Sonnet with the guide ~0.5 ¢ per sender.
+6. **Headless `claude -p` on the Max subscription**, as `seo_llm.py` already does: batches of
    20 senders, `--json-schema` for structured output, and the CLI trimmed to ~1k tokens of
    overhead (`--tools ''`, `--strict-mcp-config`, `--setting-sources ''`, own `--system-prompt`)
    — without the trimming one call loaded ~570k tokens of user config.
+7. **Review only, no auto mode.** 66–70 % agreement is below the 80 % bar; every proposal goes
+   through a human. Auto acceptance (e.g. confidence ≥ 0.9) only after real review statistics.
 
 ## Consequences
 

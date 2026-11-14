@@ -64,7 +64,7 @@ def sender_digests(db: sqlite3.Connection, cfg: dict, trash: set[str], skip: set
 
 
 def propose(digests: list[dict], labels: list[str], labelled: list[dict], log=print,
-            limit: int = MAX_PROPOSE) -> tuple[list[tuple], bool]:
+            limit: int = MAX_PROPOSE, guide: str = '') -> tuple[list[tuple], bool]:
     """(proposal rows, reachable). Batches of gmail_llm.BATCH; stops at the first failed call — try tomorrow."""
     import gmail_llm_db
     rows: list[tuple] = []
@@ -73,7 +73,7 @@ def propose(digests: list[dict], labels: list[str], labelled: list[dict], log=pr
     for start in range(0, len(todo), gmail_llm.BATCH):
         batch = todo[start:start + gmail_llm.BATCH]
         try:
-            proposals, response = gmail_llm.propose_batch(batch, labels, shots)
+            proposals, response = gmail_llm.propose_batch(batch, labels, shots, guide=guide)
         except gmail_llm.ClaudeError as exc:
             log(f'claude failed ({exc}); {len(rows)} proposals this run')
             return rows, False

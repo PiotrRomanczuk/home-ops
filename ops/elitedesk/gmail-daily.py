@@ -79,8 +79,11 @@ def _reporter(log=print):
 def llm_steps(gmail: Gmail, db, cfg: dict, trash: set[str], reporter, journal: Path, log=print) -> tuple[int, int]:
     """Claude proposals for uncovered senders, questions on "Dziś", archive per accepted inbox policy."""
     import gmail_llm_db
+    import gmail_llm_guide
     weak, labelled = gmail_llm_daily.sender_digests(db, cfg, trash, gmail_llm_db.known_senders())
-    rows, _reachable = gmail_llm_daily.propose(weak, gmail_llm_daily.model_labels(cfg), labelled, log)
+    labels = gmail_llm_daily.model_labels(cfg)
+    guide = gmail_llm_guide.ensure_guide(labels, labelled, log=log) if weak else ''
+    rows, _reachable = gmail_llm_daily.propose(weak, labels, labelled, log, guide=guide)
     gmail_llm_db.insert_proposals(rows)
     if reporter:
         gmail_llm_daily.ask(reporter, log)

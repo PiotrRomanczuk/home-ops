@@ -20,6 +20,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import gmail_llm  # noqa: E402
+import gmail_llm_report  # noqa: E402
 
 WEAK_REASONS = {'none', 'tab', 'unsub'}
 
@@ -48,21 +49,40 @@ def sample(senders: list[dict], per_label: int, weak: int, seed: int) -> list[tu
     return picked
 
 
+def held_out_guide(base: Path, labels: list[str], pool: list[dict], picked: list) -> str:
+    """Guide written by GUIDE_MODEL from rule-filed senders OUTSIDE the evaluation sample (cached in guide-*.md)."""
+    import gmail_llm_guide
+    path = base / f'guide-{gmail_llm.PROMPT_VERSION}.md'
+    if not path.exists():
+        sampled = {s['sender'] for _, s, _ in picked}
+        held_out = [s for s in pool if s['sender'] not in sampled]
+        print(f'writing the guide with {gmail_llm.GUIDE_MODEL} from {len(held_out)} held-out senders…', flush=True)
+        guide, response = gmail_llm_guide.write_guide(labels, held_out)
+        path.write_text(guide + '\n')
+        (base / f'guide-{gmail_llm.PROMPT_VERSION}.response.json').write_text(json.dumps(response, ensure_ascii=False))
+    guide = path.read_text().strip()
+    leaked = gmail_llm_guide.leaks(guide, [s for _, s, _ in picked])
+    print(f'guide: {len(guide.split())} words; sample senders/domains named in it: {leaked or "none"}', flush=True)
+    return guide
+
+
 def done_keys(out: Path) -> set[tuple[str, str]]:
     if not out.exists():
         return set()
-    return {(r['model'], r['sender']) for r in gmail_llm.read_jsonl(out)}
+    return {(r['model'], r['sender']) for r in gmail_llm_report.read_jsonl(out)}
 
 
-def run(base: Path, models: list[str], per_label: int, weak: int, seed: int) -> Path:
-    senders = gmail_llm.read_jsonl(base / 'senders-2026-11-13.jsonl')
-    rule_labels = [r['label'] for r in gmail_llm.read_jsonl(base / 'rules-labels-2026-11-13.jsonl')]
+def run(base: Path, models: list[str], per_label: int, weak: int, seed: int, with_guide: bool = False) -> Path:
+    senders = gmail_llm_report.read_jsonl(base / 'senders-2026-11-13.jsonl')
+    rule_labels = [r['label'] for r in gmail_llm_report.read_jsonl(base / 'rules-labels-2026-11-13.jsonl')]
     labels = gmail_llm.labels_from(rule_labels)
     picked = sample(senders, per_label, weak, seed)
     random.Random(seed).shuffle(picked)  # a batch must not be 20 senders of one category
     pool = [{**s, 'label': gold_label(s)} for s in senders if gold_label(s)]
-    out = base / f'results-{gmail_llm.PROMPT_VERSION}.jsonl'
-    batches = base / f'batches-{gmail_llm.PROMPT_VERSION}.jsonl'
+    guide = held_out_guide(base, labels, pool, picked) if with_guide else ''
+    tag = gmail_llm.PROMPT_VERSION if with_guide else 'v2-claude'
+    out = base / f'results-{tag}.jsonl'
+    batches = base / f'batches-{tag}.jsonl'
     done = done_keys(out)
     print(f'{len(picked)} senders ({sum(p[0] == "gold" for p in picked)} gold) × {len(models)} models, '
           f'{len(labels)} labels, {len(done)} already done', flush=True)
@@ -74,7 +94,8 @@ def run(base: Path, models: list[str], per_label: int, weak: int, seed: int) -> 
                 # examples never come from a domain that is being classified in this batch
                 shots = gmail_llm.examples(pool, {gmail_llm.domain(s['sender']) for _, s, _ in chunk})
                 try:
-                    proposals, response = gmail_llm.propose_batch([s for _, s, _ in chunk], labels, shots, model=model)
+                    proposals, response = gmail_llm.propose_batch([s for _, s, _ in chunk], labels, shots, model=model,
+                                                                  guide=guide)
                 except gmail_llm.ClaudeError as exc:
                     print(f'{model} batch {start}: {exc}', flush=True)
                     continue
@@ -84,7 +105,7 @@ def run(base: Path, models: list[str], per_label: int, weak: int, seed: int) -> 
                 share = {'batch': batch_id, 'latency_s': round(response.get('duration_ms', 0) / 1000 / len(chunk), 2),
                          'cost_usd': round((response.get('total_cost_usd') or 0) / len(chunk), 5)}
                 for (kind, s, gold), proposal in zip(chunk, proposals):
-                    fh.write(json.dumps({'model': model, 'prompt_version': gmail_llm.PROMPT_VERSION, 'set': kind,
+                    fh.write(json.dumps({'model': model, 'prompt_version': tag, 'set': kind,
                                          'sender': s['sender'], 'gold': gold, 'proposal': proposal.to_json(),
                                          'response': share}, ensure_ascii=False) + '\n')
                 fh.flush()
@@ -100,10 +121,10 @@ def main() -> int:
     ap.add_argument('--per-label', type=int, default=15)
     ap.add_argument('--weak', type=int, default=150)
     ap.add_argument('--seed', type=int, default=13)
+    ap.add_argument('--guide', action='store_true', help='Sonnet & co. follow a guide written by GUIDE_MODEL')
     args = ap.parse_args()
-    out = run(args.dir.expanduser(), args.models, args.per_label, args.weak, args.seed)
-    import gmail_llm_report
-    (out.parent / f'summary-{gmail_llm.PROMPT_VERSION}.md').write_text(gmail_llm_report.summary(out))
+    out = run(args.dir.expanduser(), args.models, args.per_label, args.weak, args.seed, args.guide)
+    (out.parent / out.name.replace('results-', 'summary-').replace('.jsonl', '.md')).write_text(gmail_llm_report.summary(out))
     print(f'done → {out}')
     return 0
 

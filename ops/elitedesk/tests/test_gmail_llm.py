@@ -10,6 +10,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import gmail_llm  # noqa: E402
+import gmail_llm_report  # noqa: E402
 
 LABELS = gmail_llm.labels_from(['Zakupy', 'Zakupy/Sklepy', 'Urzędy', 'Finanse/Faktury'])
 SENDER = {'sender': 'sklep@allegro.pl', 'name': 'Allegro', 'n': 12, 'unsub_share': 0.5, 'tab': 'updates',
@@ -101,7 +102,7 @@ class ClaudeCallTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / 'x.jsonl'
             path.write_text(json.dumps({'s': 'a b'}, ensure_ascii=False) + '\n\n' + json.dumps({'s': 'c'}) + '\n')
-            self.assertEqual([r['s'] for r in gmail_llm.read_jsonl(path)], ['a b', 'c'])
+            self.assertEqual([r['s'] for r in gmail_llm_report.read_jsonl(path)], ['a b', 'c'])
 
 
 if __name__ == '__main__':

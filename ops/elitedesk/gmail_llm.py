@@ -1,13 +1,8 @@
-"""gmail_llm.py — Claude proposes *rules* (sender → category + inbox policy).
+"""gmail_llm.py — Claude proposes *rules* (sender → category + keep|archive); a human accepts them.
 
-The classifier stays deterministic: a proposal only takes effect once a human
-accepts it and it becomes a row in gmail.rule. Claude sees headers only (sender,
-name, Gmail tab, unsubscribe share, recent subjects) for a batch of senders, plus
-a few example senders per category taken from the existing rules, and must pick a
-category from the existing labels (JSON Schema enum — it cannot invent one).
-Headless `claude -p` on the Max subscription, trimmed to ~1k tokens of overhead:
-no tools, no MCP, no user settings/CLAUDE.md, own system prompt.
-Shared by the offline evaluation (gmail_llm_eval.py) and the daily routine.
+Headers only, batches of senders, categories as a JSON Schema enum with example senders and the
+owner's guide (gmail_llm_guide.py). Headless `claude -p` on the Max subscription, trimmed to ~1k
+tokens of overhead (no tools, MCP, user settings). ADR: docs/adr/2026-11-13-gmail-llm-rule-proposals.md
 """
 from __future__ import annotations
 
@@ -18,9 +13,10 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 CLAUDE_BIN = os.environ.get('CLAUDE_BIN', 'claude')
-MODEL = os.environ.get('GMAIL_LLM_MODEL', 'opus')  # eval 2026-11-14: opus 64 % exact vs sonnet 59 %, calibrated confidence
+MODEL = os.environ.get('GMAIL_LLM_MODEL', 'sonnet')  # daily proposals; Piotr 2026-11-14: opus ≈ sonnet, sonnet cheaper
+GUIDE_MODEL = os.environ.get('GMAIL_LLM_GUIDE_MODEL', 'fable')  # writes the category guide once (gmail_llm_guide.py)
 TIMEOUT = int(os.environ.get('GMAIL_LLM_TIMEOUT', '300'))
-PROMPT_VERSION = 'v2-claude'
+PROMPT_VERSION = 'v3-guide'
 BATCH, MAX_SUBJECTS, PER_LABEL_EXAMPLES = 20, 6, 4
 BUILTIN = ('Ludzie', 'Promocje', 'Newslettery', 'Powiadomienia', 'Społecznościowe', 'Inne/Do-przejrzenia')
 REVIEW = 'Inne/Do-przejrzenia'
@@ -61,11 +57,6 @@ class Proposal:
 
     def to_json(self) -> dict:
         return {**asdict(self), 'sender_key': self.sender_key}
-
-
-def read_jsonl(path) -> list[dict]:
-    """JSON lines split on newline only — str.splitlines() also breaks on U+2028 & co. inside subjects."""
-    return [json.loads(line) for line in Path(path).read_text().split('\n') if line.strip()]
 
 
 def labels_from(rule_labels: list[str]) -> list[str]:
@@ -124,13 +115,19 @@ def parse(raw: dict | None, sender: str, labels: list[str]) -> Proposal:
     return Proposal(sender, label, inbox, scope, conf, str(raw.get('reason', ''))[:300])  # type: ignore[union-attr]
 
 
-def claude(prompt: str, fmt: dict, model: str = MODEL, runner=subprocess.run) -> dict:
+def system_prompt(guide: str = '') -> str:
+    """SYSTEM, plus the owner's category guide (written by GUIDE_MODEL) when there is one."""
+    return SYSTEM + (f"\n\nThe owner's category guide — follow it:\n{guide}" if guide else '')
+
+
+def claude(prompt: str, fmt: dict, model: str = MODEL, runner=subprocess.run, system: str = SYSTEM,
+           timeout: int = TIMEOUT) -> dict:
     """One headless call; returns the CLI's JSON (structured_output, usage, total_cost_usd …)."""
     cmd = [CLAUDE_BIN, '-p', '--output-format', 'json', '--model', model, '--tools', '', '--strict-mcp-config',
-           '--setting-sources', '', '--no-session-persistence', '--system-prompt', SYSTEM,
+           '--setting-sources', '', '--no-session-persistence', '--system-prompt', system,
            '--json-schema', json.dumps(fmt, ensure_ascii=False)]
     try:
-        r = runner(cmd, input=prompt, capture_output=True, text=True, timeout=TIMEOUT)
+        r = runner(cmd, input=prompt, capture_output=True, text=True, timeout=timeout)
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise ClaudeError(str(exc)) from exc
     try:
@@ -143,9 +140,9 @@ def claude(prompt: str, fmt: dict, model: str = MODEL, runner=subprocess.run) ->
 
 
 def propose_batch(batch: list[dict], labels: list[str], shots: dict[str, list[str]], model: str = MODEL,
-                  runner=subprocess.run) -> tuple[list[Proposal], dict]:
+                  runner=subprocess.run, guide: str = '') -> tuple[list[Proposal], dict]:
     """Up to BATCH senders → one Proposal each (missing answers become review) + the full CLI response."""
     senders = [s['sender'] for s in batch]
-    response = claude(render(batch, labels, shots), schema(labels, senders), model, runner)
+    response = claude(render(batch, labels, shots), schema(labels, senders), model, runner, system_prompt(guide))
     by_sender = {i.get('sender'): i for i in response['structured_output'].get('proposals', []) if isinstance(i, dict)}
     return [parse(by_sender.get(s), s, labels) for s in senders], response

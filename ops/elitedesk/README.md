@@ -15,7 +15,7 @@ stack. They're version-controlled here; installed by symlinking into
 | `gmail_db.py` + `gmail_import.py` | Schema `gmail` (migration 025): headers, rules as rows, applied-ops log, current category per message. `gmail_import.py all` backfills from the SQLite + journals + rules JSON | see "Gmail routine" below |
 | `gmail-daily.py` / `.service` / `.timer` | 06:40 — inventory new mail over IMAP, classify with `gmail.rules_json()`, reconcile category labels (never trashes), rewrite `gmail.message_state`, one digest card | `systemctl --user link` / `enable --now` |
 | `gmail-daily.env.example` | Template for `gmail-daily.env` (ingest token, `GMAIL_RULES=db`) | copy, `chmod 600` |
-| `gmail_llm.py`, `gmail_llm_db.py`, `gmail_llm_daily.py` | Claude (headless `claude -p`, Max subscription) proposes rules for senders no rule covers; proposals in `gmail.rule_proposal` (migration 031); daily steps consume / propose / ask / archive | (imported by `gmail-daily.py`) |
+| `gmail_llm.py`, `gmail_llm_db.py`, `gmail_llm_daily.py`, `gmail_llm_guide.py` | Claude (headless `claude -p`, Max subscription) proposes rules for senders no rule covers; proposals in `gmail.rule_proposal` (migration 031); daily steps consume / propose / ask / archive | (imported by `gmail-daily.py`) |
 | `gmail_review.py` | Terminal review of proposals: accept / change category / keep-or-archive / reject | `ssh -t uwh 'cd ~/code/logs-stack && python3 ops/elitedesk/gmail_review.py'` |
 | `gmail-llm.py` | Run one LLM step by hand without Gmail (`propose --dry`, `archive`, `ask`, `consume`) | `python3 gmail-llm.py -h` |
 | `gmail_llm_eval.py` + `gmail_llm_report.py` | Offline evaluation: how well a model re-derives the existing rules | see "LLM rule proposals" below |
@@ -469,13 +469,17 @@ takes effect on the next run, which also moves already-labelled messages
 _Added 2026-11-13._ ADR: `docs/adr/2026-11-13-gmail-llm-rule-proposals.md`. Senders whose
 mail lands only in weak buckets (no rule: Gmail tab, List-Unsubscribe, `Inne/Do-przejrzenia`)
 go to Claude in batches of 20 (`claude -p`, `CLAUDE_CODE_OAUTH_TOKEN` in `gmail-daily.env`, model
-`GMAIL_LLM_MODEL`, default `opus`), with a few rule-filed example senders per category. It proposes `sender → category + keep|archive`; nothing changes until a
+`GMAIL_LLM_MODEL`, default `sonnet`), with a few rule-filed example senders per category and the
+owner's **category guide**: written once by the strongest model (`GMAIL_LLM_GUIDE_MODEL`, default `fable`)
+from the rule-filed senders, stored in `gmail.config` (key `llm_guide`, never in the repo), rewritten
+when older than 30 days. It proposes `sender → category + keep|archive`; nothing changes until a
 human accepts — then it is an ordinary `gmail.rule` row. Order inside `gmail-daily`:
 consume "Dziś" answers → classify/reconcile → propose (≤ 40 senders) → ask (≤ 3 open
 questions) → archive per accepted rules. `GMAIL_LLM=0` switches the steps off.
 
 ```bash
 scripts/apply-migrations.sh                                  # 031_gmail_llm.sql
+python3 ops/elitedesk/gmail-llm.py guide                     # write the category guide now (Fable)
 python3 ops/elitedesk/gmail-llm.py propose --limit 10 --dry  # what the model would propose, nothing stored
 python3 ops/elitedesk/gmail-llm.py propose                   # store proposals for the backlog
 python3 ops/elitedesk/gmail_review.py                        # review them (ssh -t uwh …)
@@ -483,4 +487,7 @@ python3 ops/elitedesk/gmail-llm.py archive                   # how many inbox me
 ```
 
 Evaluation (Mac, data exported read-only from the DB; see the ADR):
-`python3 ops/elitedesk/gmail_llm_eval.py --dir ~/.local/state/home-ops/gmail/llm-eval --models sonnet opus`
+`python3 ops/elitedesk/gmail_llm_eval.py --dir ~/.local/state/home-ops/gmail/llm-eval --models sonnet --guide`
+(`--guide`: the guide is written from senders outside the evaluation sample).
+
+`gmail_import.py rules FILE` truncates `gmail.config` — run `gmail-llm.py guide` again after a rules re-import.

@@ -6,8 +6,14 @@ latency, inbox policy and what the model does with the weak (no-rule) senders.
 """
 from __future__ import annotations
 
+import json
 from collections import Counter, defaultdict
 from pathlib import Path
+
+
+def read_jsonl(path) -> list[dict]:
+    """JSON lines split on newline only — str.splitlines() also breaks on U+2028 & co. inside subjects."""
+    return [json.loads(line) for line in Path(path).read_text().split('\n') if line.strip()]
 
 
 def same_branch(pred: str, gold: str) -> bool:
@@ -55,8 +61,7 @@ def model_section(model: str, rows: list[dict]) -> list[str]:
 
 
 def summary(results: Path) -> str:
-    import gmail_llm
-    rows = gmail_llm.read_jsonl(results)
+    rows = read_jsonl(results)
     by_model: dict[str, list[dict]] = defaultdict(list)
     for r in rows:
         by_model[r['model']].append(r)

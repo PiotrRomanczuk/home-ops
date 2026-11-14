@@ -7,6 +7,7 @@ through psql variables (seo_db.psql_exec), never string-built SQL values.
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 
 import gmail_db
 from seo_db import psql_exec, psql_json
@@ -69,3 +70,20 @@ def reject(proposal_id: int, via: str) -> None:
 
 def set_decision(proposal_id: int, decision_id: int) -> None:
     psql_exec(DECISION_SQL, {'id': str(proposal_id), 'decision': str(decision_id)})
+
+
+def save_guide(text: str, model: str) -> None:
+    """Store the category guide in gmail.config (key llm_guide) — private, never in the repo."""
+    value = json.dumps({'text': text, 'model': model, 'created': datetime.now(timezone.utc).isoformat()},
+                       ensure_ascii=False)
+    gmail_db.psql_script('CREATE TEMP TABLE g (value jsonb) ON COMMIT DROP;\n' + gmail_db.copy_block('g', ('value',), [(value,)])
+                         + "INSERT INTO gmail.config (key, value) SELECT 'llm_guide', value FROM g "
+                         'ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now();\n')
+
+
+def load_guide() -> tuple[str, datetime | None]:
+    """(guide text, created) — ('', None) when no guide was written yet."""
+    rows = psql_json("SELECT value->>'text' AS text, value->>'created' AS created FROM gmail.config WHERE key = 'llm_guide'")
+    if not rows or not rows[0]['text']:
+        return '', None
+    return rows[0]['text'], datetime.fromisoformat(rows[0]['created'])
