@@ -89,7 +89,8 @@ class GateTest(unittest.TestCase):
                          '3': {'mergeable': 'UNKNOWN', 'statusCheckRollup': [{'name': 'lint', 'conclusion': 'SUCCESS'}]}})
         self.assertFalse(pr_gate.state(g, 'o', 'a', 1)['ok'])
         self.assertIn('lint', pr_gate.state(g, 'o', 'a', 2)['line'])
-        self.assertEqual(pr_gate.state(g, 'o', 'a', 3), {'sha': 'sha1', 'head': '', 'ok': True, 'line': '+0 / −0 linii'})
+        self.assertEqual(pr_gate.state(g, 'o', 'a', 3), {'sha': 'sha1', 'head': '', 'head_owner': '', 'ok': True,
+                                                       'line': '+0 / −0 linii'})
 
     def test_options_follow_the_review(self):
         keys = lambda opts: [o['key'] for o in opts]  # noqa: E731
