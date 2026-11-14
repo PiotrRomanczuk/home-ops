@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>dataset-db — szablon schematu (raport 2026-11-14)</title>
+<style>
+  :root { --ink:#1d2433; --muted:#5b6475; --line:#e3e6ec; --bg:#fafbfc; --ok:#1f7a4d; --warn:#9a5b00; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.55 -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 900px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 1.6rem; margin: 0 0 4px; } h2 { margin-top: 2rem; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+  .meta { color: var(--muted); font-size: .9rem; }
+  code, pre { font-family: ui-monospace, Menlo, monospace; font-size: .86rem; }
+  pre { background:#fff; border:1px solid var(--line); border-radius:8px; padding:12px 14px; overflow-x:auto; }
+  table { border-collapse: collapse; width: 100%; font-size: .92rem; }
+  th, td { text-align:left; border-bottom:1px solid var(--line); padding:7px 6px; vertical-align: top; }
+  .ok { color: var(--ok); font-weight: 600; } .warn { color: var(--warn); font-weight: 600; }
+</style>
+</head>
+<body>
+<main>
+<h1>dataset-db — szablon schematu dla zbiorów danych</h1>
+<p class="meta">Data: 2026-11-14 · Gałąź: <code>feat/dataset-db-template</code> · Plan: <code>~/.claude/plans/shiny-booping-sloth.md</code> (część 1)</p>
+
+<h2>1. Co zostało zrobione</h2>
+<p>Przegląd wszystkich 13 magazynów danych w <code>~/code</code> pokazał, że zbiory danych zbierane przez zadania (song2logic, job-radar, d4, daily-news, olx-scraper) robią to samo każdy inaczej. Z tego powstał <b>szablon do skopiowania</b> (nie biblioteka) w <code>templates/dataset-db/</code>:</p>
+<ul>
+  <li><b>Miejsce</b>: własny schemat w <code>home_ops</code>, więc nocny <code>pg-backup</code> obejmuje go od pierwszego dnia.</li>
+  <li><b>Zapis z Maca</b>: <code>ssh uwh docker exec -i home-ops-postgres-1 psql</code> (wzorzec song2logic): bez sterownika, hasła i otwartego portu (<code>db/psql.py</code>).</li>
+  <li><b>Migracje z rejestrem</b> (<code>db/migrate.py</code>): pliki <code>NNN_nazwa.sql</code>, tabela <code>&lt;schemat&gt;.schema_migrations</code> z sumą SHA-256, każdy plik w jednej transakcji, a plik zmieniony po zastosowaniu zatrzymuje przebieg. Tego brakowało job-radar.</li>
+  <li><b>Ładowanie</b> (<code>db/load.py</code>): JSONL → <code>COPY</code> do tabel tymczasowych → upsert projektu → <b>strażnik liczby wierszy</b> (tabela, w której ubyło wierszy, przerywa cały zapis: lekcja z olx-scraper 12.10 i Strummy dev 10.11) → commit albo rollback przy <code>--dry-run</code>.</li>
+  <li><b>Szkielet</b> <code>migrations/001_init.sql</code>: tabela <code>runs</code>, przykładowa tabela <code>items</code> (klucz naturalny, <code>raw jsonb</code>, <code>first_seen_at</code>/<code>last_seen_at</code>, <code>check</code> zamiast enumów), widok i rola tylko do odczytu <code>&lt;schemat&gt;_ro</code>.</li>
+  <li><b>Konwencje</b> z pochodzeniem każdej reguły w <code>templates/dataset-db/README.md</code>; decyzja w <code>docs/adr/2026-11-14-dataset-db-template.md</code>; nowy rozdział w <code>docs/CONTEXT.md</code>.</li>
+  <li><code>scripts/new-dataset.sh &lt;schemat&gt; &lt;pakiet&gt;</code> kopiuje szablon i wstawia nazwę schematu oraz datę.</li>
+  <li>CI: nowy job <code>tests-dataset-db</code> (Postgres 17 jako usługa, testy czyste i na żywej bazie, próba <code>new-dataset.sh</code>).</li>
+</ul>
+<p>Nic nie zostało zastosowane na uwh. Pierwszym użytkownikiem będzie coupon-ocr (schemat <code>zakupy</code>) w osobnym repo.</p>
+
+<h2>2. Wyniki weryfikacji (Mac, 2026-11-14)</h2>
+<table>
+  <tr><th>Sprawdzenie</th><th>Wynik</th></tr>
+  <tr><td><code>python -m unittest</code> (Python 3.12) na <code>postgres:17-alpine</code> w Dockerze</td><td class="ok">17/17 OK (10 bez bazy, 7 na żywej bazie)</td></tr>
+  <tr><td>migracje dwa razy: druga nic nie robi</td><td class="ok">OK</td></tr>
+  <tr><td>plik zmieniony po zastosowaniu → <code>MigrationError</code></td><td class="ok">OK</td></tr>
+  <tr><td>ponowny load: ta sama liczba wierszy, <code>first_seen_at</code> zachowane, nazwa odświeżona</td><td class="ok">OK</td></tr>
+  <tr><td>ten sam klucz dwa razy w jednej paczce → zostaje nowszy</td><td class="ok">OK</td></tr>
+  <tr><td><code>dry_run</code> pokazuje stan po zapisie, a baza zostaje pusta</td><td class="ok">OK</td></tr>
+  <tr><td>upsert, który kasuje wiersze → zapis przerwany, wiersz został</td><td class="ok">OK</td></tr>
+  <tr><td>rola <code>_ro</code> ma SELECT na widoku</td><td class="ok">OK</td></tr>
+  <tr><td><code>ruff check</code> + <code>ruff format --check</code> + <code>mypy --strict</code> na <code>db/</code></td><td class="ok">czysto</td></tr>
+  <tr><td><code>new-dataset.sh</code>: kopiuje, podstawia nazwę i datę; odmawia nadpisania i złej nazwy</td><td class="ok">OK (kod wyjścia 1 w obu odmowach)</td></tr>
+</table>
+
+<h2>3. Jak przetestować ręcznie</h2>
+<p>Wymagania: Docker (na Macu Colima), Python ≥ 3.12.</p>
+<pre>docker run -d --rm --name dataset-db-test -e POSTGRES_PASSWORD=x postgres:17-alpine
+cd ~/code/homelab/home-ops/templates/dataset-db
+DATASET_TEST_PSQL="docker exec -i dataset-db-test psql -U postgres -d postgres" \
+  python3 -m unittest discover -s tests -t . -v
+# oczekiwane: Ran 17 tests … OK</pre>
+<p>Ręczna próba całego cyklu na tej samej bazie:</p>
+<pre>T=$(mktemp -d)
+~/code/homelab/home-ops/scripts/new-dataset.sh demo $T/pkg
+cd $T/pkg
+export DATASET_PSQL="docker exec -i dataset-db-test psql -U postgres -d postgres"
+python3 -m db.migrate --schema demo --dir migrations --dry-run   # would apply 1: 001_init.sql
+python3 -m db.migrate --schema demo --dir migrations             # applied 1
+python3 -m db.migrate --schema demo --dir migrations             # applied 0
+echo '-- edit' &gt;&gt; migrations/001_init.sql
+python3 -m db.migrate --schema demo --dir migrations             # ✗ changed after being applied: 001_init.sql
+docker stop dataset-db-test</pre>
+<p>Przypadki brzegowe warte sprawdzenia: plik <code>1_a.sql</code> albo dwa pliki <code>001_*</code> w <code>migrations/</code> (odmowa przed dotknięciem bazy); <code>new-dataset.sh</code> drugi raz w ten sam katalog (odmowa, nic nie nadpisane).</p>
+
+<h2>4. Czego to nie robi</h2>
+<ul>
+  <li>Nie zmienia song2logic ani job-radar (przeniesienie na szablon to osobny plan).</li>
+  <li>Zapis idzie jako <code>postgres</code> (ograniczenie opisane w ADR); czytelnicy dostają rolę <code>_ro</code>.</li>
+  <li><code>scripts/apply-migrations.sh</code> nie dotyka schematów zbiorów danych.</li>
+</ul>
+</main>
+</body>
+</html>
