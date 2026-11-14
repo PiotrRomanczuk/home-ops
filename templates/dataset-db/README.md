@@ -42,7 +42,7 @@ Then:
 | Raw data | the full document in `raw jsonb` next to the typed columns pulled from it | job-radar, song2logic, Strummy |
 | Keys | natural `unique (source, external_id)` plus `bigint generated always as identity` | job-radar |
 | Time | `timestamptz`, names ending in `_at`: `fetched_at`, `first_seen_at`, `last_seen_at` | d4 |
-| Writing | `insert … on conflict … do update`; `distinct on` the key within one batch; `first_seen_at` and human-set fields are kept | job-radar, song2logic |
+| Writing | `insert … on conflict … do update`; `distinct on` the key within one batch; `first_seen_at` and human-set fields are kept; older documents never overwrite newer ones (`where excluded.fetched_at >= …`) | job-radar, song2logic |
 | Deleting | never; `db/load.py` aborts a load after which any watched table holds fewer rows | olx-scraper / Strummy incidents |
 | Runs | table `runs` (start, end, status, counts, error, stats) | d4, daily-news |
 | Value sets | `text` with a named `check` constraint, no enums | job-radar, social-hub |

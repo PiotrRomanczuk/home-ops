@@ -2,6 +2,8 @@
 -- items.jsonl) into __SCHEMA__.items. Run by db/load.py inside its transaction.
 -- `distinct on` keeps the newest copy of a key that appears twice in one batch: ON CONFLICT
 -- cannot touch the same row twice in one statement.
+-- The `where` makes the write monotonic: a document older than the stored one (a re-read of an old
+-- JSONL, a file from another machine) changes nothing, so name/raw never go back in time.
 insert into __SCHEMA__.items (source, external_id, name, raw, fetched_at)
 select distinct on (doc->>'source', doc->>'external_id')
   doc->>'source', doc->>'external_id', doc->>'name', doc, (doc->>'fetched_at')::timestamptz
@@ -10,5 +12,6 @@ order by doc->>'source', doc->>'external_id', (doc->>'fetched_at')::timestamptz 
 on conflict (source, external_id) do update set
   name         = excluded.name,
   raw          = excluded.raw,
-  fetched_at   = greatest(__SCHEMA__.items.fetched_at, excluded.fetched_at),
-  last_seen_at = now();
+  fetched_at   = excluded.fetched_at,
+  last_seen_at = now()
+where excluded.fetched_at >= __SCHEMA__.items.fetched_at;

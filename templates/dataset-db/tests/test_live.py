@@ -56,6 +56,25 @@ class LiveTemplateTest(unittest.TestCase):
         self.assertEqual(self.migrate(), ["001_init.sql"])
         self.assertEqual(self.migrate(), [])
 
+    def test_dry_run_runs_no_ddl(self) -> None:
+        self.assertEqual(
+            migrate.migrate(self.schema, self.dir / "migrations", self.psql, dry_run=True), ["001_init.sql"]
+        )
+        gone = pg.run(f"select to_regnamespace('{self.schema}') is null;", self.psql)
+        self.assertEqual(gone, ["t"])
+        self.migrate()
+        self.assertEqual(migrate.migrate(self.schema, self.dir / "migrations", self.psql, dry_run=True), [])
+
+    def test_foreign_schema_without_ledger_is_refused(self) -> None:
+        pg.run(f"create schema {self.schema}; create table {self.schema}.items (id int);", self.psql)
+        for dry_run in (True, False):
+            with self.assertRaises(migrate.MigrationError):
+                migrate.migrate(self.schema, self.dir / "migrations", self.psql, dry_run)
+        tables = pg.run(
+            f"select count(*) from information_schema.tables where table_schema = '{self.schema}';", self.psql
+        )
+        self.assertEqual(tables, ["1"])
+
     def test_changed_migration_stops_the_run(self) -> None:
         self.migrate()
         path = self.dir / "migrations/001_init.sql"
@@ -73,6 +92,14 @@ class LiveTemplateTest(unittest.TestCase):
         rows = pg.query(f"select name, first_seen_at from {self.schema}.items where external_id = '1'", self.psql)
         self.assertEqual(rows[0]["name"], "Masło extra")
         self.assertEqual(rows[0]["first_seen_at"], first[0]["first_seen_at"])
+
+    def test_older_document_never_overwrites_newer(self) -> None:
+        self.migrate()
+        self.load([item("1", "new", "2026-11-14T11:00:00Z")])
+        self.load([item("1", "old", "2026-11-14T10:00:00Z")])
+        rows = pg.query(f"select name, raw->>'name' as raw_name, fetched_at from {self.schema}.items", self.psql)
+        self.assertEqual([(r["name"], r["raw_name"]) for r in rows], [("new", "new")])
+        self.assertTrue(str(rows[0]["fetched_at"]).startswith("2026-11-14T11:00:00"))
 
     def test_duplicate_key_in_one_batch_keeps_newest(self) -> None:
         self.migrate()

@@ -50,6 +50,8 @@
   <tr><td>rola <code>_ro</code> ma SELECT na widoku</td><td class="ok">OK</td></tr>
   <tr><td><code>ruff check</code> + <code>ruff format --check</code> + <code>mypy --strict</code> na <code>db/</code></td><td class="ok">czysto</td></tr>
   <tr><td><code>new-dataset.sh</code>: kopiuje, podstawia nazwę i datę; odmawia nadpisania i złej nazwy</td><td class="ok">OK (kod wyjścia 1 w obu odmowach)</td></tr>
+  <tr><td>poprawki po recenzji (2026-11-15): <code>--dry-run</code> migracji bez DDL (po nim brak schematu), schemat bez rejestru odrzucony, starszy dokument nie nadpisuje nowszego, walidacja nazw w <code>load.py</code></td><td class="ok">23/23 OK (13 bez bazy, 10 na żywej bazie), ruff + mypy --strict czysto</td></tr>
+  <tr><td>nowy <code>new-dataset.sh</code> / <code>migrate</code>: odmowa schematów <code>public</code>, <code>information_schema</code>, <code>pg_*</code></td><td class="ok">OK</td></tr>
 </table>
 
 <h2>3. Jak przetestować ręcznie</h2>

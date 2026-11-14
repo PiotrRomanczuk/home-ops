@@ -176,7 +176,19 @@ jobs:
       - name: new-dataset.sh copies and names the schema
         run: |
           scripts/new-dataset.sh ci_check "$RUNNER_TEMP/pkg"
-          ! grep -rq '__SCHEMA__\|__DATE__' "$RUNNER_TEMP/pkg"
+          if grep -rq '__SCHEMA__\|__DATE__' "$RUNNER_TEMP/pkg"; then echo "placeholder left behind"; exit 1; fi
+      - name: new-dataset.sh refuses reserved schema names
+        run: |
+          for name in public information_schema pg_catalog; do
+            if scripts/new-dataset.sh "$name" "$RUNNER_TEMP/bad_$name"; then echo "accepted $name"; exit 1; fi
+          done
+      - name: ruff + mypy --strict
+        working-directory: templates/dataset-db
+        run: |
+          pip install --quiet ruff mypy
+          ruff check --line-length 120 .
+          ruff format --check --line-length 120 .
+          mypy --strict db/
 
   tests-state-machine:
     name: tests (state machine + decisions + briefs/today + queue vs real postgres)

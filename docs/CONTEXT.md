@@ -220,8 +220,8 @@ The above query is a multi-week setup in Grafana+Prometheus+Loki and
 _added 2026-11-14_
 
 Jobs outside this repo keep their data in their **own schema in `home_ops`** so the nightly
-`pg-backup` covers it: `song2logic` (song analyses, Mac) and `zakupy` (leaflet prices,
-coupon-ocr, Mac). Each owning repo applies its own migrations (ledger
+`pg-backup` covers it: `song2logic` (song analyses, Mac) and, planned, `zakupy` (leaflet prices,
+coupon-ocr, Mac; not yet created on uwh). Each owning repo applies its own migrations (ledger
 `<schema>.schema_migrations`) over `ssh uwh docker exec -i home-ops-postgres-1 psql`;
 `scripts/apply-migrations.sh` never touches them. New datasets start from
 `templates/dataset-db/` (`scripts/new-dataset.sh`), ADR

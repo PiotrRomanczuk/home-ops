@@ -15,6 +15,9 @@ die() { echo "✗ $*" >&2; exit 1; }
 schema="$1"
 target="$2"
 [[ "$schema" =~ ^[a-z_][a-z0-9_]*$ ]] || die "schema must match ^[a-z_][a-z0-9_]*$: $schema"
+case "$schema" in
+  public|information_schema|pg_*) die "schema name is reserved (public, information_schema, pg_*): $schema" ;;
+esac
 
 src="$(cd "$(dirname "$0")/.." && pwd)/templates/dataset-db"
 for sub in db migrations sql; do

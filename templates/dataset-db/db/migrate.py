@@ -15,7 +15,8 @@ from pathlib import Path
 from . import psql as pg
 
 NAME = re.compile(r"^\d{3}_[a-z0-9_]+\.sql$")
-SCHEMA = re.compile(r"^[a-z_][a-z0-9_]*$")
+SCHEMA = re.compile(r"^(?!pg_)[a-z_][a-z0-9_]*$")
+RESERVED = frozenset({"public", "information_schema"})  # `public` holds home-ops' own schema_migrations
 
 
 class MigrationError(RuntimeError):
@@ -47,19 +48,43 @@ def plan(applied: Mapping[str, str], paths: Sequence[Path]) -> tuple[list[Path],
 
 def ledger_sql(schema: str) -> str:
     return (
+        "begin;\n"
         f"create schema if not exists {schema};\n"
         f"create table if not exists {schema}.schema_migrations ("
         "filename text primary key, checksum text not null, applied_at timestamptz not null default now());\n"
+        "commit;\n"
     )
+
+
+def check_schema_name(schema: str) -> None:
+    if not SCHEMA.match(schema) or schema in RESERVED:
+        raise MigrationError(f"bad schema name (not public, information_schema, pg_*): {schema!r}")
+
+
+def applied_files(schema: str, psql: Sequence[str], dry_run: bool) -> dict[str, str]:
+    """Applied files {name: checksum}. Reads only, except that a real run creates the schema and ledger.
+
+    A schema that exists without our ledger belongs to something else (another project, or one
+    made by hand): refused, so we never write into it. Adopt it by creating the ledger yourself."""
+    state = pg.run(
+        f"select to_regnamespace('{schema}') is not null, to_regclass('{schema}.schema_migrations') is not null;", psql
+    )
+    has_schema, has_ledger = (flag == "t" for flag in state[-1].split("|"))
+    if has_schema and not has_ledger:
+        raise MigrationError(f"schema {schema} exists without {schema}.schema_migrations: not ours, refusing")
+    if not has_ledger:
+        if not dry_run:
+            pg.run(ledger_sql(schema), psql)
+        return {}
+    rows = pg.run(f"select filename, checksum from {schema}.schema_migrations;", psql)
+    return dict(line.split("|", 1) for line in rows)
 
 
 def migrate(schema: str, directory: Path, psql: Sequence[str], dry_run: bool = False) -> list[str]:
     """Apply pending migrations; return their file names (with dry_run: only list them)."""
-    if not SCHEMA.match(schema):
-        raise MigrationError(f"bad schema name: {schema!r}")
-    lines = pg.run(ledger_sql(schema) + f"select filename, checksum from {schema}.schema_migrations;", psql)
-    applied = dict(line.split("|", 1) for line in lines)
-    pending, changed = plan(applied, files(directory))
+    check_schema_name(schema)
+    paths = files(directory)
+    pending, changed = plan(applied_files(schema, psql, dry_run), paths)
     if changed:
         raise MigrationError(f"changed after being applied: {', '.join(changed)}")
     for path in [] if dry_run else pending:
@@ -73,7 +98,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--schema", required=True)
     parser.add_argument("--dir", type=Path, default=Path("migrations"))
     parser.add_argument("--psql", help=f"psql command (default $DATASET_PSQL or: {pg.DEFAULT})")
-    parser.add_argument("--dry-run", action="store_true", help="only list what would be applied")
+    parser.add_argument(
+        "--dry-run", action="store_true", help="only list what would be applied (reads only: no DDL, no writes)"
+    )
     args = parser.parse_args(argv)
     try:
         names = migrate(args.schema, args.dir, pg.command(args.psql), args.dry_run)

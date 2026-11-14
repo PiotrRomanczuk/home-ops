@@ -50,6 +50,11 @@ class MigrationFilesTest(unittest.TestCase):
         with self.assertRaises(migrate.MigrationError):
             migrate.migrate("Drop table;", self.dir, ["false"])
 
+    def test_reserved_schema_names_are_refused_before_psql(self) -> None:
+        for name in ("public", "information_schema", "pg_catalog", "pg_temp"):
+            with self.assertRaises(migrate.MigrationError, msg=name):
+                migrate.migrate(name, self.dir, ["false"])
+
 
 class LoadScriptTest(unittest.TestCase):
     def test_copy_block_is_one_line_per_document(self) -> None:
@@ -69,6 +74,20 @@ class LoadScriptTest(unittest.TestCase):
         script = load.build_script({"items": []}, "select 1;", {"s.items": 0}, dry_run=True)
         self.assertTrue(script.rstrip().endswith("rollback;"))
         self.assertIn("create temp table incoming_items (doc jsonb) on commit drop;", script)
+
+    def test_names_are_validated_before_they_reach_sql(self) -> None:
+        for bad in ("a'b", "s.items; drop table x", "S.items", "a.b.c", ""):
+            with self.assertRaises(ValueError, msg=bad):
+                load.counts_sql([bad])
+            with self.assertRaises(ValueError, msg=bad):
+                load.guard_sql({bad: 1})
+        with self.assertRaises(ValueError):
+            load.build_script({"items; drop": []}, "select 1;", {"s.items": 0}, dry_run=False)
+        self.assertIn("s.items", load.counts_sql(["s.items"]))
+
+    def test_empty_table_list_is_an_error_not_bad_sql(self) -> None:
+        with self.assertRaises(ValueError):
+            load.counts_sql([])
 
     def test_read_jsonl_skips_blank_lines_and_missing_files(self) -> None:
         path = Path(tempfile.mkdtemp()) / "x.jsonl"
