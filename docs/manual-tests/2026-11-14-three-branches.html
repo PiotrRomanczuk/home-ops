@@ -11,7 +11,7 @@
   .ok { color: var(--ok); font-weight: 600; } .warn { color: var(--warn); font-weight: 600; }
 </style></head><body><main>
 <h1>Trzy gałęzie: dev → test → main (pilotaż na home-ops)</h1>
-<p class="meta">2026-11-14 · branch <code>feat/three-branches</code> → <code>dev</code> · ADR <code>docs/adr/2026-11-14-three-branches.md</code></p>
+<p class="meta">2026-11-14 · updated 2026-11-15 (poprawki po recenzji: token, deduplikacja zgłoszeń, wyścigi, PR z forka) · branch <code>feat/three-branches</code> → <code>dev</code> · ADR <code>docs/adr/2026-11-14-three-branches.md</code></p>
 
 <h2>1. Co zostało zrobione</h2>
 <ul>
@@ -21,6 +21,16 @@
   <li><b>pr-decide</b> (<code>pr_gate.py</code>): PR promocyjny scala commitem merge i nie usuwa gałęzi; zwykły PR nadal squash z usunięciem gałęzi.</li>
   <li><b>Dokumentacja:</b> ADR, sekcja w RUNBOOK, nowy <code>CLAUDE.md</code> repozytorium.</li>
 </ul>
+<h3>Poprawki 2026-11-15 (recenzja PR #84)</h3>
+<ul>
+  <li><b>CI dla PR-ów w stosie:</b> <code>check.yml</code> reaguje na każdy <code>pull_request</code>, nie tylko do <code>dev</code>/<code>test</code>/<code>main</code>.</li>
+  <li><b>Token:</b> <code>flow.yml</code> używa sekretu <code>FLOW_TOKEN</code>, gdy istnieje (push uruchamia wtedy <code>check</code> sam i może zmieniać <code>.github/workflows</code>). Bez niego: <code>GITHUB_TOKEN</code> + ręczne uruchomienie <code>check</code>, a odrzucony push zmiany w workflows zakłada jedno zgłoszenie z poleceniem ręcznego pushu.</li>
+  <li><b>Zgłoszenia bez duplikatów:</b> stałe tytuły; jeśli zgłoszenie o tym tytule jest otwarte, nowe nie powstaje (zgłoszenie o release jest odświeżane).</li>
+  <li><b>Wyścigi:</b> wspólna grupa <code>flow-write</code> dla <code>promote</code>, <code>tester-pr</code>, <code>sync</code>; push ponawiany raz po scaleniu przesuniętej gałęzi; <code>tester-pr</code> bierze świeży <code>dev</code> przed scaleniem.</li>
+  <li><b>Release:</b> PR <code>test → main</code> tylko, gdy <code>test</code> ma inną zawartość niż <code>main</code> (po synchronizacji same commity merge nie otwierają nowego PR-a); otwarty PR dostaje odświeżony opis.</li>
+  <li><b>pr-decide:</b> merge-commit tylko dla gałęzi <code>dev</code>/<code>test</code>/<code>main</code> z repozytorium właściciela; PR z forka z gałęzią <code>main</code> idzie przez squash.</li>
+  <li>Logika kroków przeniesiona z YAML do <code>ops/ci/flow_ops.py</code> + <code>flow_cli.py</code> (testy jednostkowe).</li>
+</ul>
 
 <h2>2. Co sprawdziłem (2026-11-14)</h2>
 <table>
@@ -29,6 +39,12 @@
   <tr><td>unittest <code>ops/ci</code> (które ścieżki są testami)</td><td class="ok">3 OK</td></tr>
   <tr><td>unittest <code>ops/elitedesk</code> (w tym nowe: squash dla zwykłych PR-ów, merge dla promocji, brak scalenia po zmianie SHA)</td><td class="ok">96 OK</td></tr>
   <tr><td>Składnia <code>flow.yml</code> i <code>check.yml</code></td><td class="ok">poprawny YAML, 5 zadań przepływu</td></tr>
+  <tr><td>2026-11-15: unittest <code>ops/ci</code> (scalanie, ponowny push, odmowa workflows, zgłoszenia bez duplikatów, tester, release)</td><td class="ok">18 OK</td></tr>
+  <tr><td>2026-11-15: unittest <code>ops/elitedesk</code> (+ PR z forka z headem <code>main</code> → squash, właściciel bez rozróżniania wielkości liter)</td><td class="ok">98 OK</td></tr>
+  <tr><td>2026-11-15: unittest <code>agents</code>; <code>ingest</code> <code>npm run check</code> + vitest</td><td class="ok">88 OK; 83 OK (10 plików)</td></tr>
+  <tr><td>2026-11-15: symulacja <code>flow_cli.py</code> na prawdziwym gicie (lokalne repo bare + atrapa <code>gh</code>): promocja, przesunięty <code>test</code> w trakcie (odrzucony push → scalenie → drugi push), release bez prawa do PR-ów (jedno zgłoszenie), release po synchronizacji <code>main → dev → test</code> (nic do wydania)</td><td class="ok">zgodnie z oczekiwaniami</td></tr>
+  <tr><td>2026-11-15: symulacja odmowy pushu zmiany w <code>.github/workflows</code> (hook <code>pre-receive</code> z komunikatem GitHuba), dwa przebiegi</td><td class="ok">kod 1, jedno zgłoszenie, brak <code>gh workflow run</code>, <code>test</code> bez zmian</td></tr>
+  <tr><td>2026-11-15: składnia <code>flow.yml</code>/<code>check.yml</code> (parser YAML; actionlint niedostępny na Macu)</td><td class="ok">poprawny YAML</td></tr>
   <tr><td>Działanie <code>flow.yml</code> na żywo</td><td class="warn">niesprawdzone: workflow zaczyna działać dopiero po scaleniu tego PR-a do <code>dev</code></td></tr>
 </table>
 
@@ -40,13 +56,23 @@
   <li>Otwórz PR do <code>test</code>, który zmienia plik z kodem. Nie scala się sam.</li>
   <li>Dodaj na <code>test</code> nieprzechodzący test (PR z samym testem). Po scaleniu pojawia się zgłoszenie <code>back-to-dev</code>, a PR promocyjny nie powstaje.</li>
   <li>Scal PR „release: test → main” przez „Dziś”. <code>test</code> nie znika, a <code>flow / sync</code> przenosi commit na <code>dev</code>.</li>
-  <li>Na uwh po scaleniu: <code>deploy-agent.sh</code> nie jest potrzebny; wystarczy <code>git pull</code> w <code>~/code/logs-stack</code> przed następnym uruchomieniem <code>pr-decide</code>, żeby promocje scalał commitem merge.</li>
+  <li><b>Pierwsze wydanie</b> (raz): nie przez „Dziś”. Procedura w <code>docs/RUNBOOK.md</code>, „First release”: ochrona <code>dev</code>/<code>test</code>, ręczne <code>gh pr merge &lt;n&gt; --merge</code> bez <code>--delete-branch</code>, potem <code>git pull</code> w <code>~/code/logs-stack</code> na uwh. Następne wydania już przez „Dziś”.</li>
 </ol>
+
+<h3>Nowe przypadki (recenzja 2026-11-15)</h3>
+<table>
+  <tr><th>#</th><th>Kroki</th><th>Oczekiwany wynik</th></tr>
+  <tr><td>A</td><td><b>Push zmiany workflow bez tokenu.</b> Bez sekretu <code>FLOW_TOKEN</code> scal do <code>dev</code> PR zmieniający <code>.github/workflows/check.yml</code> (pierwszy taki przypadek to ten PR). Poczekaj na zielony <code>check</code> na <code>dev</code>.</td><td><code>flow / promote</code> czerwony; jedno zgłoszenie „flow: dev → test wymaga ręcznego pushu (zmiana w workflows)” z poleceniem <code>git push origin origin/dev:test</code>; <code>test</code> bez zmian. Kolejny zielony <code>dev</code> nie tworzy drugiego zgłoszenia. Po ręcznym pushu z Maca <code>check</code> rusza na <code>test</code> sam.</td></tr>
+  <tr><td>B</td><td><b>Drugie zielone <code>test</code>.</b> Przy wyłączonym „Allow GitHub Actions to create … pull requests” doprowadź do dwóch zielonych przebiegów <code>check</code> na <code>test</code> (np. dwie kolejne promocje).</td><td>Jedno zgłoszenie „release: test → main: otwórz PR ręcznie”; po drugim przebiegu nadal jedno, z odświeżoną treścią (liczba commitów, lista). Gdy PR <code>test → main</code> już jest otwarty: brak zgłoszenia, opis PR-a odświeżony.</td></tr>
+  <tr><td>C</td><td><b>PR z forka z headem <code>main</code>.</b> Z konta innego niż właściciel zrób fork, otwórz PR z gałęzi <code>main</code> forka do <code>dev</code>, przejdź <code>pr-review</code> i „Scal” na „Dziś” (albo test jednostkowy <code>test_fork_branch_named_main_is_squashed</code>).</td><td><code>pr_gate</code> wywołuje <code>gh pr merge … --squash --delete-branch</code>, nie <code>--merge</code>. Gałąź <code>main</code> repozytorium nietknięta.</td></tr>
+</table>
 
 <h2>4. Ograniczenia i ryzyka</h2>
 <ul>
   <li><span class="warn">Do czasu scalenia tego PR-a</span> PR-y celujące w <code>dev</code> nie mają CI, bo stary <code>check.yml</code> reaguje tylko na <code>main</code>. Ten PR powinien wejść pierwszy.</li>
-  <li><code>pr-decide</code> na uwh ma starą wersję <code>pr_gate.py</code>. Do czasu <code>git pull</code> scaliłby PR promocyjny przez squash i usunął gałąź <code>test</code>. Nie klikać „Scal” na PR-ze <code>test → main</code> przed aktualizacją uwh.</li>
+  <li><code>pr-decide</code> na uwh działa z checkoutu <code>main</code>, więc nowy <code>pr_gate.py</code> trafi tam dopiero z pierwszym wydaniem. Pierwszy PR <code>test → main</code> scala się ręcznie (RUNBOOK, „First release”), inaczej squash usunąłby gałąź <code>test</code>.</li>
+  <li>Bez <code>FLOW_TOKEN</code> każda promocja zmieniająca <code>.github/workflows</code> wymaga ręcznego pushu (przypadek A).</li>
+  <li>GitHub trzyma jedno oczekujące zadanie na grupę <code>flow-write</code>: przy trzech naraz środkowe przepada. Zadania liczą stan gałęzi, więc następny zielony przebieg je powtarza; pominięty <code>tester-pr</code> wymaga ponownego uruchomienia jego <code>check</code>.</li>
   <li>Konflikt przy automatycznym scalaniu gałęzi kończy się zgłoszeniem, nie próbą rozwiązania.</li>
   <li>Nie ma osobnego środowiska testowego. Etap <code>test</code> uruchamia testy tras na Postgresie w CI.</li>
   <li>Testera jeszcze nie ma jako stałej rutyny. Na razie to rodzaj zadania w kolejce sprintu.</li>
