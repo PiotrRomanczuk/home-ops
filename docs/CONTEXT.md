@@ -1,6 +1,6 @@
 ---
 created: 2026-06-07
-updated: 2026-06-07
+updated: 2026-11-14
 ---
 
 # home-ops — project context
@@ -214,6 +214,18 @@ WHERE l.level IN ('error','fatal') AND l.ts > now() - '24 hours'::interval;
 
 The above query is a multi-week setup in Grafana+Prometheus+Loki and
 ~30 seconds of SQL in home-ops because both streams are in the same DB.
+
+## Data model — dataset schemas owned by other repos
+
+_added 2026-11-14_
+
+Jobs outside this repo keep their data in their **own schema in `home_ops`** so the nightly
+`pg-backup` covers it: `song2logic` (song analyses, Mac) and, planned, `zakupy` (leaflet prices,
+coupon-ocr, Mac; not yet created on uwh). Each owning repo applies its own migrations (ledger
+`<schema>.schema_migrations`) over `ssh uwh docker exec -i home-ops-postgres-1 psql`;
+`scripts/apply-migrations.sh` never touches them. New datasets start from
+`templates/dataset-db/` (`scripts/new-dataset.sh`), ADR
+`docs/adr/2026-11-14-dataset-db-template.md`.
 
 ## Core use cases (priority order)
 

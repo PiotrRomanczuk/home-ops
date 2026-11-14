@@ -147,6 +147,49 @@ jobs:
       - name: unittest discover (ops/elitedesk)
         run: python3 -m unittest discover -s ops/elitedesk/tests -p 'test_*.py' -v
 
+  tests-dataset-db:
+    name: tests (dataset-db template vs real postgres)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: ci-placeholder
+          POSTGRES_DB: home_ops
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d home_ops"
+          --health-interval 3s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: unittest (pure + live)
+        working-directory: templates/dataset-db
+        env:
+          DATASET_TEST_PSQL: psql postgresql://postgres:ci-placeholder@127.0.0.1:5432/home_ops
+        run: python3 -m unittest discover -s tests -t . -v
+      - name: new-dataset.sh copies and names the schema
+        run: |
+          scripts/new-dataset.sh ci_check "$RUNNER_TEMP/pkg"
+          if grep -rq '__SCHEMA__\|__DATE__' "$RUNNER_TEMP/pkg"; then echo "placeholder left behind"; exit 1; fi
+      - name: new-dataset.sh refuses reserved schema names
+        run: |
+          for name in public information_schema pg_catalog; do
+            if scripts/new-dataset.sh "$name" "$RUNNER_TEMP/bad_$name"; then echo "accepted $name"; exit 1; fi
+          done
+      - name: ruff + mypy --strict
+        working-directory: templates/dataset-db
+        run: |
+          pip install --quiet ruff mypy
+          ruff check --line-length 120 .
+          ruff format --check --line-length 120 .
+          mypy --strict db/
+
   tests-state-machine:
     name: tests (state machine + decisions + briefs/today + queue vs real postgres)
     runs-on: ubuntu-latest
