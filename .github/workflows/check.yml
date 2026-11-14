@@ -2,11 +2,11 @@ name: check
 
 # dev → test → main: see flow.yml. workflow_dispatch lets flow.yml start this
 # on a branch it pushed to (GITHUB_TOKEN pushes start no workflows).
+# pull_request has no branch filter: PRs stacked on a feature branch get CI too.
 on:
   push:
     branches: [main, dev, test]
   pull_request:
-    branches: [main, dev, test]
   workflow_dispatch:
 
 jobs:
@@ -78,7 +78,9 @@ jobs:
             ops/elitedesk/seo_opps.py \
             ops/elitedesk/brief-pull.py \
             ops/elitedesk/brief_parse.py \
-            ops/ci/flow_paths.py
+            ops/ci/flow_paths.py \
+            ops/ci/flow_ops.py \
+            ops/ci/flow_cli.py
 
   clients-node:
     name: clients/node (syntax)
