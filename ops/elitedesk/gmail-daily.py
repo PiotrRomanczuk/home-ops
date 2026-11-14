@@ -26,9 +26,11 @@ import gmail_db  # noqa: E402
 import gmail_imap  # noqa: E402
 import gmail_import  # noqa: E402
 import gmail_inventory  # noqa: E402
+import gmail_llm_daily  # noqa: E402
 from gmail_api import Gmail  # noqa: E402
 
 ROUTINE = 'gmail-daily'
+LLM = os.environ.get('GMAIL_LLM', '1') != '0'  # GMAIL_LLM=0 switches the model steps off
 
 
 def expected_labels(db: sqlite3.Connection, cfg: dict, trash: set[str]) -> dict[str, set[str]]:
@@ -65,6 +67,32 @@ def reconcile_live(gmail: Gmail, expected: dict[str, set[str]], known: set[str],
     return added, removed
 
 
+def _reporter(log=print):
+    try:
+        from agents.routine_report import Reporter
+        return Reporter.from_env(ROUTINE)
+    except Exception as e:  # no ingest env → run without "Dziś" (card, questions, answers)
+        log(f'no reporter: {e}')
+        return None
+
+
+def llm_steps(gmail: Gmail, db, cfg: dict, trash: set[str], reporter, journal: Path, log=print) -> tuple[int, int]:
+    """Claude proposals for uncovered senders, questions on "Dziś", archive per accepted inbox policy."""
+    import gmail_llm_db
+    import gmail_llm_guide
+    weak, labelled = gmail_llm_daily.sender_digests(db, cfg, trash, gmail_llm_db.known_senders())
+    labels = gmail_llm_daily.model_labels(cfg)
+    guide = gmail_llm_guide.ensure_guide(labels, labelled, log=log) if weak else ''
+    rows, _reachable = gmail_llm_daily.propose(weak, labels, labelled, log, guide=guide)
+    gmail_llm_db.insert_proposals(rows)
+    if reporter:
+        gmail_llm_daily.ask(reporter, log)
+    ids = gmail_llm_daily.archive_ids(db, cfg, set(gmail.iter_ids('in:inbox')))
+    if ids:
+        gmail_apply.move(gmail, 'archive', ids, set(ids), journal, note='rule inbox=archive', log=log)
+    return len(rows), len(ids)
+
+
 def main() -> int:
     log = print
     gmail = Gmail(gmail_auth.access_token)
@@ -76,23 +104,27 @@ def main() -> int:
                                         (db.execute('SELECT COUNT(*) FROM messages').fetchone()[0] - before,))]
     gmail_db.upsert_messages([gmail_db.message_row(r) for r in db.execute(
         f"SELECT * FROM messages WHERE id IN ({','.join('?' * len(new_ids))})", new_ids)] if new_ids else [])
+    reporter = _reporter(log)
+    if LLM and reporter:
+        gmail_llm_daily.consume(reporter, log)  # accepted answers become rules before this run classifies
     cfg = gmail_classify.load_rules(Path('db'))
     trash = set(gmail.iter_ids('in:trash'))
     expected = expected_labels(db, cfg, trash)
     known = {r[0] for r in db.execute('SELECT id FROM messages')}
     journal = gmail_inventory.STATE_DIR / f'journal-daily-{time.strftime("%Y%m%d-%H%M%S")}.jsonl'
     added, removed = reconcile_live(gmail, expected, known, journal, log)
+    proposed, archived = llm_steps(gmail, db, cfg, trash, reporter, journal, log) if LLM else (0, 0)
     if journal.exists():
         gmail_db.insert_applied(gmail_db.journal_rows(journal))
     inbox, unread = set(gmail.iter_ids('in:inbox')), set(gmail.iter_ids('is:unread -in:trash'))
     gmail_db.replace_state(gmail_import.state_rows(db, cfg, trash, inbox, unread))
     review = len(expected.get(gmail_classify.FALLBACK, ()))
-    headline = f'{len(new_ids)} nowych, {added} etykiet dodanych, {removed} zdjętych, INBOX {len(inbox)}, do przejrzenia {review}'
+    headline = (f'{len(new_ids)} nowych, {added} etykiet dodanych, {removed} zdjętych, INBOX {len(inbox)}, '
+                f'do przejrzenia {review}, propozycji reguł {proposed}, zarchiwizowanych {archived}')
     log(headline)
     try:
-        from agents.routine_report import Reporter
-        Reporter.from_env(ROUTINE).card(headline, status='ok' if len(inbox) == 0 else 'warn',
-                                        metric={'label': 'INBOX', 'value': len(inbox)})
+        if reporter:
+            reporter.card(headline, status='ok' if len(inbox) == 0 else 'warn', metric={'label': 'INBOX', 'value': len(inbox)})
     except Exception as e:  # the card is best-effort; the run itself succeeded
         log(f'card not posted: {e}')
     return 0

@@ -38,6 +38,7 @@ class Rule:
     senders: tuple[str, ...] = ()   # 'addr@x.pl', '@x.pl' (exact domain) or 'x.pl' (domain + subdomains)
     subject: re.Pattern | None = None
     automated_only: bool = False    # subject rule applies only to bot-like local parts (never to a person)
+    inbox: str = 'keep'             # 'archive' = matched mail leaves the inbox (gmail_llm_daily.archive)
 
     def hits(self, addr: str, subject: str) -> bool:
         if self.senders and not any(_sender_match(addr, s) for s in self.senders):
@@ -68,7 +69,7 @@ def rules_from_dict(raw: dict) -> dict:
     """Compile the rules JSON shape (file or gmail.rules_json()) into regex-backed Rule objects."""
     rules = [Rule(r['label'], tuple(s.lower() for s in r.get('from', [])),
                   re.compile(r['subject'], re.I) if r.get('subject') else None,
-                  bool(r.get('automated_only')))
+                  bool(r.get('automated_only')), r.get('inbox', 'keep'))
              for r in raw['rules']]
     protect = raw.get('protect', {})
     subrules = [(r['parent'], Rule(r['label'], tuple(x.lower() for x in r.get('from', [])),
