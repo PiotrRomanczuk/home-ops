@@ -18,6 +18,9 @@ Env:
   SYNC_INTERVAL    seconds between syncs, default 60
   PROJECT_DIRS     comma-separated vault folders holding project notes
                    (default: projects,1-Projekty,2-Obszary,3-Zasoby/pomysly,4-Archiwum)
+  GITHUB_OWNER     owner of `repo:` in notes with `zadania: github` (default PiotrRomanczuk)
+  ISSUES_INTERVAL  seconds between GitHub Issues renders, default 300
+  GITHUB_TOKEN     optional; falls back to `gh auth token`
 """
 from __future__ import annotations
 
@@ -39,6 +42,8 @@ _here = Path(__file__).resolve().parent
 sys.path.insert(0, str(_here))
 sys.path.insert(0, str(_here.parent))
 from _common import IngestClient, Shutdown  # noqa: E402
+from issues_gh import fetch_open_issues, set_issue_state  # noqa: E402
+from issues_md import in_issue_block, issue_ref, render_issue_blocks, replace_issue_blocks  # noqa: E402
 from queue_md import parse_queue_md  # noqa: E402
 from task_ticks import TickTracker  # noqa: E402
 
@@ -60,6 +65,8 @@ BOARD_SLUG = os.environ.get('BOARD_SLUG', 'home-ops')
 QUEUE_URL = INGEST_BASE + '/api/queue/sync'
 QUEUE_FILE = os.environ.get('QUEUE_FILE', 'QUEUE.md')
 SIGNALS_URL = INGEST_BASE + '/api/progress/signals'
+GITHUB_OWNER = os.environ.get('GITHUB_OWNER', 'PiotrRomanczuk')
+ISSUES_INTERVAL = float(os.environ.get('ISSUES_INTERVAL', '300'))
 
 
 def post_log(level: str, message: str, data: dict[str, Any] | None = None) -> None:
@@ -301,6 +308,11 @@ def _apply_one_toggle(toggle: dict[str, Any]) -> tuple[str, str | None]:
         text = md_path.read_text(encoding='utf-8')
     except (OSError, UnicodeDecodeError) as e:
         return 'failed', f'read failed: {e}'
+
+    # A line generated from GitHub Issues: the issue is the source of truth.
+    ref = issue_ref(toggle.get('text') or '') if in_issue_block(text, toggle.get('text') or '') else None
+    if ref:
+        return _toggle_issue(ref, done)
 
     new_text = _flip_task_in_section(text, section, idx, done, toggle.get('text'))
     if new_text is None:
@@ -630,6 +642,45 @@ def queue_sync_once() -> None:
         post_log('error', 'queue sync failed', {'status': status, 'error': (body or {}).get('error')})
 
 
+# ── issues sync (GitHub Issues → Now/Next/Later blocks, pilot 2026-11-14) ─
+
+_issues_due = 0.0
+
+
+def issues_sync_once() -> None:
+    """Notes with `zadania: github` + `repo:` get their generated blocks
+    re-rendered from open issues, at most every ISSUES_INTERVAL seconds.
+    Runs right after the tick's pull, like board sync."""
+    global _issues_due
+    if time.monotonic() < _issues_due:
+        return
+    _issues_due = time.monotonic() + ISSUES_INTERVAL
+    for md_path in _project_files(PLANNER_DIR):
+        rec = parse_project_file(md_path) or {}
+        fm = rec.get('raw_frontmatter') or {}
+        if fm.get('zadania') != 'github' or not fm.get('repo'):
+            continue
+        repo = str(fm['repo']) if '/' in str(fm['repo']) else f"{GITHUB_OWNER}/{fm['repo']}"
+        issues = fetch_open_issues(repo)
+        if issues is None:
+            post_log('warn', f'issues fetch failed: {repo}')
+            continue
+        current = md_path.read_text(encoding='utf-8')
+        new_md = replace_issue_blocks(current, render_issue_blocks(issues))
+        if new_md != current and _write_commit_push(md_path, new_md, f'issues sync: {rec["slug"]}'):
+            post_log('info', f'issues sync: {rec["slug"]}', {'repo': repo, 'open': len(issues)})
+
+
+def _toggle_issue(ref: tuple[str, int], done: bool) -> tuple[str, str | None]:
+    """Dziś toggle on a generated line → close/reopen the issue; the next
+    sync tick re-renders the block (forced, without waiting ISSUES_INTERVAL)."""
+    global _issues_due
+    if not set_issue_state(ref[0], ref[1], done):
+        return 'failed', f'GitHub issue {ref[0]}#{ref[1]} update failed'
+    _issues_due = 0.0
+    return 'applied', None
+
+
 # ── main loop ─────────────────────────────────────────────────────────
 
 def sync_once() -> None:
@@ -648,6 +699,11 @@ def sync_once() -> None:
             board_sync_once(slug)
         except (OSError, ValueError, subprocess.SubprocessError) as e:
             post_log('error', f'board-sync raised for {slug}: {type(e).__name__}', {'err': str(e)[:500]})
+
+    try:
+        issues_sync_once()
+    except (OSError, ValueError, subprocess.SubprocessError) as e:
+        post_log('error', f'issues-sync raised: {type(e).__name__}', {'err': str(e)[:500]})
 
     project_files = _project_files(PLANNER_DIR)
     if not project_files:
