@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="pl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trzy gałęzie dev → test → main · raport testów ręcznych</title>
+<style>
+  :root { --ink:#1d2433; --muted:#5b6475; --line:#e3e6ec; --bg:#fafbfc; --ok:#1f7a4d; --warn:#9a5b00; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.55 -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 900px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 1.6rem; margin: 0 0 4px; } h2 { margin-top: 2rem; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+  .meta { color: var(--muted); font-size: .9rem; } code { font-family: ui-monospace, Menlo, monospace; font-size: .86rem; }
+  table { border-collapse: collapse; width: 100%; font-size: .92rem; } th, td { text-align:left; border-bottom:1px solid var(--line); padding:7px 6px; vertical-align: top; }
+  .ok { color: var(--ok); font-weight: 600; } .warn { color: var(--warn); font-weight: 600; }
+</style></head><body><main>
+<h1>Trzy gałęzie: dev → test → main (pilotaż na home-ops)</h1>
+<p class="meta">2026-11-14 · branch <code>feat/three-branches</code> → <code>dev</code> · ADR <code>docs/adr/2026-11-14-three-branches.md</code></p>
+
+<h2>1. Co zostało zrobione</h2>
+<ul>
+  <li><b>Na GitHubie (już działa):</b> gałęzie <code>dev</code> i <code>test</code> utworzone z <code>main</code>, domyślna gałąź to <code>dev</code>, 8 otwartych PR-ów przekierowanych z <code>main</code> na <code>dev</code>, <code>main</code> przyjmuje zmiany tylko przez PR, etykieta <code>back-to-dev</code>.</li>
+  <li><b>CI</b> (<code>check.yml</code>) uruchamia się dla <code>dev</code>, <code>test</code> i <code>main</code> oraz na żądanie.</li>
+  <li><b>Automat przepływu</b> (<code>flow.yml</code>): zielony <code>dev</code> wchodzi na <code>test</code>; PR do <code>test</code> zawierający wyłącznie pliki testów scala się sam, a testy wracają na <code>dev</code>; zielony <code>test</code> otwiera PR <code>test → main</code>; czerwony <code>test</code> zakłada zgłoszenie <code>back-to-dev</code>; zmiana na <code>main</code> wraca na <code>dev</code>.</li>
+  <li><b>pr-decide</b> (<code>pr_gate.py</code>): PR promocyjny scala commitem merge i nie usuwa gałęzi; zwykły PR nadal squash z usunięciem gałęzi.</li>
+  <li><b>Dokumentacja:</b> ADR, sekcja w RUNBOOK, nowy <code>CLAUDE.md</code> repozytorium.</li>
+</ul>
+
+<h2>2. Co sprawdziłem (2026-11-14)</h2>
+<table>
+  <tr><th>Sprawdzenie</th><th>Wynik</th></tr>
+  <tr><td>Stan na GitHubie: domyślna gałąź, bazy PR-ów, ochrona <code>main</code></td><td class="ok">dev; 8 PR-ów na dev, 5 stosów bez zmian; PR wymagany</td></tr>
+  <tr><td>unittest <code>ops/ci</code> (które ścieżki są testami)</td><td class="ok">3 OK</td></tr>
+  <tr><td>unittest <code>ops/elitedesk</code> (w tym nowe: squash dla zwykłych PR-ów, merge dla promocji, brak scalenia po zmianie SHA)</td><td class="ok">96 OK</td></tr>
+  <tr><td>Składnia <code>flow.yml</code> i <code>check.yml</code></td><td class="ok">poprawny YAML, 5 zadań przepływu</td></tr>
+  <tr><td>Działanie <code>flow.yml</code> na żywo</td><td class="warn">niesprawdzone: workflow zaczyna działać dopiero po scaleniu tego PR-a do <code>dev</code></td></tr>
+</table>
+
+<h2>3. Jak przetestować ręcznie (po scaleniu tego PR-a do dev)</h2>
+<ol>
+  <li>Zakładka Actions: po scaleniu przebieg <code>check</code> na <code>dev</code>, potem <code>flow / promote</code>. Gałąź <code>test</code> ma ten sam commit co <code>dev</code>.</li>
+  <li>Przebieg <code>check</code> na <code>test</code> jest zielony, a <code>flow / release-pr</code> otwiera PR „release: test → main”. Jeśli zamiast PR-a pojawi się zgłoszenie z linkiem, włącz w ustawieniach repozytorium (Actions → General) zgodę na otwieranie PR-ów przez Actions.</li>
+  <li>Otwórz PR do <code>test</code>, który dodaje tylko plik testu (np. <code>ops/ci/tests/test_x.py</code>). Po zielonym CI scala się sam, a <code>dev</code> dostaje ten plik.</li>
+  <li>Otwórz PR do <code>test</code>, który zmienia plik z kodem. Nie scala się sam.</li>
+  <li>Dodaj na <code>test</code> nieprzechodzący test (PR z samym testem). Po scaleniu pojawia się zgłoszenie <code>back-to-dev</code>, a PR promocyjny nie powstaje.</li>
+  <li>Scal PR „release: test → main” przez „Dziś”. <code>test</code> nie znika, a <code>flow / sync</code> przenosi commit na <code>dev</code>.</li>
+  <li>Na uwh po scaleniu: <code>deploy-agent.sh</code> nie jest potrzebny; wystarczy <code>git pull</code> w <code>~/code/logs-stack</code> przed następnym uruchomieniem <code>pr-decide</code>, żeby promocje scalał commitem merge.</li>
+</ol>
+
+<h2>4. Ograniczenia i ryzyka</h2>
+<ul>
+  <li><span class="warn">Do czasu scalenia tego PR-a</span> PR-y celujące w <code>dev</code> nie mają CI, bo stary <code>check.yml</code> reaguje tylko na <code>main</code>. Ten PR powinien wejść pierwszy.</li>
+  <li><code>pr-decide</code> na uwh ma starą wersję <code>pr_gate.py</code>. Do czasu <code>git pull</code> scaliłby PR promocyjny przez squash i usunął gałąź <code>test</code>. Nie klikać „Scal” na PR-ze <code>test → main</code> przed aktualizacją uwh.</li>
+  <li>Konflikt przy automatycznym scalaniu gałęzi kończy się zgłoszeniem, nie próbą rozwiązania.</li>
+  <li>Nie ma osobnego środowiska testowego. Etap <code>test</code> uruchamia testy tras na Postgresie w CI.</li>
+  <li>Testera jeszcze nie ma jako stałej rutyny. Na razie to rodzaj zadania w kolejce sprintu.</li>
+</ul>
+</main></body></html>

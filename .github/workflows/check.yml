@@ -1,10 +1,13 @@
 name: check
 
+# dev → test → main: see flow.yml. workflow_dispatch lets flow.yml start this
+# on a branch it pushed to (GITHUB_TOKEN pushes start no workflows).
 on:
   push:
-    branches: [main]
+    branches: [main, dev, test]
   pull_request:
-    branches: [main]
+    branches: [main, dev, test]
+  workflow_dispatch:
 
 jobs:
   # ── static checks ────────────────────────────────────────────────────
@@ -74,7 +77,8 @@ jobs:
             ops/elitedesk/seo_drift.py \
             ops/elitedesk/seo_opps.py \
             ops/elitedesk/brief-pull.py \
-            ops/elitedesk/brief_parse.py
+            ops/elitedesk/brief_parse.py \
+            ops/ci/flow_paths.py
 
   clients-node:
     name: clients/node (syntax)
@@ -146,6 +150,8 @@ jobs:
         run: python3 -m unittest discover -s agents/tests -p 'test_*.py' -v
       - name: unittest discover (ops/elitedesk)
         run: python3 -m unittest discover -s ops/elitedesk/tests -p 'test_*.py' -v
+      - name: unittest discover (ops/ci)
+        run: python3 -m unittest discover -s ops/ci/tests -p 'test_*.py' -v
 
   tests-state-machine:
     name: tests (state machine + decisions + briefs/today + queue vs real postgres)

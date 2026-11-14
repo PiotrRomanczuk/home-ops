@@ -1,0 +1,123 @@
+name: flow
+
+# dev → test → main (docs/adr/2026-11-14-three-branches.md).
+#   promote     dev is green            → merge dev into test
+#   tester-pr   a green PR into test that touches only test files → merge it,
+#               then bring the tests back to dev
+#   release-pr  test is green and ahead of main → open the PR test → main
+#   back-to-dev test is red             → issue labelled back-to-dev
+#   sync        main moved              → merge main into dev
+# Pushes made with GITHUB_TOKEN start no workflows, so every job that pushes
+# dispatches `check` on the branch it changed.
+
+on:
+  workflow_run:
+    workflows: [check]
+    types: [completed]
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  actions: write
+
+concurrency:
+  group: flow-${{ github.event.workflow_run.head_branch || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  GH_TOKEN: ${{ github.token }}
+  GH_REPO: ${{ github.repository }}
+
+jobs:
+  promote:
+    if: >-
+      github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'dev' && github.event.workflow_run.event != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: test, fetch-depth: 0 }
+      - name: merge dev into test
+        run: |
+          git config user.name 'home-ops flow' && git config user.email 'flow@users.noreply.github.com'
+          before=$(git rev-parse HEAD)
+          git merge --no-edit origin/dev || { gh issue create --title "flow: dev nie wchodzi czysto na test" \
+            --label back-to-dev --body "Konflikt przy promocji dev → test (run ${{ github.run_id }})."; exit 1; }
+          [ "$(git rev-parse HEAD)" = "$before" ] && exit 0
+          git push origin test && gh workflow run check.yml --ref test
+
+  tester-pr:
+    if: >-
+      github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: dev, fetch-depth: 0 }
+      - name: merge a tests-only PR into test, then tests back to dev
+        run: |
+          sha=${{ github.event.workflow_run.head_sha }}
+          num=$(gh pr list --base test --state open --json number,headRefOid \
+                --jq ".[] | select(.headRefOid == \"$sha\") | .number" | head -1)
+          [ -n "$num" ] || { echo "not a PR into test"; exit 0; }
+          gh pr view "$num" --json files --jq '.files[].path' | python3 ops/ci/flow_paths.py \
+            || { echo "PR #$num touches non-test files — waits for a human"; exit 0; }
+          gh pr merge "$num" --merge --delete-branch --match-head-commit "$sha"
+          git config user.name 'home-ops flow' && git config user.email 'flow@users.noreply.github.com'
+          git fetch origin test && git merge --no-edit origin/test && git push origin dev
+          gh workflow run check.yml --ref test && gh workflow run check.yml --ref dev
+
+  release-pr:
+    if: >-
+      github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'test' && github.event.workflow_run.event != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: test, fetch-depth: 0 }
+      - name: open (or keep) the PR test → main
+        run: |
+          n=$(git rev-list --count origin/main..HEAD)
+          [ "$n" -gt 0 ] || { echo "test is not ahead of main"; exit 0; }
+          [ -z "$(gh pr list --base main --head test --state open --json number --jq '.[].number')" ] || exit 0
+          body="Promocja test → main: $n commitów, testy zielone (run ${{ github.event.workflow_run.id }}).
+          Scalać commitem merge (nie squash), gałęzi test nie usuwać.
+
+          $(git log --no-merges --format='- %s' origin/main..HEAD | head -40)"
+          gh pr create --base main --head test --title "release: test → main ($n)" --body "$body" \
+            || gh issue create --title "release: test → main gotowe ($n)" --body "Actions nie może otwierać PR-ów w tym repo. Otwórz ręcznie: https://github.com/${{ github.repository }}/compare/main...test
+
+          $body"
+
+  back-to-dev:
+    if: >-
+      github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'failure' &&
+      github.event.workflow_run.head_branch == 'test' && github.event.workflow_run.event != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: file the failure for dev
+        run: |
+          sha=${{ github.event.workflow_run.head_sha }}
+          title="test czerwony @ ${sha:0:7}: poprawka na dev"
+          [ -z "$(gh issue list --state open --search "\"${sha:0:7}\" in:title" --json number --jq '.[].number')" ] || exit 0
+          gh issue create --title "$title" --label back-to-dev --body "Testy na gałęzi test nie przeszły: ${{ github.event.workflow_run.html_url }}
+          Promocja do main stoi. Poprawka idzie przez PR do dev (testy z test są już na dev)."
+
+  sync:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: dev, fetch-depth: 0 }
+      - name: merge main into dev
+        run: |
+          git config user.name 'home-ops flow' && git config user.email 'flow@users.noreply.github.com'
+          before=$(git rev-parse HEAD)
+          git merge --no-edit origin/main || { gh issue create --title "flow: main nie wchodzi czysto na dev" \
+            --label back-to-dev --body "Konflikt przy synchronizacji main → dev (run ${{ github.run_id }})."; exit 1; }
+          [ "$(git rev-parse HEAD)" = "$before" ] && exit 0
+          git push origin dev && gh workflow run check.yml --ref dev

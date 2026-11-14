@@ -1,6 +1,6 @@
 ---
 created: 2026-07-14
-updated: 2026-07-14
+updated: 2026-11-14
 ---
 
 # home-ops — operations runbook
@@ -8,6 +8,12 @@ updated: 2026-07-14
 Day-to-day operational procedures: deploy, migrations, verification, retention,
 backups, and monitoring. For *what the system is* and *why*, read
 [`CONTEXT.md`](CONTEXT.md); for the component map, [`ARCHITECTURE.md`](ARCHITECTURE.md).
+
+## Branches (since 2026-11-14)
+
+`dev` (default, PRs land here) → `test` (automatic, integration and end-to-end tests) → `main` (deployed).
+Automation: `.github/workflows/flow.yml`; decision: `docs/adr/2026-11-14-three-branches.md`. Deploy steps below
+still pull `main`. Labels: `back-to-dev` = the test stage failed, fix through `dev`.
 
 ## Deploy (elitedesk)
 

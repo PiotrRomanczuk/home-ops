@@ -44,7 +44,7 @@ def pr_key(ref: str) -> str:
 def state(run: Gh, owner: str, repo: str, number: int) -> dict[str, Any]:
     """Head SHA, whether it can merge, and a one-line size/why-not."""
     v = json.loads(run(['pr', 'view', str(number), '-R', f'{owner}/{repo}', '--json',
-                        'headRefOid,mergeable,statusCheckRollup,additions,deletions']))
+                        'headRefOid,headRefName,mergeable,statusCheckRollup,additions,deletions']))
     size = f'+{v.get("additions", 0)} / −{v.get("deletions", 0)} linii'
     red = [c.get('name') or c.get('context') for c in v.get('statusCheckRollup') or []
            if (c.get('conclusion') or c.get('state') or '').upper() in RED]
@@ -54,11 +54,17 @@ def state(run: Gh, owner: str, repo: str, number: int) -> dict[str, Any]:
         why = f'CI czerwone: {", ".join(red[:3])}'
     else:
         why = ''
-    return {'sha': v.get('headRefOid') or '', 'ok': not why, 'line': f'{size} · {why}' if why else size}
+    return {'sha': v.get('headRefOid') or '', 'head': v.get('headRefName') or '', 'ok': not why,
+            'line': f'{size} · {why}' if why else size}
+
+
+LONG_LIVED = ('dev', 'test', 'main')
 
 
 def merge_reviewed(run: Gh, owner: str, repo: str, num: str, sha: str | None, log: Callable[[str], None]) -> None:
-    """Squash-merge only the commit that was reviewed, and only while it can merge."""
+    """Merge only the commit that was reviewed, and only while it can merge. A feature branch is
+    squashed and deleted; a promotion between the long-lived branches (test → main, main → dev) keeps
+    its history and its branch — squashing would make test and main diverge."""
     if not sha:
         log(f'{repo}#{num}: question predates reviews — waiting for pr-review, not merging')
         return
@@ -68,7 +74,8 @@ def merge_reviewed(run: Gh, owner: str, repo: str, num: str, sha: str | None, lo
     elif not st['ok']:
         log(f'{repo}#{num}: cannot merge now ({st["line"]})')
     else:
-        run(['pr', 'merge', num, '-R', f'{owner}/{repo}', '--squash', '--delete-branch', '--match-head-commit', sha])
+        how = ['--merge'] if st.get('head') in LONG_LIVED else ['--squash', '--delete-branch']
+        run(['pr', 'merge', num, '-R', f'{owner}/{repo}', *how, '--match-head-commit', sha])
         log(f'{repo}#{num} merged at {sha[:7]}')
 
 
