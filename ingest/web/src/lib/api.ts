@@ -64,7 +64,7 @@ export interface PressureResponse {
   weights: Record<string, unknown>;
 }
 
-async function getJson<T>(path: string): Promise<T> {
+export async function getJson<T>(path: string): Promise<T> {
   const r = await fetch(path, { credentials: 'same-origin' });
   if (r.status === 401) {
     window.location.href = '/login';
