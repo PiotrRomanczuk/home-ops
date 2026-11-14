@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- home-ops: CPU/GPU/network sampler for the Mac, every 30 s, always on.
+     Installed by scripts/deploy-agent.sh mac mac-watcher (__HOME__ is replaced on install). -->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>pl.pionat.home-ops.mac-watcher</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>__HOME__/bin/home-ops/run.sh</string>
+    <string>mac-watcher.py</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>30</integer>
+  <key>StandardOutPath</key>
+  <string>__HOME__/Library/Logs/home-ops/mac-watcher.log</string>
+  <key>StandardErrorPath</key>
+  <string>__HOME__/Library/Logs/home-ops/mac-watcher.log</string>
+  <key>ProcessType</key>
+  <string>Background</string>
+</dict>
+</plist>

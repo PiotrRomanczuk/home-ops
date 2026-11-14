@@ -11,6 +11,8 @@ export const SIGNALS = [
   'ci_failed',
   'tasks_done',
   'tasks_added',
+  'claude_sessions',
+  'claude_prompts',
 ] as const;
 export type Signal = (typeof SIGNALS)[number];
 /** What counts as the project actually moving (routines and CI don't). */

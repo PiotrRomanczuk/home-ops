@@ -1,6 +1,6 @@
 ---
 created: 2026-06-08
-updated: 2026-06-08
+updated: 2026-11-14
 ---
 
 # home-ops — architecture at a glance
@@ -17,6 +17,9 @@ graph TB
     direction TB
     vault[("Obsidian vault<br/>projects/*.md")]
     browser["Browser<br/>home-ops console UI<br/>(4 tabs + footer)"]
+    mac_watcher["mac-watcher (launchd)<br/>CPU / GPU / net per process<br/>+ Claude session attribution"]
+    claude_collector["claude-collector (launchd, 5 min)<br/>~/.claude/projects transcripts"]
+    day_summary["day-summary (21:30)<br/>local Ollama → card"]
   end
 
   %% ─────────── elitedesk ───────────
@@ -60,6 +63,9 @@ graph TB
   win10_watcher --> ingest
   ollama_watcher --> ingest
   rpi_watcher --> ingest
+  mac_watcher -. "LAN / Tailscale, spool when away" .-> ingest
+  claude_collector == "POST /api/claude/{sessions,events}" ==> ingest
+  day_summary == "GET /api/journal/day · POST /api/journal + /api/cards" ==> ingest
 
   %% ─── GPU job lifecycle ───
   gpu_sched -- "claim · result · complete" --> ingest

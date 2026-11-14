@@ -15,7 +15,7 @@ WARSAW = ZoneInfo('Europe/Warsaw')
 FONT = "-apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue',Helvetica,Arial,sans-serif"
 INK, INK2, INK3, LINE = '#1d1d1f', '#6e6e73', '#aeaeb2', '#e5e5ea'
 GOOD, WARN, BAD, LINK = '#34c759', '#ff9f0a', '#ff3b30', '#0066cc'
-STATUS_COLOR = {'ok': GOOD, 'warn': WARN, 'bad': BAD, 'fail': BAD, 'off': INK3, 'skipped': INK3}
+STATUS_COLOR = {'ok': GOOD, 'warn': WARN, 'bad': BAD, 'fail': BAD, 'off': INK3, 'skipped': INK3, 'sleep': INK3}
 
 
 def e(s: object) -> str:

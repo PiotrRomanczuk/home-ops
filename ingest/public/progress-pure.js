@@ -12,6 +12,7 @@
     code: { label: 'Kod', parts: { commits: 1, pr_merged: 3 } },
     tasks: { label: 'Zadania', parts: { tasks_done: 1 } },
     runs: { label: 'Rutyny', parts: { runs_ok: 1, runs_failed: 1 } },
+    claude: { label: 'Claude', parts: { claude_prompts: 1 } },
   };
   const TILES = [
     ['commits', 'commity'], ['pr_merged', 'PR zmergowane'], ['tasks_done', 'zadania odhaczone'],
@@ -55,7 +56,7 @@
     const names = {
       commits: 'commity', pr_opened: 'PR otwarte', pr_merged: 'PR zmergowane', deploys: 'deploye',
       ci_ok: 'CI ok', ci_failed: 'CI błąd', tasks_done: 'zadania odhaczone', tasks_added: 'zadania dodane',
-      runs_ok: 'rutyny ok', runs_failed: 'rutyny błąd',
+      runs_ok: 'rutyny ok', runs_failed: 'rutyny błąd', claude_sessions: 'sesje Claude', claude_prompts: 'prompty Claude',
     };
     const parts = Object.keys(names).filter((k) => (series[k] || [])[i]).map((k) => `${names[k]} ${series[k][i]}`);
     return parts.length ? parts.join(' · ') : 'bez ruchu';

@@ -20,7 +20,7 @@
 
 const HOSTS_REFRESH_MS = 30_000;
 
-const HOST_ROLES = { elitedesk: 'server', win10: 'gpu', rpi: 'monitoring' };
+const HOST_ROLES = { elitedesk: 'server', win10: 'gpu', rpi: 'monitoring', mac: 'laptop' };
 
 function fmtKbps(kbps) {
   if (kbps == null) return '—';

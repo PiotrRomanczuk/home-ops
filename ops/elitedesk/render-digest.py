@@ -62,6 +62,8 @@ def sec_hosts(m: dict, now: datetime) -> str:
             continue  # summarised in one line below
         if h['status'] == 'bad':
             right = f"silent since {when(h['last_metric_ts'], now)}"
+        elif h['status'] == 'sleep':
+            right = f"asleep since {when(h['last_metric_ts'], now)}"
         else:
             right = f"cpu {int(h['cpu_pct'] or 0)}% · mem {int(h['mem_pct'] or 0)}% · disk {int(h['disk_pct'] or 0)}%"
         rows.append(row(STATUS_COLOR[h['status']], e(h['host']), None, right))

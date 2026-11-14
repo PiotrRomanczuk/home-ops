@@ -39,8 +39,9 @@ const Status = {
   hostHealth(row) {
     const m = this.lagSec(row.last_metric_ts);
     if (m == null) return 'noagent';
-    // metrics sample every 30s: <=90s good, <=5m warn, else stale
-    return m <= 90 ? 'good' : m <= 300 ? 'warn' : 'stale';
+    // metrics sample every 30s: <=90s good, <=5m warn, else stale — unless
+    // the host is allowed to sleep (host_profiles, the Mac): then it's neutral.
+    return m <= 90 ? 'good' : m <= 300 ? 'warn' : row.sleeps ? 'noagent' : 'stale';
   },
 
   alarmCount() {

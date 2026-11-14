@@ -1,0 +1,12 @@
+[Unit]
+Description=home-ops claude-collector — Claude Code sessions on elitedesk → /api/claude/*
+After=network.target
+
+[Service]
+Type=oneshot
+# INGEST_URL / INGEST_TOKEN, same file as the other elitedesk agents.
+EnvironmentFile=%h/.config/elitedesk-watcher.env
+Environment=HOST_NAME=elitedesk
+ExecStart=/usr/bin/python3 %h/bin/claude-collector.py
+StandardOutput=journal
+StandardError=journal

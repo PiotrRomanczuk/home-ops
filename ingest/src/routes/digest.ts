@@ -39,6 +39,8 @@ const DISK_WARN_PCT = 90;
 
 export interface HostRow {
   host: string;
+  /** host_profiles.sleeps (032): silence is the lid being closed, not an outage. */
+  sleeps?: boolean | null;
   last_metric_ts: string | null;
   last_event_ts: string | null;
   cpu_pct: number | null;
@@ -46,10 +48,10 @@ export interface HostRow {
   disk_pct: number | null;
 }
 
-export function hostStatus(h: HostRow, now: number): 'ok' | 'warn' | 'bad' | 'off' {
+export function hostStatus(h: HostRow, now: number): 'ok' | 'warn' | 'bad' | 'off' | 'sleep' {
   if (!h.last_metric_ts) return 'off';
   const silentMin = (now - new Date(h.last_metric_ts).getTime()) / 60_000;
-  if (silentMin > SILENT_AFTER_MIN) return 'bad';
+  if (silentMin > SILENT_AFTER_MIN) return h.sleeps ? 'sleep' : 'bad';
   if ((h.disk_pct ?? 0) >= DISK_WARN_PCT) return 'warn';
   return 'ok';
 }
