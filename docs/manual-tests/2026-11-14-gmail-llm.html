@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gmail LLM — raport testów ręcznych</title>
+<style>
+  :root { --bg:#fbfaf7; --ink:#1d1d1b; --muted:#6b6862; --line:#e4e0d8; --ok:#2f6f5e; --warn:#a2541b; --code:#f1eee7; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#181816; --ink:#ecebe6; --muted:#a3a09a; --line:#33322e; --ok:#7cc4ad; --warn:#e3a06b; --code:#24231f; } }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.55 -apple-system, system-ui, sans-serif; }
+  main { max-width: 900px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 27px; margin: 0 0 4px; } h2 { font-size: 20px; margin: 34px 0 8px; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+  .meta { color: var(--muted); font-size: 14px; }
+  code, pre { font: 13px/1.5 ui-monospace, Menlo, monospace; background: var(--code); border-radius: 6px; }
+  code { padding: 1px 5px; } pre { padding: 12px 14px; overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; } th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); } .ok { color: var(--ok); font-weight: 600; } .bad { color: var(--warn); font-weight: 600; }
+</style>
+</head>
+<body>
+<main>
+<h1>Gmail: Claude proponuje reguły, człowiek zatwierdza</h1>
+<p class="meta">2026-11-14 · gałąź <code>feat/gmail-llm</code> (na <code>feat/gmail-cleanup</code>, PR #68) · ADR <code>docs/adr/2026-11-13-gmail-llm-rule-proposals.md</code> · test na bazie <code>gmail_test</code> (uwh), bez dostępu do Gmaila (token martwy od 31.10)</p>
+
+<h2>Co zostało zrobione</h2>
+<ul>
+  <li><b>Claude pisze propozycje reguł, nie etykiety.</b> Dla nadawców, których żadna reguła nie łapie (koszyki <code>none</code> / <code>tab</code> / <code>unsub</code>), Claude proponuje: nadawca (adres albo domena) → kategoria z <i>istniejącej</i> listy + polityka skrzynki <code>keep</code>/<code>archive</code>. Zatwierdzona propozycja staje się zwykłym wierszem <code>gmail.rule</code>, więc <code>reconcile_live</code> jej nie cofa.</li>
+  <li><b>Wywołanie:</b> <code>claude -p</code> na abonamencie Max, paczki po 20 nadawców, <code>--json-schema</code> (kategoria i nadawca jako enum), przy każdej kategorii kilku przykładowych nadawców z reguł. CLI odchudzone flagami <code>--tools ''</code>, <code>--strict-mcp-config</code>, <code>--setting-sources ''</code>, własny <code>--system-prompt</code>: ok. 1 tys. tokenów narzutu zamiast ok. 570 tys.</li>
+  <li><b>Migracja 031:</b> <code>gmail.rule.inbox</code>, tabela <code>gmail.rule_proposal</code>, <code>rules_json()</code> zwraca <code>inbox</code>.</li>
+  <li><b>Rutyna <code>gmail-daily</code>:</b> consume odpowiedzi z „Dziś” → klasyfikacja → propose (≤ 40 nadawców) → ask (≤ 3 otwarte pytania) → archive według zatwierdzonych reguł. Nigdy Kosz; chronione maile (gwiazdka, chronione kategorie, tematy jak dokumenty) nigdy nie są archiwizowane. <code>GMAIL_LLM=0</code> wyłącza całość.</li>
+  <li><b>Przegląd w terminalu:</b> <code>gmail_review.py</code> (t / z / a / n / p / q). <b>CLI ręczne:</b> <code>gmail-llm.py propose|archive|ask|consume</code> działa bez Gmaila.</li>
+  <li><b>Ewaluacja:</b> <code>gmail_llm_eval.py</code> + <code>gmail_llm_report.py</code> — zgodność z istniejącymi regułami (reguł model nie widzi; przykłady nigdy z domeny ocenianej w tej samej paczce).</li>
+  <li>Przy okazji: test <code>test_automated_only_subject_rule_skips_people</code> nie był uruchamiany przez unittest (funkcja w stylu pytest za <code>if __name__</code>) — przeniesiony do klasy.</li>
+</ul>
+
+<h2>Co sprawdziłem</h2>
+<table>
+  <tr><th>Test</th><th>Wynik</th></tr>
+  <tr><td>Pełny zestaw testów <code>ops/elitedesk/tests</code> (Python 3.9 i 3.12), <code>py_compile</code> nowych modułów</td><td class="ok">140 testów OK</td></tr>
+  <tr><td>Migracja 031 na <code>gmail_test</code> dwa razy z rzędu</td><td class="ok">idempotentna; 90 reguł dostało <code>inbox = keep</code></td></tr>
+  <tr><td><code>gmail-llm.py propose --limit 0 --dry</code> na prawdziwym inventory (uwh)</td><td class="ok">621 słabych nadawców i 1614 z regułami — co do sztuki jak w bazie</td></tr>
+  <tr><td><code>gmail-llm.py propose --limit 10</code> z tokenem abonamentu na uwh</td><td class="ok">10 propozycji zapisanych, sensowne (np. powiadomienia urzędu o pojeździe → <code>Dom/Auto</code>, zostaje w skrzynce)</td></tr>
+  <tr><td><code>gmail_review.py</code> ze skryptowanymi odpowiedziami (t, t, t, z+t, n, q)</td><td class="ok">4 reguły dopisane na końcu (pozycje 67–70, note <code>llm sonnet 2026-11-13</code>), 1 odrzucona, reszta czeka</td></tr>
+  <tr><td>Archiwizacja: reguła „archive” dla newslettera z 1 mailem w skrzynce</td><td class="ok">0 — ten mail ma gwiazdkę, strażnik chroniony słusznie go pominął</td></tr>
+  <tr><td>Archiwizacja: tymczasowa reguła (w pamięci) dla nadawcy z 16 mailami w skrzynce</td><td class="ok">11 = 9 z zakładki + 2 bez reguły; 5 łapie wcześniejsza reguła „keep” (pierwsza wygrywa), w tym 1 chroniony</td></tr>
+  <tr><td>Ewaluacja na 588 nadawcach z regułami (+150 bez reguł)</td><td>wyniki niżej</td></tr>
+</table>
+
+<h2>Ewaluacja</h2>
+<table>
+  <tr><th>Model</th><th>Dokładnie</th><th>Ta sama gałąź</th><th>Pewność ≥ 0,9 → trafność</th><th>Czas / nadawcę</th></tr>
+  <tr><td>qwen3.5:9b (lokalnie, wfh)</td><td>26 %</td><td>31 %</td><td>pewność płaska (≥ 0,85 w 582/588)</td><td>2,2 s</td></tr>
+  <tr><td>gemma4:12b (lokalnie, przerwane na 366)</td><td>~45 %</td><td>~48 %</td><td>—</td><td>~3 s</td></tr>
+  <tr><td>Claude Sonnet</td><td>59 %</td><td>63 %</td><td>126 nadawców → 80 %</td><td>0,5 s</td></tr>
+  <tr><td><b>Claude Opus (domyślny)</b></td><td><b>64 %</b></td><td><b>68 %</b></td><td><b>90 nadawców → 94 %</b></td><td>0,7 s</td></tr>
+</table>
+<p>Wzorzec = wynik istniejących reguł (588 nadawców, 51 kategorii). Pomyłki Claude to głównie sąsiednie kategorie (<code>Praca/Zatrudnienie</code> → <code>Szukanie-pracy</code>, <code>Faktury</code> ↔ <code>Zamówienia-przesyłki</code>). Poniżej progu 80 % → <b>tylko tryb przeglądu</b>. Koszt w przeliczeniu na API: Opus 5,67 $ / 738 nadawców (abonament Max — bez dopłat, liczy się do limitu sesji). Notatka: vault <code>3-Zasoby/analysis/2026-11-13-gmail-llm-ewaluacja.md</code>.</p>
+
+<h2>Jak przetestować ręcznie (po scaleniu PR #68 i tego PR)</h2>
+<ol>
+  <li>Wymagania Piotra: GCP <code>home-ops-seo</code> → ekran zgody → <b>In production</b>; nowy token na Macu (<code>gmail_cleanup.py auth</code>); <code>scp ~/.config/home-ops/gmail-{client,token}.json uwh:~/.config/home-ops/</code>; w <code>gmail-daily.env</code> wpisać <code>CLAUDE_CODE_OAUTH_TOKEN</code> (ten sam co w <code>seo-collect.env</code>).</li>
+  <li>Na uwh: <code>cd ~/code/logs-stack && git pull && scripts/apply-migrations.sh</code> (025 + 031), <code>python3 ops/elitedesk/gmail_import.py all</code>.</li>
+  <li><code>python3 ops/elitedesk/gmail-llm.py propose --limit 10 --dry</code> — oczekiwane: 10 linii <code>proposal: nadawca → kategoria / keep|archive (pewność)</code>, nic nie zapisane.</li>
+  <li><code>python3 ops/elitedesk/gmail-llm.py propose</code>, potem <code>ssh -t uwh 'cd ~/code/logs-stack && python3 ops/elitedesk/gmail_review.py'</code> — przejrzyj kilka; <code>z</code> pokazuje listę kategorii, <code>a</code> przełącza skrzynkę/archiwum, <code>n</code> = nadawca nie wróci.</li>
+  <li><code>python3 ops/elitedesk/gmail-llm.py archive</code> — ile maili zarchiwizuje najbliższy przebieg; sprawdź, że maile z gwiazdką nie są liczone.</li>
+  <li><code>systemctl --user start gmail-daily.service && journalctl --user -u gmail-daily -n 30</code> — karta na „Dziś” z „propozycji reguł N, zarchiwizowanych M” i do 3 pytań <code>Gmail: … → kategoria?</code> (tak / tak, ale w skrzynce / nie).</li>
+  <li>Cofnięcie archiwizacji: <code>python3 ops/elitedesk/gmail_cleanup.py undo ~/.local/state/home-ops/gmail/journal-daily-&lt;czas&gt;.jsonl</code> przywraca INBOX.</li>
+</ol>
+</main>
+</body>
+</html>

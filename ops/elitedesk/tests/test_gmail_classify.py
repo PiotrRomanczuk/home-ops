@@ -109,14 +109,20 @@ class CoverageTest(unittest.TestCase):
         self.assertIn('| Dev/GitHub | 1 |', report(db, CFG))
 
 
+class RuleFieldsTest(unittest.TestCase):
+    def test_automated_only_subject_rule_skips_people(self):
+        import re
+        rule = Rule('Zakupy', subject=re.compile('order', re.I), automated_only=True)
+        self.assertTrue(rule.hits('sklep@x.pl', 'Your order'))
+        self.assertFalse(rule.hits('anna.kowalska@x.pl', 'Re: order'))
+        self.assertTrue(rule.hits('', 'order'))
+
+    def test_inbox_policy_defaults_to_keep(self):
+        from gmail_classify import rules_from_dict
+        cfg = rules_from_dict({'me': [], 'freemail': [], 'rules': [
+            {'label': 'Zakupy', 'from': ['allegro.pl'], 'inbox': 'archive'}, {'label': 'Urzędy', 'from': ['gov.pl']}]})
+        self.assertEqual([r.inbox for r in cfg['rules']], ['archive', 'keep'])
+
+
 if __name__ == '__main__':
     unittest.main()
-
-
-def test_automated_only_subject_rule_skips_people():
-    from gmail_classify import Rule
-    import re
-    rule = Rule('Zakupy', subject=re.compile('order', re.I), automated_only=True)
-    assert rule.hits('sklep@x.pl', 'Your order') is True
-    assert rule.hits('anna.kowalska@x.pl', 'Re: order') is False
-    assert rule.hits('', 'order') is True
