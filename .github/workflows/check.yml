@@ -74,7 +74,11 @@ jobs:
             ops/elitedesk/seo_drift.py \
             ops/elitedesk/seo_opps.py \
             ops/elitedesk/brief-pull.py \
-            ops/elitedesk/brief_parse.py
+            ops/elitedesk/brief_parse.py \
+            ops/mac/sprint/runner.py \
+            ops/mac/sprint/sprint_tasks.py \
+            ops/mac/sprint/seed.py \
+            ops/mac/sprint/status.py
 
   clients-node:
     name: clients/node (syntax)
@@ -146,6 +150,8 @@ jobs:
         run: python3 -m unittest discover -s agents/tests -p 'test_*.py' -v
       - name: unittest discover (ops/elitedesk)
         run: python3 -m unittest discover -s ops/elitedesk/tests -p 'test_*.py' -v
+      - name: unittest discover (ops/mac/sprint)
+        run: python3 -m unittest discover -s ops/mac/sprint/tests -p 'test_*.py' -v
 
   tests-state-machine:
     name: tests (state machine + decisions + briefs/today + queue vs real postgres)

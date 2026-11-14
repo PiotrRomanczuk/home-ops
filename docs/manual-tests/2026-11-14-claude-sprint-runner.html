@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="pl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sprint Claude — runner zadań headless · raport testów ręcznych</title>
+<style>
+  :root { --ink:#1d2433; --muted:#5b6475; --line:#e3e6ec; --bg:#fafbfc; --ok:#1f7a4d; --warn:#9a5b00; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.55 -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 900px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 1.6rem; margin: 0 0 4px; } h2 { margin-top: 2rem; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+  .meta { color: var(--muted); font-size: .9rem; } code, pre { font-family: ui-monospace, Menlo, monospace; font-size: .86rem; }
+  pre { background:#fff; border:1px solid var(--line); border-radius:8px; padding:12px 14px; overflow-x:auto; white-space:pre-wrap; }
+  table { border-collapse: collapse; width: 100%; font-size: .92rem; } th, td { text-align:left; border-bottom:1px solid var(--line); padding:7px 6px; vertical-align: top; }
+  .ok { color: var(--ok); font-weight: 600; } .warn { color: var(--warn); font-weight: 600; }
+</style></head><body><main>
+<h1>Sprint Claude: runner zadań headless na Macu</h1>
+<p class="meta">2026-11-14 · branch <code>feat/claude-sprint</code> · <code>ops/mac/sprint/</code></p>
+
+<h2>1. Co zostało zrobione</h2>
+<ul>
+  <li><b>Kolejka plikowa</b> (<code>sprint_tasks.py</code>): jedno zadanie to plik markdown z nagłówkiem (model, wysiłek, priorytet, limit czasu, <code>lock</code>, <code>after</code>). Zadanie wędruje <code>queue → running → done | failed</code>, a po porażce jest raz ponawiane na mocniejszym modelu.</li>
+  <li><b>Runner</b> (<code>runner.py</code>, launchd pod <code>caffeinate</code>): 3 workerów uruchamia zadania przez <code>claude -p</code> w świeżych sesjach, z modelem z zadania, bez serwerów MCP, w trybie <code>auto</code> bez nikogo, kto odpowie na pytania o uprawnienia. Każdy przebieg trafia w całości do <code>logs/runs.jsonl</code> i jako wiersz do raportu w vaulcie.</li>
+  <li><b>Twarde blokady</b>: lista zakazanych narzędzi (połączenia z innymi hostami, podnoszenie uprawnień, scalanie i zatwierdzanie PR-ów, wdrożenia, menedżer haseł) plus hook <code>guard-bash.py</code> i zasady w <code>rules.md</code>.</li>
+  <li><b>Limity</b>: po wyczerpaniu limitu zadanie wraca do kolejki, a workerzy czekają 10 min. Zadanie na Fable jest najpierw ponawiane na Opus.</li>
+  <li><b>Planista</b> (<code>planner.md</code>, Fable): gdy kolejka się kończy, sam dopisuje zadania i dobiera do nich model. <b>Podsumowanie</b> co 5 h (<code>summary.md</code>).</li>
+  <li><b>Kolejka startowa</b> (<code>seed.py</code>): pilotaż porządku w notatce vaulta, jego recenzja, pozostałe notatki, niezależna recenzja każdego otwartego PR-a.</li>
+  <li><b>Strona stanu</b> (<code>status.py</code>): jedna strona HTML ze stanem kolejki, ostatnimi przebiegami, listą „Czeka na Piotra” i wyłącznikiem. Domyślnie tylko na <code>127.0.0.1:8787</code>.</li>
+</ul>
+
+<h2>2. Co sprawdziłem (2026-11-14, Mac)</h2>
+<table>
+  <tr><th>Sprawdzenie</th><th>Wynik</th></tr>
+  <tr><td>unittest kolejki (priorytet, <code>after</code>, <code>lock</code>, eskalacja modelu, odzyskanie po awarii)</td><td class="ok">4 OK</td></tr>
+  <tr><td>Próba na sucho: 2 zadania na Haiku w osobnym katalogu stanu</td><td class="ok">oba w <code>done/</code>, wyniki i wiersze raportu zapisane</td></tr>
+  <tr><td>Zadanie z zakazanymi komendami (z zasadami sprintu)</td><td class="ok">worker odmówił ich uruchomienia i wskazał, że połączenia z hostami nie miały blokady mechanicznej (dodana)</td></tr>
+  <tr><td>Blokady bez zasad sprintu (sam mechanizm): połączenie z uwh, to samo wewnątrz złożonej komendy, scalenie nieistniejącego PR-a</td><td class="ok">połączenia odrzucone przez warstwę uprawnień (2×), scalenie zablokowane przez hook</td></tr>
+  <tr><td>Plik <code>STOP</code> i termin</td><td class="ok">runner kończy pracę</td></tr>
+  <tr><td>Start przez launchd z kolejką 82 zadań (21 notatek, 60 PR-ów)</td><td class="ok">3 zadania w toku po 25 s; pierwsza recenzja PR-a skończona po 2 min</td></tr>
+  <tr><td>Strona stanu</td><td class="warn">napisana, kompiluje się; nie uruchomiona (start serwera w sieci lokalnej wymaga decyzji Piotra)</td></tr>
+</table>
+
+<h2>3. Jak przetestować ręcznie</h2>
+<pre>cd ops/mac/sprint
+T=$(mktemp -d); mkdir -p $T/queue
+printf -- '---\nmodel: haiku\ncwd: ~\nmax_minutes: 5\n---\nNapisz w pliku wyniku jedno zdanie.\n' > $T/queue/t1.md
+SPRINT_STATE=$T SPRINT_REPORT=$T/report.md SPRINT_PLANNER=0 SPRINT_WORKERS=1 \
+  SPRINT_DEADLINE=$(date -v+5M +%Y-%m-%dT%H:%M:%S) python3 runner.py
+ls $T/done $T/results; tail -1 $T/report.md        # t1 w done/, wynik zapisany, wiersz w raporcie
+SPRINT_STATE=$T python3 status.py &amp;                # http://127.0.0.1:8787
+touch $T/STOP                                       # runner kończy się w ciągu kilkunastu sekund</pre>
+<p>Stan prawdziwego sprintu: <code>ls ~/.local/state/home-ops/sprint/{queue,running,done,failed}</code>, log <code>~/Library/Logs/home-ops/sprint.log</code>, raport <code>3-Zasoby/analysis/2026-11-14-sprint-48h.md</code> w vaulcie.</p>
+
+<h2>4. Ograniczenia i ryzyka</h2>
+<ul>
+  <li><span class="warn">Wykrywanie limitu</span> opiera się na tekście błędu z <code>claude</code>. Prawdziwego komunikatu o limicie jeszcze nie widziałem, więc wzorzec może wymagać poprawki po pierwszym wyczerpaniu okna 5 h.</li>
+  <li>Procentu limitu nie da się odczytać w trybie headless. Raport podaje tokeny i koszt per zadanie.</li>
+  <li>Zadania edytujące vault biegną pojedynczo (<code>lock: vault</code>).</li>
+  <li>Jakość zadań dopisywanych przez planistę nie była jeszcze sprawdzona w praktyce.</li>
+  <li>Strona stanu nie ma logowania. Po ustawieniu <code>SPRINT_STATUS_HOST=0.0.0.0</code> każdy w sieci lokalnej widzi wyniki zadań i może zatrzymać sprint.</li>
+</ul>
+</main></body></html>
