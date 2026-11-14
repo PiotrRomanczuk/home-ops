@@ -134,7 +134,7 @@ class DayPromptTest(unittest.TestCase):
 
     def test_card(self):
         c = day_prompt.card(JOURNAL, ['krok'], prev_active_min=125)
-        self.assertTrue(c['headline'].startswith('sob 14.11: 3 h 05 min z Claude · 5 sesji · 80 promptów'))
+        self.assertEqual(c['headline'], 'sob 14.11: 3 h 05 min z Claude · 5 sesji · 80 promptów · home-ops')
         self.assertEqual(c['items'], [('krok', None)])
         self.assertEqual(c['metric'], {'label': 'aktywny czas z Claude', 'value': 3.1, 'unit': 'h', 'delta': 1.0})
         fallback = day_prompt.card(JOURNAL, [], None)

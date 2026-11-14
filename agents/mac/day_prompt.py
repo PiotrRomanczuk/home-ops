@@ -78,7 +78,8 @@ def next_steps(text: str) -> list[str]:
 def card(j: dict[str, Any], steps: list[str], prev_active_min: float | None) -> dict[str, Any]:
     tot = (j.get('claude') or {}).get('totals') or {}
     active = float(tot.get('active_min') or 0)
-    projects = [p.get('project_slug') for p in _top((j.get('claude') or {}).get('by_project') or [], 'active_min')]
+    by_project = [p for p in (j.get('claude') or {}).get('by_project') or [] if p.get('project_slug')]
+    projects = [p['project_slug'] for p in _top(by_project, 'active_min')]
     day = j.get('day') or ''
     try:
         from datetime import date
@@ -88,7 +89,7 @@ def card(j: dict[str, Any], steps: list[str], prev_active_min: float | None) -> 
         label = day
     head = f'{label}: {hm(active)} z Claude · {tot.get("sessions", 0)} sesji · {tot.get("prompts", 0)} promptów'
     if projects:
-        head += ' · ' + ', '.join(p or '(bez projektu)' for p in projects)
+        head += ' · ' + ', '.join(projects)
     items = steps or [line.lstrip('- ') for line in facts(j)[2:7]]
     metric = {'label': 'aktywny czas z Claude', 'value': round(active / 60, 1), 'unit': 'h'}
     if prev_active_min is not None:
