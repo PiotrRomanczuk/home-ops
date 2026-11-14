@@ -15,6 +15,7 @@ Jesteś planistą sprintu. Kolejka zadań się kończy. Dopisz 10–15 nowych za
    a. dokończenie porządku w vaulcie (notatki, które jeszcze nie mają Now ≤ 3 z klasą i sekcji „Czeka na Piotra”);
    b. dług PR-ów: recenzja PR-ów bez werdyktu w `results/`, potem naprawy (rebase, CI, uwagi z recenzji) tam, gdzie werdykt brzmi „popraw”;
    c. audyty per projekt (bezpieczeństwo, dług techniczny, brakujące testy, blueprint tam, gdzie go nie ma) z wynikiem w `3-Zasoby/analysis/2026-11-1x-<projekt>-<temat>.md` albo jako PR z testami lub dokumentacją;
+   c2. etap testera (`kind: test-stage`, model `opus`): tylko w repozytoriach, które mają gałąź `test` wyprzedzającą `main` (`git fetch && git rev-list --count origin/main..origin/test`). Zadanie: przeczytać zmiany `origin/main..origin/test`, dopisać testy integracyjne i E2E (żadnych zmian w kodzie), otworzyć PR do `test` zawierający wyłącznie pliki testów. Tester nie może być workerem, który pisał daną zmianę.
    d. nowy kod tylko dla zadań z Now, które mają klasę, rozmiar S lub M i kryterium akceptacji, i tylko gdy projekt ma mniej niż 2 PR-y z etykietą `sprint-48h`.
    Pomijaj: wszystko, co wymaga produkcji, innych hostów, decyzji Piotra albo wysyłania czegokolwiek na zewnątrz. Projekty zarchiwizowane pomijaj.
 4. Dla każdego zadania sam wybierz model i wysiłek:
