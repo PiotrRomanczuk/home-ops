@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gmail — kategoryzacja skrzynki</title>
+<style>
+  :root { --bg:#fafaf8; --fg:#1d1d1b; --mute:#6b6b66; --line:#e3e2dc; --acc:#2f6b4f; --warn:#9a5b12; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#171716; --fg:#ecebe6; --mute:#a3a29b; --line:#33322f; --acc:#7fc4a0; --warn:#e0a85a; } }
+  body { background:var(--bg); color:var(--fg); font:15px/1.55 -apple-system, system-ui, sans-serif; max-width:860px; margin:0 auto; padding:24px 16px 64px; }
+  h1 { font-size:24px; margin:0 0 4px; } h2 { font-size:18px; margin:32px 0 8px; border-bottom:1px solid var(--line); padding-bottom:4px; }
+  .meta { color:var(--mute); font-size:13px; }
+  code, pre { font:13px/1.45 ui-monospace, Menlo, monospace; } pre { background:rgba(127,127,127,.1); padding:10px 12px; border-radius:6px; overflow-x:auto; }
+  table { border-collapse:collapse; width:100%; font-size:14px; } td, th { border-bottom:1px solid var(--line); padding:5px 8px; text-align:left; } td.n { text-align:right; font-variant-numeric:tabular-nums; }
+  .ok { color:var(--acc); font-weight:600; } .warn { color:var(--warn); font-weight:600; }
+  li { margin:4px 0; }
+</style>
+</head>
+<body>
+<h1>Gmail — kategoryzacja każdego maila</h1>
+<div class="meta">2026-10-24 · branch <code>feat/gmail-cleanup</code> · skrzynka p.romanczuk@gmail.com</div>
+
+<h2>Co zostało zrobione</h2>
+<ul>
+  <li>Nowe narzędzie <code>ops/elitedesk/gmail_cleanup.py</code> (stdlib Python, bez pip). Kroki: <code>auth</code> → <code>inventory</code> → <code>classify</code> → <code>apply</code> / <code>undo</code>.</li>
+  <li><b>Inwentaryzacja</b> metadanych wszystkich 107&nbsp;201 wiadomości do SQLite (<code>~/.local/state/home-ops/gmail/inventory.sqlite</code>) przez <b>IMAP + OAuth (XOAUTH2)</b>: 4 minuty. REST API było limitowane do ~3&nbsp;msg/s (~10&nbsp;h), więc służy tylko do zapisu etykiet (<code>batchModify</code>).</li>
+  <li><b>Klasyfikacja</b>: każdy mail dostaje dokładnie jedną kategorię. Kolejność: reguły nadawców z <code>gmail_rules.json</code> → własne maile według odbiorcy → ludzie (adresy, do których Piotr pisał, i freemail bez List-Unsubscribe, z wyłączeniem adresów automatycznych) → zakładki Gmaila → <code>Inne/Do-przejrzenia</code>.</li>
+  <li><b>Zapis</b>: 34 etykiety (zagnieżdżone, widoczne w panelu). Narzędzie tylko <b>dodaje</b> etykiety: bez archiwizacji, bez zmiany przeczytania, bez kasowania. Dziennik JSONL umożliwia <code>undo</code>.</li>
+</ul>
+
+<h2>Wynik</h2>
+<p class="ok">107 201 / 107 201 maili ma kategorię; liczniki w Gmailu zgadzają się co do sztuki z symulacją. Bez etykiety: 2 maile, które przyszły po inwentaryzacji. 84 stare czaty Hangouts dopisano do „Ludzie”.</p>
+<table>
+<tr><th>Kategoria</th><th>Maili</th><th>Nieprzeczytane</th></tr>
+<tr><td>Dev/Zwroty-poczty</td><td class="n">22 163</td><td class="n">21 601</td></tr>
+<tr><td>Zakupy</td><td class="n">9 629</td><td class="n">1 790</td></tr>
+<tr><td>Społecznościowe</td><td class="n">9 339</td><td class="n">1 486</td></tr>
+<tr><td>Promocje</td><td class="n">8 933</td><td class="n">3 716</td></tr>
+<tr><td>Newslettery (+/Edukacja, /Dev, /Gitara, /AI)</td><td class="n">18 074</td><td class="n">4 617</td></tr>
+<tr><td>Praca/Szukanie-pracy</td><td class="n">5 427</td><td class="n">386</td></tr>
+<tr><td>Powiadomienia</td><td class="n">5 091</td><td class="n">397</td></tr>
+<tr><td>Dev (GitHub, Vercel, Sentry, Usługi, Home-ops, Bezpieczeństwo)</td><td class="n">7 329</td><td class="n">6 235</td></tr>
+<tr><td>Ludzie + Ludzie/Wysłane</td><td class="n">5 714</td><td class="n">20</td></tr>
+<tr><td>Inne/Do-przejrzenia</td><td class="n">965</td><td class="n">70</td></tr>
+</table>
+<p class="warn">Odkrycie: 22 tys. zwrotów (VIII–X 2026) to testy E2E/RLS ze Strummy wysyłające przez Gmail SMTP na adresy <code>rls-admin-…@guitarcrm.local</code>. Do naprawy w repo Strummy.</p>
+
+<h2>Jak przetestować ręcznie</h2>
+<ol>
+  <li>Wymagane: <code>~/.config/home-ops/gmail-client.json</code> (klient OAuth „Desktop”, projekt <code>home-ops-seo</code>) oraz token <code>gmail-token.json</code> (<code>python3 ops/elitedesk/gmail_cleanup.py auth</code>).</li>
+  <li>Testy jednostkowe: <pre>python3 -m unittest discover -s ops/elitedesk/tests -p 'test_*.py'</pre> Oczekiwane: 100 testów OK (32 dotyczy Gmaila).</li>
+  <li>Inwentaryzacja (tylko odczyt, ok. 4 min): <pre>python3 ops/elitedesk/gmail_cleanup.py inventory</pre> Oczekiwane: <code>107201 messages in All Mail …</code>.</li>
+  <li>Raport na sucho: <pre>python3 ops/elitedesk/gmail_cleanup.py classify</pre> Sprawdź <code>~/.local/state/home-ops/gmail/classify-report.md</code>: suma kategorii = liczba maili, <code>Inne/Do-przejrzenia</code> poniżej 1%.</li>
+  <li>W Gmailu wyszukaj <code>has:nouserlabels -in:chats</code>. Wynik powinien obejmować tylko maile nowsze niż ostatnia inwentaryzacja.</li>
+  <li>Kliknij kilka etykiet w panelu (np. <code>Prawne</code>, <code>Ludzie</code>, <code>Finanse/Faktury</code>) i oceń trafność próbek.</li>
+  <li>Cofanie (nie uruchamiać bez potrzeby): <pre>python3 ops/elitedesk/gmail_cleanup.py undo ~/.local/state/home-ops/gmail/journal-20261024-184848.jsonl</pre> Usuwa tylko etykiety dodane przez narzędzie.</li>
+</ol>
+
+<h2>Przypadki brzegowe</h2>
+<ul>
+  <li>Uszkodzone nagłówki (CR/LF w adresie, błędne kodowanie RFC&nbsp;2047): parser jest tolerancyjny, co pokrywa test.</li>
+  <li>Polski folder „[Gmail]/Wszystkie”: nazwę wykrywa atrybut <code>\All</code>, nie stała.</li>
+  <li>Limity API (403 „Quota exceeded”): adaptacyjny ogranicznik AIMD oraz ponawianie przy timeoutach sieci.</li>
+  <li>Token OAuth w trybie „Testing” wygasa po 7 dniach (31.10). Trzeba opublikować aplikację (Branding → Publish) i raz powtórzyć <code>auth</code>.</li>
+</ul>
+</body>
+</html>
