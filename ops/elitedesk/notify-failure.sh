@@ -35,7 +35,14 @@ INVOCATION="$(show InvocationID)"
 RUNLOG=""
 [[ -n "$INVOCATION" ]] &&
   RUNLOG="$(journalctl --user _SYSTEMD_INVOCATION_ID="$INVOCATION" --no-pager -o cat 2>/dev/null | tail -n 60 || true)"
-[[ -n "$RUNLOG" ]] || RUNLOG="$(journalctl --user -u "$UNIT" -n 40 --no-pager -o short-iso 2>&1 || true)"
+# The reason is always computed from the bare (-o cat) text so the anchored
+# filter below works in the fallback too; timestamps only for display.
+RUNLOG_VIEW=""
+if [[ -z "$RUNLOG" ]]; then
+  RUNLOG="$(journalctl --user -u "$UNIT" -n 40 --no-pager -o cat 2>&1 || true)"
+  RUNLOG_VIEW="$(journalctl --user -u "$UNIT" -n 40 --no-pager -o short-iso 2>&1 || true)"
+fi
+: "${RUNLOG_VIEW:=$RUNLOG}"
 
 # The reason = the program's own last words, minus systemd's bookkeeping.
 REASON="$(printf '%s\n' "$RUNLOG" |
@@ -43,10 +50,10 @@ REASON="$(printf '%s\n' "$RUNLOG" |
   grep -vE '^\s*(#.*)?$|^STATUS:' | tail -n 3 || true)"
 [[ -n "$REASON" ]] || REASON="Proces zakończył się kodem ${CODE:-?} bez komunikatu."
 SHORT="$(printf '%s' "$REASON" | tail -n 1 |
-  sed -E 's/^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+([+-][0-9:]+|Z)? //; s/ — log: .*//' | cut -c1-80)"
+  sed -E 's/^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+([+-][0-9:]+|Z)? //; s/ — log: .*//' | python3 -c 'import sys; print(sys.stdin.read().strip()[:80], end="")')"
 
-LAST_OK="$(journalctl --user -u "$UNIT" --no-pager -o short-iso 2>/dev/null |
-  grep -E ' Finished ' | tail -n 1 | cut -d' ' -f1 | sed 's/T/ /; s/+.*//' || true)"
+LAST_OK="$(journalctl --user -u "$UNIT" --since "-60 days" --no-pager -o short-iso 2>/dev/null |
+  grep -E ' systemd\[[0-9]+\]: Finished ' | tail -n 1 | cut -d' ' -f1 | sed 's/T/ /; s/+.*//' || true)"
 NEXT=""
 systemctl --user cat "${NAME}.timer" >/dev/null 2>&1 &&
   NEXT="$(systemctl --user list-timers --no-legend "${NAME}.timer" 2>/dev/null | awk '{print $1, $2, $3}')"
@@ -68,7 +75,7 @@ $(row 'Następny' "${NEXT:-brak timera — tylko ręcznie}")
 </table>
 <p style=\"font-size:13px\"><b>Co zrobić:</b> przeczytaj przyczynę i kontekst poniżej. Jeśli to chwilowe, poczekaj na następny przebieg albo uruchom ręcznie: <code>systemctl --user start ${UNIT}</code>. Log: <code>journalctl --user -u ${UNIT} --since today</code></p>"
 [[ -n "$CONTEXT" ]] && HTML+="<h4 style=\"margin-bottom:4px\">Kontekst</h4><pre style=\"font-size:12px;white-space:pre-wrap\">$(printf '%s' "$CONTEXT" | esc)</pre>"
-HTML+="<h4 style=\"margin-bottom:4px\">Log tego przebiegu</h4><pre style=\"font-size:12px;white-space:pre-wrap;color:#4a4037\">$(printf '%s' "$RUNLOG" | esc)</pre>"
+HTML+="<h4 style=\"margin-bottom:4px\">Log tego przebiegu</h4><pre style=\"font-size:12px;white-space:pre-wrap;color:#4a4037\">$(printf '%s' "$RUNLOG_VIEW" | esc)</pre>"
 
 SUBJECT="[home-ops] ❌ ${NAME}: ${SHORT}"
 if [[ "${DRY_RUN:-0}" = 1 ]]; then
