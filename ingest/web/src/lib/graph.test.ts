@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { MapNode, MapResponse } from './api';
-import { toFlow } from './flow';
+import { structureKeyOf, toFlow } from './flow';
 import { EXTERNAL_GROUP, ecosystemSpec, impactOf, infraSpec, primaryHost, relationsOf, visibleIds } from './graph';
 import { layoutSpec } from './layout';
 
@@ -56,6 +56,43 @@ describe('visibility', () => {
     expect(ids.has('host:uwh')).toBe(false);
     expect(visibleIds(MAP, true).has('inborr')).toBe(true);
   });
+
+  const withQuiet = (extraNodes: MapNode[], extraEdges: MapResponse['edges']): MapResponse => ({
+    ...MAP,
+    nodes: [...MAP.nodes, ...extraNodes],
+    edges: [...MAP.edges, ...extraEdges],
+  });
+
+  it('hides a quiet project whose only relation is its own dependency on an active one', () => {
+    const map = withQuiet(
+      [node('d4-build-agent', { status: 'dormant' })],
+      [{ from: 'd4-build-agent', to: 'home-ops', kind: 'depends_on' }],
+    );
+    expect(visibleIds(map, false).has('d4-build-agent')).toBe(false);
+    expect(visibleIds(map, true).has('d4-build-agent')).toBe(true);
+  });
+
+  it('hides a quiet project that only feeds an active one', () => {
+    const map = withQuiet(
+      [node('rhcsa-lab', { status: 'dormant', verdict: 'archiwum' })],
+      [{ from: 'rhcsa-lab', to: 'home-ops', kind: 'feeds' }],
+    );
+    expect(visibleIds(map, false).has('rhcsa-lab')).toBe(false);
+  });
+
+  it('hides an external service tied only to a hidden quiet project', () => {
+    const map = withQuiet(
+      [
+        node('szczerze-mowiac', { verdict: 'pomysł' }),
+        node('comfyui', { kind: 'external', status: null, verdict: null }),
+      ],
+      [{ from: 'szczerze-mowiac', to: 'comfyui', kind: 'depends_on' }],
+    );
+    const ids = visibleIds(map, false);
+    expect(ids.has('szczerze-mowiac')).toBe(false);
+    expect(ids.has('comfyui')).toBe(false);
+    expect(visibleIds(map, true).has('comfyui')).toBe(true);
+  });
 });
 
 describe('specs', () => {
@@ -101,6 +138,19 @@ describe('impact and relations', () => {
       fedBy: [],
       neededBy: ['natalia-cv'],
     });
+  });
+});
+
+describe('structure key', () => {
+  it('stays equal when only pressure changes, differs when the shape does', () => {
+    const calm = ecosystemSpec(MAP, false);
+    const loud = ecosystemSpec(
+      { ...MAP, nodes: MAP.nodes.map((n) => (n.id === 'strummy' ? { ...n, pressure: 9, health: 'bad' } : n)) },
+      false,
+    );
+    expect(loud).not.toEqual(calm);
+    expect(structureKeyOf(loud)).toBe(structureKeyOf(calm));
+    expect(structureKeyOf(ecosystemSpec(MAP, true))).not.toBe(structureKeyOf(calm));
   });
 });
 

@@ -3,8 +3,10 @@
 //               depends_on + feeds edges (UML-component-like)
 //   infra     — projects inside their primary host, depends_on edges
 //               (UML-deployment-like)
-// Quiet projects (dormant / archived / idea) are hidden unless a relation
-// still ties them to the rest — job-radar's dependency on olx-scraper stays.
+// Quiet projects (dormant / archived / idea) are hidden unless an active
+// project depends on them or uses them (depends_on / feeds) — job-radar's
+// dependency on olx-scraper stays, a dormant project's own outgoing relations
+// don't keep it. External services show only when tied to a visible project.
 
 import type { MapEdge, MapNode, MapResponse } from './api';
 
@@ -42,14 +44,22 @@ export const isQuiet = (n: MapNode): boolean =>
 const relations = (map: MapResponse): MapEdge[] => map.edges.filter((e) => e.kind !== 'runs_on');
 
 export function visibleIds(map: MapResponse, showQuiet: boolean): Set<string> {
-  const connected = new Set(relations(map).flatMap((e) => [e.from, e.to]));
+  const rels = relations(map);
+  const byId = new Map(map.nodes.map((n) => [n.id, n]));
+  const isActiveProject = (id: string) => {
+    const n = byId.get(id);
+    return n?.kind === 'project' && !isQuiet(n);
+  };
+  const needed = new Set(rels.filter((e) => isActiveProject(e.from)).map((e) => e.to));
   const ids = new Set<string>();
   for (const n of map.nodes) {
-    if (n.kind === 'host') continue;
-    if (n.kind === 'external' && !connected.has(n.id)) continue;
-    if (n.kind === 'project' && !showQuiet && isQuiet(n) && !connected.has(n.id)) continue;
-    ids.add(n.id);
+    if (n.kind !== 'project') continue;
+    if (showQuiet || !isQuiet(n) || needed.has(n.id)) ids.add(n.id);
   }
+  const tiedToVisible = new Set(
+    rels.flatMap((e) => [ids.has(e.from) ? e.to : null, ids.has(e.to) ? e.from : null]).filter((id) => id !== null),
+  );
+  for (const n of map.nodes) if (n.kind === 'external' && tiedToVisible.has(n.id)) ids.add(n.id);
   return ids;
 }
 
