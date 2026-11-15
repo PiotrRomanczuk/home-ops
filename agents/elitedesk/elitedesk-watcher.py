@@ -13,6 +13,7 @@ Runs as a systemd --user service. Configurable via env:
 """
 from __future__ import annotations
 
+import json
 import os
 import queue
 import subprocess

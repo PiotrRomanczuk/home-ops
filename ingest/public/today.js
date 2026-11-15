@@ -90,6 +90,6 @@ VIEWS.today = (st, main) => {
     h('div', { class: 'td-grid' },
       h('div', { class: 'td-col' }, window.tdBrief(m.brief)),
       h('div', { class: 'td-col' },
-        window.tdApprovals(m.brief), window.tdQueue(m.queue), tdTasks(m.tasks || []), tdProblems(m.problems || [], m.hosts || [], m.muted_problems || 0),
+        window.tdServer(), window.tdApprovals(m.brief), window.tdQueue(m.queue), tdTasks(m.tasks || []), tdProblems(m.problems || [], m.hosts || [], m.muted_problems || 0),
         tdCards(m.cards || [])))));
 };

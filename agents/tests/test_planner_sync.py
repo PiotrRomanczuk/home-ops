@@ -284,42 +284,45 @@ class BoardRenderTests(unittest.TestCase):
 
 
 class TestProjectFiles(unittest.TestCase):
-    """Discovery must follow the vault layout: projects/*.md plus one group
-    folder deep, excluding dated snapshot notes and deeper working docs."""
+    """Discovery must follow the vault layout: PARA folders (and the legacy
+    projects/ tree), notes with a `status:` key, excluding dated snapshots."""
 
     def setUp(self):
         self.mod = _load_planner_sync()
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
-        for rel in (
-            'rhcsa-lab.md',
-            'Private/home-ops.md',
-            'Private/job-search.md',
-            'Private/2026-07-02-strummy-eval-week.md',  # dated note — skip
-            'Marszal/stano.md',
-            'Strummy/Strummy.md',
-            'Strummy/design-preview/song-detail.md',  # too deep — skip
-            'Private/notes.txt',  # not markdown — skip
+        project = '---\nstatus: hot\n---\n# x\n'
+        for rel, body in (
+            ('1-Projekty/Strummy/Strummy.md', project),
+            ('1-Projekty/Strummy/eval/2026-07-05-strummy-eval-week.md', project),  # dated — skip
+            ('1-Projekty/sztutowo/negocjacje.md', '---\ncreated: 2026-10-25\n---\n# n\n'),  # no status — skip
+            ('2-Obszary/homelab/home-ops.md', project),
+            ('2-Obszary/mapy/STORAGE.md', '# no frontmatter\n'),  # skip
+            ('3-Zasoby/pomysly/coupon-ocr.md', project),
+            ('3-Zasoby/analysis/report.md', project),  # not a project dir — skip
+            ('4-Archiwum/stano.md', project),
+            ('projects/rhcsa-lab.md', project),  # legacy layout still read
+            ('1-Projekty/notes.txt', project),  # not markdown — skip
         ):
             p = self.root / rel
             p.parent.mkdir(parents=True, exist_ok=True)
-            p.write_text('---\nstatus: hot\n---\n# x\n', encoding='utf-8')
+            p.write_text(body, encoding='utf-8')
 
     def tearDown(self):
         self.tmp.cleanup()
 
-    def test_discovers_top_level_and_group_folders_only(self):
+    def test_discovers_project_notes_in_para_and_legacy_dirs(self):
         names = [p.stem for p in self.mod._project_files(self.root)]
         self.assertEqual(
             sorted(names),
-            ['Strummy', 'home-ops', 'job-search', 'rhcsa-lab', 'stano'],
+            ['Strummy', 'coupon-ocr', 'home-ops', 'rhcsa-lab', 'stano'],
         )
 
-    def test_find_project_file_matches_slug_in_group_folder(self):
+    def test_find_project_file_matches_slug_in_nested_folder(self):
         p = self.mod._find_project_file(self.root, 'home-ops')
         assert p is not None
-        self.assertEqual(p, self.root / 'Private' / 'home-ops.md')
-        self.assertIsNone(self.mod._find_project_file(self.root, 'song-detail'))
+        self.assertEqual(p, self.root / '2-Obszary' / 'homelab' / 'home-ops.md')
+        self.assertIsNone(self.mod._find_project_file(self.root, 'negocjacje'))
 
 
 class TestLoadState(unittest.TestCase):

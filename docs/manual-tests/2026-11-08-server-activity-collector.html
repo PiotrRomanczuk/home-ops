@@ -1,0 +1,76 @@
+<!doctype html><html lang="pl"><head><meta charset="utf-8"><title>Manual test: co robi serwer — zbieranie</title>
+<style>body{margin:0;background:#f5f5f7;color:#1d1d1f;font:15px/1.55 -apple-system,Helvetica,Arial,sans-serif;padding:32px 16px}main{max-width:860px;margin:0 auto}h1{font-size:28px;margin:0 0 4px}h2{font-size:20px;margin:32px 0 10px}.meta{color:#6e6e73;font-size:13px}code,pre{font:13px ui-monospace,Menlo,monospace;background:#fff;padding:1px 5px;border-radius:5px}pre{padding:12px;overflow-x:auto;border:1px solid #e5e5ea}table{border-collapse:collapse;width:100%;background:#fff}td,th{text-align:left;padding:8px 10px;border-bottom:1px solid #eee;font-size:14px;vertical-align:top}.ok{color:#248a3d;font-weight:600}.warn{color:#b25000;font-weight:600}</style></head><body><main>
+<h1>Co robi serwer — część 1: zbieranie danych</h1>
+<p class="meta">Data: 2026-11-08 · Gałąź: <code>feat/server-activity</code> · Bez UI (zakładka „Serwer” to następny PR), więc bez zrzutów ekranu.</p>
+
+<h2>Po co</h2>
+<p>uwh odpala 32 timery <code>systemctl --user</code> i dwa runnery GitHub Actions, ale żadne z tych uruchomień nie trafiało do home-ops. Hałas o 19:20 (Strummy „Nightly E2E”: Playwright z nagrywaniem wideo, load 17 na 8 rdzeniach) nie był nigdzie widoczny. Ten PR zbiera dane, a zakładka je pokaże.</p>
+
+<h2>Co zostało zrobione</h2>
+<ul>
+<li><b>Nowy agent <code>activity-watcher</code></b> (systemd --user na elitedesk, ten sam plik env co elitedesk-watcher):
+  <ul>
+  <li>co 30 s czyta journal <code>--user</code> od zapisanego kursora; przy pierwszym starcie robi backfill 7 dni;</li>
+  <li>z komunikatów systemd (start, koniec, porażka, „Consumed … CPU”) składa jedno uruchomienie na <code>INVOCATION_ID</code>, z kodem wyjścia, CPU, pamięcią i ostatnimi 30 liniami logu;</li>
+  <li>śledzi tylko unity z <code>~/.config/systemd/user</code>, bez szumu sesji pulpitu;</li>
+  <li>projekt przypisuje według wzorców nazw (<code>seo-*</code> → gitara-lekcje itd.), a w razie braku według <code>WorkingDirectory=~/code/&lt;repo&gt;</code>;</li>
+  <li><b>pętla restartów to jeden wiersz</b>: kolejne porażki tego samego unitu w ciągu 10 min podbijają <code>repeat_count</code>;</li>
+  <li><b>logi krótkich procesów</b>: journald gubi unit procesu, który kończy się w &lt; 1 s. Taka linia trafia do jedynego oneshota trwającego w tej chwili, a gdy trwają dwa, jest pomijana, bo żaden log jest lepszy niż cudzy.</li>
+  </ul></li>
+<li><b>Joby GitHub Actions</b>: co 2 min przez <code>gh api</code> (gh na uwh jest już zalogowany, nowy token nie jest potrzebny). Repo wykrywane są z <code>~/actions-runner/*/.runner</code>. Zostają tylko joby z runnerów <code>uwh-*</code>; każdy ma link do GitHuba.</li>
+<li><b>Migawka „teraz”</b>, co 30 s:
+  <ul>
+  <li>CPU zgrupowane per właściciel z <code>/proc/&lt;pid&gt;/cgroup</code> (runner, kontener, unit), czyli Playwright = „github-runner-strummy”, a nie 40 procesów chrome;</li>
+  <li>trwające oneshoty, zajętość runnerów, 5 najbliższych timerów.</li>
+  </ul></li>
+<li><b>Migracja 026</b>:
+  <ul>
+  <li><code>unit_runs</code>: upsert po <code>(host, invocation_id)</code>; późniejszy POST nie kasuje tego, co wiedział wcześniejszy;</li>
+  <li><code>activity_now</code>: 1 wiersz na hosta;</li>
+  <li>pg_cron czyści runy starsze niż 90 dni.</li>
+  </ul></li>
+<li><b>API</b>:
+  <ul>
+  <li><code>POST /api/activity/runs</code> i <code>/now</code> (token);</li>
+  <li><code>GET /api/activity/now</code>: migawki + podsumowanie 24 h (runy, porażki, które unity padają);</li>
+  <li><code>GET /api/activity/runs?since_h&amp;project&amp;unit&amp;result&amp;kind</code>;</li>
+  <li><code>GET /api/activity/runs/:id</code>: z logiem.</li>
+  </ul></li>
+<li><b>Poprawka</b>: <code>elitedesk-watcher.py</code> nie miał <code>import json</code> (od d3a272b), więc wątki journald padały na pierwszej linii. Nowy test <code>test_agent_imports.py</code> sprawdza to dla wszystkich agentów.</li>
+</ul>
+
+<h2>Sprawdzone na prawdziwym journalu uwh (24 h, tylko odczyt)</h2>
+<table>
+<tr><th>Co</th><th>Wynik</th></tr>
+<tr><td>rekordy journala → uruchomienia</td><td>23 540 → 648 runów; każdy ma projekt</td></tr>
+<tr><td><code>stano-backfill</code></td><td class="warn">1 wiersz, <b>×3794</b> porażek, 3058 s CPU na dobę (stano w archiwum, unit do wyłączenia)</td></tr>
+<tr><td><code>szczerze-mowiac-replies</code></td><td class="warn">34 porażki / 48 runów, bo „Ollama niedostępna (No route to host)” (wfh wyłączony)</td></tr>
+<tr><td>logi w runach</td><td>np. <code>pr-decide: 28 open PRs · acted on 0 · asked 0</code>, <code>digest sent … via smtp.gmail.com:587</code></td></tr>
+<tr><td>GitHub Actions</td><td>10 jobów w 5 s, np. <code>Nightly E2E / Desktop Chrome ok · uwh-e2e · main · schedule</code></td></tr>
+<tr><td>migawka</td><td>2 runnery wykryte, 5 najbliższych timerów, właściciele CPU (containerd, docker)</td></tr>
+<tr><td>SQL migracji i upsertu</td><td>na Postgresie home-ops w <code>BEGIN … ROLLBACK</code>: <code>jsonb_to_recordset</code> poprawnie wypełnia <code>text[]</code></td></tr>
+</table>
+
+<h2>Bramki</h2>
+<pre>cd ingest &amp;&amp; npm run check            # tsc + biome
+cd ingest &amp;&amp; npm test -- --run          # activity-model (12 testów); activity.test.ts idzie w CI na Postgresie
+python3 -m unittest discover -s agents/tests -p 'test_*.py'      # 77 OK
+python3 -m unittest discover -s ops/elitedesk/tests -p 'test_*.py'   # 71 OK</pre>
+
+<h2>Jak przetestować ręcznie (po merge'u)</h2>
+<ol>
+<li>Na uwh:
+<pre>cd ~/code/logs-stack &amp;&amp; git pull
+scripts/apply-migrations.sh
+docker compose up -d --build ingest
+# z Maca:
+scripts/deploy-agent.sh elitedesk activity-watcher
+scripts/deploy-agent.sh elitedesk elitedesk-watcher   # poprawka import json</pre></li>
+<li><code>systemctl --user status activity-watcher</code> pokazuje active; w logu jest „activity-watcher up: … cursor=backfill -7d”.</li>
+<li><code>curl -s http://192.168.1.75:64421/api/activity/now -H "X-Ingest-Token: …" | jq .summary_24h</code>: runy &gt; 0, a w <code>failing_units</code> stano-backfill i szczerze-mowiac-replies.</li>
+<li>Po najbliższym kwadransie <code>/api/activity/runs?unit=lesson-notes-social.service</code> ma nowy run z <code>result: ok</code>.</li>
+<li>Gdy biegnie Nightly E2E (~08:17, 15:19, 19:20), <code>snapshot.runners[].busy = true</code>, a w <code>owners</code> na górze jest <code>github-runner-strummy</code>.</li>
+<li>Restart agenta (<code>systemctl --user restart activity-watcher</code>) nie robi duplikatów, bo czyta od kursora <code>~/.local/state/home-ops/activity.cursor</code>.</li>
+</ol>
+<p><b>Przypadki brzegowe:</b> dwa timery startujące w tej samej sekundzie (np. :30 lesson-notes-social + social-hub-cron) mają logi bez metadanych; trafiają one tylko tam, gdzie da się je jednoznacznie przypisać. Prywatność: logi zostają w bazie home-ops w LAN; repo zawiera tylko kod.</p>
+</main></body></html>
