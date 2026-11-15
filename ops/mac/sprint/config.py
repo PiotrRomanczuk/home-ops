@@ -15,7 +15,7 @@ from typing import Any
 DEFAULTS: dict[str, dict[str, Any]] = {
     'claude': {'windows': ['mon-fri 08:30-16:00', 'daily 00:00-07:00'], 'workers': 3,
                'weekly_cap': 80, 'pace_head_start': 10, 'session_cap': 90, 'fable_weekly_cap': 80,
-               'planner_every_h': 3, 'summary_at': '06:30'},
+               'planner_every_h': 3, 'summary_at': '05:30'},
     'local': {'max_tasks_per_day': 8, 'idle_min': 10, 'base_url': 'http://127.0.0.1:11434'},
 }
 DAYS = ('mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun')

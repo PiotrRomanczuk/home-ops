@@ -7,7 +7,7 @@
     "session_cap": 90,
     "fable_weekly_cap": 80,
     "planner_every_h": 3,
-    "summary_at": "06:30"
+    "summary_at": "05:30"
   },
   "local": {
     "max_tasks_per_day": 8,
