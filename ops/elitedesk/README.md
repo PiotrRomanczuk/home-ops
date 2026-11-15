@@ -13,7 +13,7 @@ stack. They're version-controlled here; installed by symlinking into
 | --- | --- | --- |
 | `gmail_cleanup.py` (+ `gmail_*.py`) | Personal Gmail cleanup CLI: IMAP inventory → SQLite, rule-based categorisation of every message, add-only labelling with undo journal. Token/client in `~/.config/home-ops/gmail-*.json`, state in `~/.local/state/home-ops/gmail/` | `python3 gmail_cleanup.py -h` |
 | `gmail_db.py` + `gmail_import.py` | Schema `gmail` (migration 025): headers, rules as rows, applied-ops log, current category per message. `gmail_import.py rules FILE` seeds the rules once (refuses a non-empty `gmail.rule` without `--force`); `all` backfills messages + journals + state (never rules) | see "Gmail routine" below |
-| `gmail-daily.py` / `.service` / `.timer` | 06:40 — inventory new mail over IMAP, classify with `gmail.rules_json()`, reconcile category labels (never trashes), rewrite `gmail.message_state`, one digest card | `systemctl --user link` / `enable --now` |
+| `gmail-daily.py` / `.service` / `.timer` | 06:40 — full mirror of All Mail over IMAP (`SEARCH ALL` + all headers, not only new mail), classify with `gmail.rules_json()`, reconcile category labels (never trashes; refuses on empty rules / more than 5000 changes, labels of disabled rules stay managed), rewrite `gmail.message_state`, one digest card | `systemctl --user link` / `enable --now` |
 | `gmail-daily.env.example` | Template for `gmail-daily.env` (ingest token, `GMAIL_RULES=db`) | copy, `chmod 600` |
 | `pg-backup.sh` | Nightly `pg_dump -Fc` of `home_ops` → NAS over scp (`/share/MD0_DATA/Backups/home-ops/`) | `chmod +x` |
 | `pg-backup.service` | Oneshot unit that runs `pg-backup.sh` | `systemctl --user link` |

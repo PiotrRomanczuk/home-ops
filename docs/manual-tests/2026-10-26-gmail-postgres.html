@@ -16,7 +16,7 @@ table{border-collapse:collapse;width:100%;font-size:14px}th,td{border-bottom:1px
 <li><b><code>gmail_db.py</code></b>: transport <code>docker exec psql</code> jak w <code>seo_db.py</code>; ładowanie masowe przez <code>COPY FROM STDIN</code> do tabeli tymczasowej + upsert. Czyste helpery (<code>message_row</code>, <code>journal_rows</code>, <code>copy_block</code>) mają testy.</li>
 <li><b><code>gmail_import.py</code></b>: jednorazowy backfill <code>messages | journals | rules | state | all</code> ze stanu z Maca.</li>
 <li><b><code>gmail_classify.rules_from_dict()</code></b>: jeden parser dla pliku JSON i dla <code>gmail.rules_json()</code>; <code>GMAIL_RULES=db</code> wybiera Postgres. Nowa flaga <code>automated_only</code> (reguła tematu tylko dla nadawców botowych) i szerszy regex nadawców automatycznych.</li>
-<li><b><code>gmail-daily.py</code> + unit/timer 06:40</b>: inwentarz nowych maili przez IMAP → klasyfikacja → reconcile etykiet kategorii (nigdy Kosz) → <code>message_state</code> → karta w digestcie.</li>
+<li><b><code>gmail-daily.py</code> + unit/timer 06:40</b>: pełne lustro All Mail przez IMAP (SEARCH ALL + nagłówki wszystkich maili, nie tylko nowych) → klasyfikacja → reconcile etykiet kategorii (nigdy Kosz) → <code>message_state</code> → karta w digestcie.</li>
 <li>README (sekcja „Gmail routine”), ADR, CI <code>py_compile</code> dla nowych plików, <code>.gitignore</code> dla <code>gmail-daily.env</code>.</li>
 </ul>
 

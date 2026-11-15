@@ -50,9 +50,14 @@ of home-ops.
    explicit, human-approved operations with their own journals.
 6. **Transport = `docker exec psql`**, like `seo_db.py`: COPY FROM STDIN into a
    temp table, then upsert. No driver on the host.
-7. **One routine on elitedesk**: `gmail-daily.timer` 06:40 → IMAP inventory of
-   new messages → classify → reconcile labels → rewrite state → one digest card
-   (`gmail-daily`). The OAuth client + token move to
+7. **One routine on elitedesk**: `gmail-daily.timer` 06:40 → IMAP mirror of
+   All Mail (a full mirror, not only new mail: `SEARCH ALL` + `FETCH` of every
+   header, ~107k messages, in chunks of 2000; it also tells which messages
+   still exist) → classify → reconcile labels → rewrite state → one digest card
+   (`gmail-daily`). The routine refuses to run (error card, exit 1) when the
+   rules or `me` in Postgres are empty, and when a run would add/remove more
+   than 5000 labels; labels of disabled rules stay managed, so a message never
+   carries two categories. The OAuth client + token move to
    `~/.config/home-ops/` on the host; the GCP consent screen must be *In
    production* (Testing-mode refresh tokens expire after 7 days).
 
