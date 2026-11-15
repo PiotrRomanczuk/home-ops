@@ -8,13 +8,20 @@
 -- pr-review findings (028), and hands out a short-lived token bound to that
 -- commit; the answer is accepted only with that token.
 --
--- Routines (ingest-token callers) may still answer through the API — that is
--- how pr-decide retires a question about an older commit.
+-- Routines (ingest-token callers) may still answer through the API with
+-- 'later' or a refusal — that is how pr-decide retires a question about an
+-- older commit — but never with an option that merges.
+--
+-- Questions pr-decide opened before this migration (up to 7 days old) get the
+-- gate too: no card button merges them after the deploy.
 --
 -- Idempotent: safe to re-run.
 
 ALTER TABLE public.decisions ADD COLUMN IF NOT EXISTS requires_review boolean NOT NULL DEFAULT false;
 ALTER TABLE public.decisions ADD COLUMN IF NOT EXISTS reviewed_at timestamptz; -- review page first opened
+
+UPDATE public.decisions SET requires_review = true
+ WHERE routine = 'pr-decide' AND answer IS NULL AND NOT requires_review;
 
 ALTER TABLE public.decisions DROP CONSTRAINT IF EXISTS decisions_answered_via_check;
 ALTER TABLE public.decisions ADD CONSTRAINT decisions_answered_via_check

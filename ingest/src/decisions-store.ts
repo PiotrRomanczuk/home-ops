@@ -85,14 +85,28 @@ export type AnswerResult =
 
 export const REVIEW_REQUIRED_ERROR = 'open the review page to answer this decision';
 
+// An answer that rejects instead of accepting; it needs a reason on the review page.
+export const NO_RE = /^(no|reject|skip|decline)$/i;
+
+// Routines whose question merges code: always answered from the review page,
+// whatever flag the caller sent (an old pr_decide.py must not skip the gate).
+export const REVIEW_ROUTINES = new Set(['pr-decide']);
+
+// Options an ingest-token caller may give a review-required decision: it can
+// retire the question ('later', how pr-decide supersedes) or refuse it, never
+// accept. Accepting is a person's act on the review page.
+export const isNonMergingOption = (option: string): boolean => option === 'later' || NO_RE.test(option);
+
 // Records an answer exactly once. A second tap on an already-answered link
 // is a 409 with the existing row, so the confirmation page can say "already
 // answered: yes at 07:12" instead of silently overwriting.
 //
-// A decision that requires review is answered by a person only from its
+// A decision that requires review is accepted by a person only from its
 // review page (via 'review', after the route checked the page's token). The
-// console buttons and email links are refused; routines ('api', ingest
-// token) still may answer, which is how pr-decide retires a stale question.
+// console buttons and email links are refused, and so is any ingest-token
+// caller ('api') answering with an option that merges (yes/force/fix): the
+// token is held by every agent, including the session that wrote the PR. It
+// may still say 'later' or refuse, which is how pr-decide retires a question.
 export async function answerDecision(
   id: number,
   option: string,
@@ -101,7 +115,8 @@ export async function answerDecision(
 ): Promise<AnswerResult> {
   const cur = await getDecision(id);
   if (!cur) return { ok: false, code: 404, error: 'not found' };
-  if (cur.requires_review && (via === 'console' || via === 'link')) {
+  const mayNotAccept = via === 'console' || via === 'link' || (via === 'api' && !isNonMergingOption(option));
+  if (cur.requires_review && mayNotAccept) {
     return { ok: false, code: 403, error: REVIEW_REQUIRED_ERROR, decision: cur };
   }
   if (!normalizeOptions(cur.options).some((o) => o.key === option)) {

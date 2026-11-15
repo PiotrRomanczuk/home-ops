@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { pool } from './db.ts';
 
 // Reads and writes for the review page (migration 033): the documentation
@@ -21,6 +22,7 @@ export interface ReviewSection {
   body_md: string | null;
   url: string | null;
   source: string;
+  created_at?: string; // set on rows read back; refreshed by every re-filing of the key
 }
 
 export interface PrReviewRow {
@@ -42,12 +44,20 @@ export function parseRef(ref: string | null): PrRef | null {
 
 export async function getSections(pr: PrRef): Promise<ReviewSection[]> {
   const r = await pool.query(
-    `SELECT key, title, position, body_md, url, source FROM public.review_sections
+    `SELECT key, title, position, body_md, url, source, created_at::text AS created_at FROM public.review_sections
       WHERE repo = $1 AND number = $2 AND head_sha = $3
       ORDER BY position, created_at`,
     [pr.repo, pr.number, pr.sha],
   );
   return r.rows as ReviewSection[];
+}
+
+// Identifies what the page displayed: the token is bound to it, so a section
+// re-filed under the same key after the page loaded (CI turning from pending
+// to failure) invalidates the page just as a new key does.
+export function sectionsVersion(sections: ReviewSection[]): string {
+  const stamp = sections.map((s) => `${s.key}@${s.created_at ?? ''}`).join('|');
+  return createHash('sha256').update(stamp).digest('base64url').slice(0, 16);
 }
 
 export async function getPrReview(pr: PrRef): Promise<PrReviewRow | null> {

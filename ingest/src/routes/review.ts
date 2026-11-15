@@ -1,7 +1,7 @@
 import type { Context, Hono } from 'hono';
 import { hasViewerAuth, tokenOnly } from '../auth.ts';
 import { errorPage, resultPage } from '../decision-pages.ts';
-import { answerDecision, type DecisionRow, getDecision } from '../decisions-store.ts';
+import { answerDecision, type DecisionRow, getDecision, NO_RE } from '../decisions-store.ts';
 import { env } from '../env.ts';
 import { requiredKeys, reviewPage } from '../review-page.ts';
 import {
@@ -12,6 +12,7 @@ import {
   type PrRef,
   parseRef,
   SECTION_KEY_RE,
+  sectionsVersion,
   upsertSection,
 } from '../review-store.ts';
 import { checkReviewToken, issueReviewToken } from '../review-token.ts';
@@ -22,14 +23,13 @@ import { checkReviewToken, issueReviewToken } from '../review-token.ts';
 //   GET  /review/:id            the page: decision, pr-review verdict, every filed section
 //   POST /review/:id            the answer — only with the page's token and every section opened
 
-const NO_RE = /^(no|reject|skip|decline)$/i;
 const MAX_SECTIONS = 20;
 
 const isViewer = (c: Context) => env.AUTH_PUBLIC || hasViewerAuth(c);
 
 async function render(c: Context, d: DecisionRow, pr: PrRef, error?: string, status: 200 | 400 | 409 = 200) {
   const [sections, review] = await Promise.all([getSections(pr), getPrReview(pr)]);
-  const token = issueReviewToken(env.DECISION_SECRET, Number(d.id), pr.sha);
+  const token = issueReviewToken(env.DECISION_SECRET, Number(d.id), pr.sha, sectionsVersion(sections));
   return c.html(reviewPage({ d, pr, sections, review, token, error }), status);
 }
 
@@ -88,11 +88,16 @@ export function registerReviewRoutes(app: Hono): void {
     const option = field('option');
     const reason = field('reason').slice(0, 200) || null;
 
-    const tok = checkReviewToken(env.DECISION_SECRET, field('token'), Number(d.id), pr.sha);
-    if (!tok.ok)
-      return render(c, d, pr, 'Strona wygasła albo nie pasuje do tego commitu — przejrzyj ją jeszcze raz.', 409);
+    // One read serves the token's version and the opened-keys check, so a
+    // section re-filed meanwhile cannot slip between them.
+    const sections = await getSections(pr);
+    const tok = checkReviewToken(env.DECISION_SECRET, field('token'), Number(d.id), pr.sha, sectionsVersion(sections));
+    if (!tok.ok) {
+      const msg = 'Strona wygasła albo nie pasuje do tego commitu lub jego dokumentacji (sekcje się zmieniły)';
+      return render(c, d, pr, `${msg} — przejrzyj ją jeszcze raz.`, 409);
+    }
     const opened = new Set(field('opened').split(',').filter(Boolean));
-    const missing = requiredKeys(await getSections(pr)).filter((k) => !opened.has(k));
+    const missing = requiredKeys(sections).filter((k) => !opened.has(k));
     if (missing.length) return render(c, d, pr, `Nierozwinięte sekcje: ${missing.join(', ')}.`, 409);
     if (NO_RE.test(option) && !reason) return render(c, d, pr, 'Przy odrzuceniu podaj powód.', 400);
 

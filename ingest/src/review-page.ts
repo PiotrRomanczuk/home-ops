@@ -1,4 +1,4 @@
-import { type DecisionRow, normalizeOptions } from './decisions-store.ts';
+import { type DecisionRow, NO_RE, normalizeOptions } from './decisions-store.ts';
 import { REVIEW_CSS, REVIEW_JS } from './review-page-assets.ts';
 import type { PrRef, PrReviewRow, ReviewSection } from './review-store.ts';
 
@@ -7,7 +7,6 @@ import type { PrRef, PrReviewRow, ReviewSection } from './review-store.ts';
 // the pr-review verdict for this exact commit is always the first section.
 
 export const PR_REVIEW_KEY = 'pr-review';
-const NO_RE = /^(no|reject|skip|decline)$/i;
 
 export interface ReviewPageModel {
   d: DecisionRow;
