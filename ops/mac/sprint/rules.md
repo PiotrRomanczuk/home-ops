@@ -19,6 +19,11 @@ Pracujesz sam, bez człowieka: Piotr czyta wyniki wieczorem i nie odpowie w trak
 - Zmiany w `~/.claude/`, w hookach, w ustawieniach uprawnień, w `config.json`, w plikach runnera i nadzorcy GPU (`~/bin/home-ops/`, `/usr/local/*/mac-worker/`, `~/Library/LaunchAgents/`) i w plikach stanu innych niż Twój wynik oraz nowe zadania w `queue/` (tylko planista).
 - Uruchamianie długich obliczeń (przebiegi wsadowe, modele lokalne po wielu plikach): to robi nadzorca GPU z listy Piotra. Opisz propozycję w wyniku.
 
+## Modele lokalne (tylko zadanie `kind: model-scout`)
+- `ollama pull <model>` wolno tylko gdy: model jest z oficjalnej biblioteki `ollama.com/library`, ma do 30 GB, po pobraniu zostanie co najmniej 300 GB wolnego dysku (`df -g ~`), a modele zainstalowane przez mac-workera zajmują łącznie do 120 GB. Jedno pobieranie naraz. Każdy zainstalowany model dopisz do `results/local-models.md` w sekcji „Zainstalowane przez mac-workera” (nazwa, rozmiar, data).
+- `ollama rm` wolno tylko dla modelu z tej sekcji, który w `results/local-models.md` jest gorszy od innego modelu w każdym rodzaju zadań. Modeli, których nie ma w tej sekcji, nie usuwasz; propozycję wpisz pod „Czeka na Piotra”.
+- Wspólne pliki `results/bench-suite.md` i `results/local-models.md` mogą zmieniać tylko zadania `bench-suite`, `bench-eval-*` i `model-scout`.
+
 ## Jak pracować
 - Zadanie ma się zmieścić w jednej sesji. Gdy jest za duże, zrób sensowną część i opisz resztę w wyniku jako propozycję kolejnych zadań.
 - Gdy potrzebna jest decyzja Piotra, nie zgaduj i nie czekaj: wpisz ją do wyniku w sekcji „Czeka na Piotra” i zakończ albo zrób to, co od tej decyzji nie zależy.
