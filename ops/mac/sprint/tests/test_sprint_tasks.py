@@ -56,6 +56,27 @@ class QueueTest(unittest.TestCase):
         self.assertEqual(q.ids(self.state, 'failed'), {'x'})
         self.assertIsNone(q.claim(self.state))
 
+    def test_accept_skips_tasks_that_may_not_start_now(self):
+        add(self.state, 'claude', priority=10)
+        add(self.state, 'local', priority=20, model='local:qwen3.8:27b')
+        t = q.claim(self.state, accept=lambda task: str(task['model']).startswith('local:'))
+        self.assertEqual(t['id'], 'local')
+        self.assertIsNone(q.claim(self.state, accept=lambda task: False))
+        self.assertEqual(q.ids(self.state, 'queue'), {'claude'})
+
+    def test_local_model_escalates_to_sonnet(self):
+        add(self.state, 'l', model='local:gemma4:26b')
+        q.finish(self.state, q.claim(self.state), 'retry')
+        self.assertEqual(q.parse(self.state / 'queue' / 'l.md')['model'], 'sonnet')
+
+    def test_task_after_a_failed_one_fails_too(self):
+        add(self.state, 'base')
+        add(self.state, 'next', after='base')
+        add(self.state, 'other', priority=90)
+        q.finish(self.state, q.claim(self.state), 'failed')
+        self.assertEqual(q.claim(self.state)['id'], 'other')
+        self.assertEqual(q.ids(self.state, 'failed'), {'base', 'next'})
+
     def test_requeue_keeps_attempts_and_setup_recovers_running(self):
         add(self.state, 'y')
         t = q.claim(self.state)

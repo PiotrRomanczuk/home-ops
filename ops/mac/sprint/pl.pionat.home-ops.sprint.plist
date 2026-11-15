@@ -1,35 +1,24 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<!-- home-ops: Claude sprint runner (ops/mac/sprint/runner.py) under caffeinate, so the Mac stays awake.
-     __HOME__ is replaced on install. Stop: touch ~/.local/state/home-ops/sprint/STOP, then launchctl bootout. -->
+<!-- Mac worker: Claude agents (runner.py). No caffeinate: on AC the Mac stays awake by `pmset -c sleep 0`,
+     on battery it may sleep. Installed by install.sh (__HOME__ is replaced). -->
 <plist version="1.0">
 <dict>
-  <key>Label</key>
-  <string>pl.pionat.home-ops.sprint</string>
+  <key>Label</key><string>pl.pionat.home-ops.sprint</string>
   <key>ProgramArguments</key>
   <array>
-    <string>/usr/bin/caffeinate</string>
-    <string>-ims</string>
     <string>/usr/bin/python3</string>
     <string>__HOME__/bin/home-ops/sprint/runner.py</string>
   </array>
   <key>EnvironmentVariables</key>
   <dict>
-    <key>PATH</key>
-    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:__HOME__/bin:__HOME__/.local/bin</string>
-    <key>HOME</key>
-    <string>__HOME__</string>
+    <key>HOME</key><string>__HOME__</string>
+    <key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:__HOME__/bin:__HOME__/.local/bin</string>
   </dict>
-  <key>RunAtLoad</key>
-  <true/>
-  <key>KeepAlive</key>
-  <dict>
-    <key>SuccessfulExit</key>
-    <false/>
-  </dict>
-  <key>StandardOutPath</key>
-  <string>__HOME__/Library/Logs/home-ops/sprint.log</string>
-  <key>StandardErrorPath</key>
-  <string>__HOME__/Library/Logs/home-ops/sprint.log</string>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>
+  <key>ExitTimeOut</key><integer>60</integer>
+  <key>StandardOutPath</key><string>__HOME__/Library/Logs/home-ops/sprint.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/Library/Logs/home-ops/sprint.log</string>
 </dict>
 </plist>

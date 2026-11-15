@@ -1,0 +1,20 @@
+[
+  {
+    "name": "s2l-strummy",
+    "argv": ["/opt/homebrew/bin/uv", "run", "--frozen", "--project", "~/code/produkty/song2logic/.claude/worktrees/gpu-runs",
+             "song2logic", "study", "~/.cache/song2logic/strummy/2026-11-13/chord-id.input.jsonl",
+             "--keep-audio-for", "~/.cache/song2logic/strummy/2026-11-13/chord-id.input.jsonl",
+             "--wait-for-logic", "--shard", "{shard}/{shards}"],
+    "cwd": "~/code/produkty/song2logic/.claude/worktrees/gpu-runs",
+    "shards": 2
+  },
+  {
+    "name": "bench-agent-song-normalization-gemma4-26b",
+    "argv": ["/opt/homebrew/bin/python3", "-I", "agent_bench.py", "--agent", "song-normalization", "--round", "mac-final",
+             "--retry-empty", "--models", "ollama:gemma4:26b", "--variants", "v1-prod-en,v4-pl,v4-en"],
+    "cwd": "~/Documents/nauczanie/guitar-lessons/llm-bench/agents",
+    "env": {"OLLAMA_BASE_URL": "http://127.0.0.1:11434"},
+    "shards": 1,
+    "unload_ollama": true
+  }
+]

@@ -78,7 +78,18 @@ jobs:
             ops/mac/sprint/runner.py \
             ops/mac/sprint/sprint_tasks.py \
             ops/mac/sprint/seed.py \
-            ops/mac/sprint/status.py
+            ops/mac/sprint/status.py \
+            ops/mac/sprint/status_panels.py \
+            ops/mac/sprint/budget.py \
+            ops/mac/sprint/config.py \
+            ops/mac/sprint/claude_run.py \
+            ops/mac/sprint/journal.py \
+            ops/mac/sprint/idea.py \
+            ops/mac/gpu/gpu_worker.py \
+            ops/mac/gpu/gpu_jobs.py \
+            ops/mac/gpu/gpu_report.py \
+            ops/mac/gpu/machine.py \
+            ops/mac/gpu/procs.py
 
   clients-node:
     name: clients/node (syntax)
@@ -152,6 +163,8 @@ jobs:
         run: python3 -m unittest discover -s ops/elitedesk/tests -p 'test_*.py' -v
       - name: unittest discover (ops/mac/sprint)
         run: python3 -m unittest discover -s ops/mac/sprint/tests -p 'test_*.py' -v
+      - name: unittest discover (ops/mac/gpu)
+        run: python3 -m unittest discover -s ops/mac/gpu/tests -p 'test_*.py' -v
 
   tests-state-machine:
     name: tests (state machine + decisions + briefs/today + queue vs real postgres)

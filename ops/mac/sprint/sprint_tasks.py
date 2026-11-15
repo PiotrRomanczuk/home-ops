@@ -1,10 +1,10 @@
-"""sprint_tasks.py — the sprint's task queue: one markdown file per task.
+"""sprint_tasks.py — the Mac worker's task queue: one markdown file per task.
 
     ---
     id: vault-lesson-notes
     project: lesson-notes
     cwd: ~/Obsidian/MainCV-Planner
-    model: sonnet            # haiku | sonnet | opus (fable only by escalation after Opus failed)
+    model: sonnet            # haiku | sonnet | opus | local:<ollama model> (fable only after Opus failed)
     effort: medium
     kind: vault              # free text, used in the report
     priority: 10             # lower runs first
@@ -16,15 +16,20 @@
     <prompt for the worker>
 
 A task moves queue/ → running/ → done/ | failed/ by rename, so a crashed
-runner leaves it visible in running/ (start() puts those back).
+runner leaves it visible in running/ (start() puts those back). A task whose
+`after` ended in failed/ goes to failed/ too instead of waiting forever.
 """
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 DIRS = ('queue', 'running', 'done', 'failed', 'results', 'logs')
-ESCALATE = {'haiku': 'sonnet', 'sonnet': 'opus', 'opus': 'fable'}
+ESCALATE = {'haiku': 'sonnet', 'sonnet': 'opus', 'opus': 'fable'}  # local:* → sonnet
+
+
+def stronger(model: str) -> str:
+    return 'sonnet' if model.startswith('local:') else ESCALATE.get(model, 'fable')
 
 
 def parse(path: Path) -> dict[str, Any]:
@@ -71,9 +76,20 @@ def eligible(state: Path) -> list[dict[str, Any]]:
     return sorted(ok, key=lambda t: (t['priority'], t['id']))
 
 
-def claim(state: Path) -> dict[str, Any] | None:
-    """Move the best eligible task to running/ (call under the runner's lock)."""
+def drop_blocked(state: Path) -> None:
+    """Fail queued tasks whose `after` task failed — they could never become eligible."""
+    failed = ids(state, 'failed')
+    for path in (state / 'queue').glob('*.md'):
+        if parse(path).get('after') in failed:
+            path.rename(state / 'failed' / path.name)
+
+
+def claim(state: Path, accept: Callable[[dict[str, Any]], bool] | None = None) -> dict[str, Any] | None:
+    """Move the best eligible task that `accept` lets start now to running/ (call under the runner's lock)."""
+    drop_blocked(state)
     for task in eligible(state):
+        if accept is not None and not accept(task):
+            continue
         target = state / 'running' / task['path'].name
         try:
             task['path'].rename(target)
@@ -91,7 +107,7 @@ def finish(state: Path, task: dict[str, Any], outcome: str) -> None:
         if task['attempts'] >= 2:
             outcome = 'failed'
         else:
-            task['model'] = ESCALATE.get(str(task.get('model')), 'fable')
+            task['model'] = stronger(str(task.get('model')))
     where = {'done': 'done', 'failed': 'failed'}.get(outcome, 'queue')
     write(state / where / task['path'].name, task)
     task['path'].unlink(missing_ok=True)

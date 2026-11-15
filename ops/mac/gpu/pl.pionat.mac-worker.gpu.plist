@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Mac worker GPU supervisor. Its code and job list are root-owned (install-gpu.sh, sudo); it runs as the
+     user. ExitTimeOut leaves time to stop the shards' process groups. Installed by ../sprint/install.sh. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>pl.pionat.mac-worker.gpu</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/python3</string>
+    <string>/usr/local/libexec/mac-worker/gpu_worker.py</string>
+    <string>/usr/local/etc/mac-worker/gpu-jobs.json</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>HOME</key><string>__HOME__</string>
+    <key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:__HOME__/.local/bin</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ExitTimeOut</key><integer>90</integer>
+  <key>StandardOutPath</key><string>__HOME__/Library/Logs/home-ops/mac-worker-gpu.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/Library/Logs/home-ops/mac-worker-gpu.log</string>
+</dict>
+</plist>

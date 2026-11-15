@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Mac worker status page (status.py) on http://127.0.0.1:8787. Installed by install.sh (__HOME__ is replaced). -->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>pl.pionat.home-ops.sprint-status</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/python3</string>
+    <string>__HOME__/bin/home-ops/sprint/status.py</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>HOME</key><string>__HOME__</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardOutPath</key><string>__HOME__/Library/Logs/home-ops/sprint-status.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/Library/Logs/home-ops/sprint-status.log</string>
+</dict>
+</plist>

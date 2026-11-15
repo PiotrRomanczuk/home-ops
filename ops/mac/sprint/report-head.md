@@ -1,8 +1,8 @@
-# Sprint Claude 14–16.11.2026
+# Mac worker: tydzień od {week}
 
-**Date**: 2026-11-14 · **Author**: runner (`home-ops/ops/mac/sprint/`) · **Scope**: autonomiczna praca Claude na bieżących projektach do 16.11 16:30. Plan: `~/.claude/plans/woolly-pondering-dongarra.md`. Stan: `~/.local/state/home-ops/sprint/`. Kopie sprzed startu: `~/Backups/sprint-2026-11-14/` + tag vaulta `sprint-start-2026-11-14`.
+**Date**: {week} · **Author**: runner (`home-ops/ops/mac/sprint/`) · **Scope**: praca w tle na Macu w tygodniu limitu Claude, który zaczął się {week}. Agenci Claude działają pn–pt 8:30–16:00 i co noc 0:00–7:00 i zużywają najwyżej 80% tygodniowego limitu, rozłożone na tydzień. Do tego lokalne LLM (Ollama) i nadzorca GPU (song2logic, llm-bench). Stan: `~/.local/state/home-ops/sprint/`, strona http://127.0.0.1:8787, notatka [[mac-praca-w-tle]].
 
-Zatrzymanie: `touch ~/.local/state/home-ops/sprint/STOP`.
+Zatrzymanie agentów: `touch ~/.local/state/home-ops/sprint/STOP`.
 
 ## Podsumowania
 
