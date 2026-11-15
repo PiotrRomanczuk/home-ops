@@ -1,0 +1,21 @@
+{
+  "type": "object",
+  "properties": {
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "index": {"type": "integer"},
+          "confirmed": {"type": "boolean"},
+          "severity": {"type": "string", "enum": ["bloker", "ważne", "drobne"]},
+          "reason": {"type": "string"}
+        },
+        "required": ["index", "confirmed", "severity", "reason"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["checks"],
+  "additionalProperties": false
+}

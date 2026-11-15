@@ -16,6 +16,8 @@ Env:
                    (e.g. file:///home/<user>/git/planner.git)
   PLANNER_DIR      local working clone, defaults to ~/planner-mirror
   SYNC_INTERVAL    seconds between syncs, default 60
+  PROJECT_DIRS     comma-separated vault folders holding project notes
+                   (default: projects,1-Projekty,2-Obszary,3-Zasoby/pomysly,4-Archiwum)
 """
 from __future__ import annotations
 
@@ -29,6 +31,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -37,6 +40,7 @@ sys.path.insert(0, str(_here))
 sys.path.insert(0, str(_here.parent))
 from _common import IngestClient, Shutdown  # noqa: E402
 from queue_md import parse_queue_md  # noqa: E402
+from task_ticks import TickTracker  # noqa: E402
 
 HOST_NAME = os.environ.get('HOST_NAME', 'elitedesk')
 PLANNER_REMOTE = os.environ.get('PLANNER_REMOTE', '')
@@ -55,6 +59,7 @@ BOARD_IMPORT_URL = INGEST_BASE + '/api/board/import'
 BOARD_SLUG = os.environ.get('BOARD_SLUG', 'home-ops')
 QUEUE_URL = INGEST_BASE + '/api/queue/sync'
 QUEUE_FILE = os.environ.get('QUEUE_FILE', 'QUEUE.md')
+SIGNALS_URL = INGEST_BASE + '/api/progress/signals'
 
 
 def post_log(level: str, message: str, data: dict[str, Any] | None = None) -> None:
@@ -193,17 +198,39 @@ def parse_project_file(path: Path) -> dict[str, Any] | None:
 _DATED_NOTE_RE = re.compile(r'^\d{4}-\d{2}-\d{2}-')
 
 
-def _project_files(projects_dir: Path) -> list[Path]:
-    """Project files live at projects/*.md and one folder deep
-    (projects/<group>/*.md — the vault groups them under Private/, Marszal/,
-    etc.). Anything deeper (e.g. Strummy/design-preview/*) is a working doc,
-    not a project."""
-    found = list(projects_dir.glob('*.md')) + list(projects_dir.glob('*/*.md'))
-    return sorted(p for p in found if not _DATED_NOTE_RE.match(p.name))
+# Folders scanned for project notes, relative to the vault root. The vault
+# uses PARA (1-Projekty / 2-Obszary / 4-Archiwum, ideas in 3-Zasoby/pomysly);
+# the legacy `projects/` tree is still read so either layout works.
+PROJECT_DIRS = [d.strip() for d in os.environ.get(
+    'PROJECT_DIRS', 'projects,1-Projekty,2-Obszary,3-Zasoby/pomysly,4-Archiwum',
+).split(',') if d.strip()]
 
 
-def _find_project_file(projects_dir: Path, slug: str) -> Path | None:
-    for p in _project_files(projects_dir):
+def _has_status(path: Path) -> bool:
+    """A project note carries `status:` in its frontmatter; working docs
+    (negotiation notes, reference pages) don't."""
+    try:
+        head = path.read_text(encoding='utf-8')[:2000]
+    except (OSError, UnicodeDecodeError):
+        return False
+    m = _FRONTMATTER_RE.match(head)
+    return bool(m) and 'status' in _parse_frontmatter(m.group(1))
+
+
+def _project_files(vault_root: Path) -> list[Path]:
+    """Project notes anywhere under PROJECT_DIRS, excluding dated snapshot
+    notes and anything without a `status:` frontmatter key."""
+    found: set[Path] = set()
+    for rel in PROJECT_DIRS:
+        base = vault_root / rel
+        if base.is_dir():
+            found.update(base.rglob('*.md'))
+    return sorted(p for p in found
+                  if not _DATED_NOTE_RE.match(p.name) and _has_status(p))
+
+
+def _find_project_file(vault_root: Path, slug: str) -> Path | None:
+    for p in _project_files(vault_root):
         if p.stem == slug:
             return p
     return None
@@ -260,9 +287,9 @@ def _apply_one_toggle(toggle: dict[str, Any]) -> tuple[str, str | None]:
     idx = int(toggle['idx'])
     done = bool(toggle['done'])
 
-    md_path = _find_project_file(PLANNER_DIR / 'projects', slug)
+    md_path = _find_project_file(PLANNER_DIR, slug)
     if md_path is None:
-        return 'failed', f'{slug}.md not found under projects/ in clone'
+        return 'failed', f'{slug}.md not found under {PROJECT_DIRS} in clone'
 
     # Pull first — keeps us aligned with any Obsidian edits that landed since
     # the last 60s sync tick.
@@ -529,7 +556,7 @@ def board_sync_once(slug: str) -> None:
       first tick with an empty board → seed the board from the vault.
     Loop-safe: after each write we store the managed-section hash, so our own
     commit is not seen as an external edit next tick."""
-    md_path = _find_project_file(PLANNER_DIR / 'projects', slug)
+    md_path = _find_project_file(PLANNER_DIR, slug)
     if md_path is None:
         return
     board = _board_get(slug)
@@ -622,15 +649,15 @@ def sync_once() -> None:
         except (OSError, ValueError, subprocess.SubprocessError) as e:
             post_log('error', f'board-sync raised for {slug}: {type(e).__name__}', {'err': str(e)[:500]})
 
-    projects_dir = PLANNER_DIR / 'projects'
-    if not projects_dir.is_dir():
-        post_log('error', f'projects/ not found in clone: {projects_dir}')
+    project_files = _project_files(PLANNER_DIR)
+    if not project_files:
+        post_log('error', f'no project notes under {PROJECT_DIRS} in clone: {PLANNER_DIR}')
         return
 
     records: list[dict[str, Any]] = []
     skipped: list[str] = []
     seen_slugs: dict[str, Path] = {}
-    for md in _project_files(projects_dir):
+    for md in project_files:
         rec = parse_project_file(md)
         if rec is None:
             skipped.append(md.name)
@@ -639,8 +666,8 @@ def sync_once() -> None:
         if slug in seen_slugs:
             post_log('warn', f'duplicate project slug "{slug}" — keeping {seen_slugs[slug].name}, ignoring {md.name}', {
                 'slug': slug,
-                'kept': str(seen_slugs[slug].relative_to(projects_dir)),
-                'ignored': str(md.relative_to(projects_dir)),
+                'kept': str(seen_slugs[slug].relative_to(PLANNER_DIR)),
+                'ignored': str(md.relative_to(PLANNER_DIR)),
             })
             skipped.append(md.name)
             continue
@@ -662,6 +689,26 @@ def sync_once() -> None:
         queue_sync_once()
     except (OSError, ValueError) as e:
         post_log('error', f'queue-sync raised: {type(e).__name__}', {'err': str(e)[:500]})
+
+    try:
+        ticks_sync_once(records)
+    except (OSError, ValueError) as e:
+        post_log('error', f'ticks-sync raised: {type(e).__name__}', {'err': str(e)[:500]})
+
+
+_ticks = TickTracker(Path(f'{PLANNER_DIR}.ticks.json'))
+
+
+def ticks_sync_once(records: list[dict[str, Any]]) -> None:
+    """Postęp tab: tasks ticked/added since the last snapshot → project_signals."""
+    rows, snap = _ticks.pending(records, date.today().isoformat())
+    if rows:
+        status, _ = ic.request(SIGNALS_URL, {'rows': rows}, timeout=15)
+        if status != 200:
+            post_log('warn', f'ticks POST failed: status={status}', {'rows': len(rows)})
+            return
+        post_log('info', 'vault ticks', {'rows': rows})
+    _ticks.commit(snap)
 
 
 def main() -> None:
