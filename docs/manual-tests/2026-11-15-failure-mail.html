@@ -1,0 +1,29 @@
+<!doctype html><html lang="pl"><meta charset="utf-8"><title>failure-mail — raport testu ręcznego</title>
+<body style="font-family:system-ui;max-width:900px;margin:2em auto"><h1>Maile o błędach unitów — poprawki po recenzji PR #66</h1><p><em>2026-11-15</em></p>
+<p>Co zrobiono: temat cięty po znakach, „ostatni udany” tylko z linii systemd (<code>--since "-60 days"</code>), fallback w formacie <code>cat</code> (osobny <code>RUNLOG_VIEW</code> z czasem do wyświetlenia), test bash w CI.</p>
+<p>Jak powtórzyć: <code>bash ops/elitedesk/tests/test_notify_failure.sh</code> (fałszywe <code>systemctl</code>/<code>journalctl</code>/<code>timeout</code> w <code>PATH</code> — na Macu nie ma systemd). Poniżej surowe wyjście <code>DRY_RUN=1</code> z tego testu; bez zrzutów ekranu (bez przeglądarki).</p>
+<h2>1. Unit z hintem i timerem</h2><p><code>DRY_RUN=1 bash ops/elitedesk/notify-failure.sh withtimer</code> — temat po znakach (UTF-8 poprawny), „Ostatni udany” tylko z linii <code>systemd[N]: Finished</code> (2026-11-12; wpisy programu „Finished 3/5 pages” pominięte), następny przebieg, kontekst z hinta.</p><pre>Subject: [home-ops] ❌ withtimer: zażółć gęślą jaźń zażółć gęślą jaźń zażółć gęślą jaźń zażółć gęślą jaźń błąd
+
+&lt;p style=&quot;font-size:15px&quot;&gt;&lt;b&gt;withtimer&lt;/b&gt; na &lt;b&gt;elitedesk&lt;/b&gt; nie powiódł się.&lt;/p&gt;
+&lt;p style=&quot;font-size:15px;background:#fbf1d3;padding:8px 12px;border-radius:6px&quot;&gt;zażółć gęślą jaźń zażółć gęślą jaźń zażółć gęślą jaźń zażółć gęślą jaźń błąd&lt;br&gt;&lt;/p&gt;
+&lt;table style=&quot;font-size:13px&quot;&gt;
+&lt;tr&gt;&lt;td style=&quot;color:#6b6157;padding:2px 12px 2px 0&quot;&gt;Usługa&lt;/td&gt;&lt;td&gt;Fake job&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td style=&quot;color:#6b6157;padding:2px 12px 2px 0&quot;&gt;Przebieg&lt;/td&gt;&lt;td&gt;Sat 2026-11-14 10:00:00 UTC → Sat 2026-11-14 10:00:00 UTC · kod 1&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td style=&quot;color:#6b6157;padding:2px 12px 2px 0&quot;&gt;Ostatni udany&lt;/td&gt;&lt;td&gt;2026-11-12 10:00:01&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td style=&quot;color:#6b6157;padding:2px 12px 2px 0&quot;&gt;Następny&lt;/td&gt;&lt;td&gt;Sun 2026-11-15 10:00:00&lt;/td&gt;&lt;/tr&gt;
+&lt;/table&gt;
+&lt;p style=&quot;font-size:13px&quot;&gt;&lt;b&gt;Co zrobić:&lt;/b&gt; przeczytaj przyczynę i kontekst poniżej. Jeśli to chwilowe, poczekaj na następny przebieg albo uruchom ręcznie: &lt;code&gt;systemctl --user start withtimer&lt;/code&gt;. Log: &lt;code&gt;journalctl --user -u withtimer --since today&lt;/code&gt;&lt;/p&gt;&lt;h4 style=&quot;margin-bottom:4px&quot;&gt;Kontekst&lt;/h4&gt;&lt;pre style=&quot;font-size:12px;white-space:pre-wrap&quot;&gt;hint for day 2026-11-15&lt;/pre&gt;&lt;h4 style=&quot;margin-bottom:4px&quot;&gt;Log tego przebiegu&lt;/h4&gt;&lt;pre style=&quot;font-size:12px;white-space:pre-wrap;color:#4a4037&quot;&gt;Starting Fake job...
+zażółć gęślą jaźń zażółć gęślą jaźń zażółć gęślą jaźń zażółć gęślą jaźń błąd
+Failed to start Fake job.&lt;/pre&gt;
+</pre><h2>2. Unit bez timera i bez InvocationID (fallback)</h2><p><code>DRY_RUN=1 … notimer</code> — fallback <code>-o cat</code>: przyczyną „fallback reason line” (filtr kotwiczony działa), log pokazuje znaczniki czasu (short-iso), „brak timera”, brak sekcji Kontekst.</p><pre>Subject: [home-ops] ❌ notimer: fallback reason line
+
+&lt;p style=&quot;font-size:15px&quot;&gt;&lt;b&gt;notimer&lt;/b&gt; na &lt;b&gt;elitedesk&lt;/b&gt; nie powiódł się.&lt;/p&gt;
+&lt;p style=&quot;font-size:15px;background:#fbf1d3;padding:8px 12px;border-radius:6px&quot;&gt;fallback reason line&lt;br&gt;&lt;/p&gt;
+&lt;table style=&quot;font-size:13px&quot;&gt;
+&lt;tr&gt;&lt;td style=&quot;color:#6b6157;padding:2px 12px 2px 0&quot;&gt;Usługa&lt;/td&gt;&lt;td&gt;Fake job&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td style=&quot;color:#6b6157;padding:2px 12px 2px 0&quot;&gt;Przebieg&lt;/td&gt;&lt;td&gt;Sat 2026-11-14 10:00:00 UTC → Sat 2026-11-14 10:00:00 UTC · kod 1&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td style=&quot;color:#6b6157;padding:2px 12px 2px 0&quot;&gt;Ostatni udany&lt;/td&gt;&lt;td&gt;2026-11-12 10:00:01&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td style=&quot;color:#6b6157;padding:2px 12px 2px 0&quot;&gt;Następny&lt;/td&gt;&lt;td&gt;brak timera — tylko ręcznie&lt;/td&gt;&lt;/tr&gt;
+&lt;/table&gt;
+&lt;p style=&quot;font-size:13px&quot;&gt;&lt;b&gt;Co zrobić:&lt;/b&gt; przeczytaj przyczynę i kontekst poniżej. Jeśli to chwilowe, poczekaj na następny przebieg albo uruchom ręcznie: &lt;code&gt;systemctl --user start notimer&lt;/code&gt;. Log: &lt;code&gt;journalctl --user -u notimer --since today&lt;/code&gt;&lt;/p&gt;&lt;h4 style=&quot;margin-bottom:4px&quot;&gt;Log tego przebiegu&lt;/h4&gt;&lt;pre style=&quot;font-size:12px;white-space:pre-wrap;color:#4a4037&quot;&gt;2026-11-14T10:00:00+0000 h systemd[1]: Starting Fake job...&lt;/pre&gt;
+</pre></body></html>

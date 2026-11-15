@@ -98,6 +98,8 @@ jobs:
             bash -n "$f" || exit 1
           done
           echo "✓ all shell scripts parse"
+      - name: notify-failure test
+        run: bash ops/elitedesk/tests/test_notify_failure.sh
 
   compose:
     name: docker compose build
