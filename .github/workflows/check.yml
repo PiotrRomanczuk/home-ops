@@ -65,6 +65,11 @@ jobs:
             ops/elitedesk/seo_plan.py \
             ops/elitedesk/seo_decide.py \
             ops/elitedesk/pr_decide.py \
+            ops/elitedesk/pr_gate.py \
+            ops/elitedesk/pr_review.py \
+            ops/elitedesk/pr_review_gh.py \
+            ops/elitedesk/pr_review_llm.py \
+            ops/elitedesk/review_db.py \
             ops/elitedesk/seo_plan_db.py \
             ops/elitedesk/seo_drift.py \
             ops/elitedesk/seo_opps.py \
@@ -186,11 +191,24 @@ jobs:
             -f postgres/migrations/020_digest_cards.sql \
             -f postgres/migrations/021_decisions.sql \
             -f postgres/migrations/022_daily_briefs.sql \
-            -f postgres/migrations/023_queue_state.sql
+            -f postgres/migrations/023_queue_state.sql \
+            -f postgres/migrations/028_pr_reviews.sql
           # /api/today reads host_metrics (003); its trailing cron.schedule
           # needs pg_cron, so apply the file without that last statement.
           sed '/^SELECT cron.schedule(/,$d' postgres/migrations/003_host_metrics.sql \
             | psql -h 127.0.0.1 -U postgres -d home_ops -v ON_ERROR_STOP=1
+          # unit_runs / activity_now (026) — same trailing cron.schedule strip,
+          # applied twice to prove idempotency.
+          for i in 1 2; do
+            sed '/^SELECT cron.schedule(/,$d' postgres/migrations/026_activity.sql \
+              | psql -h 127.0.0.1 -U postgres -d home_ops -v ON_ERROR_STOP=1
+          done
+          # project_signals (027) + repo_meta (016) for GET /api/progress.
+          for i in 1 2; do
+            psql -h 127.0.0.1 -U postgres -d home_ops -v ON_ERROR_STOP=1 \
+              -f postgres/migrations/016_project_repo_meta.sql \
+              -f postgres/migrations/027_project_signals.sql
+          done
 
       - name: integration tests
         working-directory: ingest
@@ -198,7 +216,9 @@ jobs:
           DATABASE_URL: postgresql://postgres:ci-placeholder@127.0.0.1:5432/home_ops
           INGEST_TOKEN: ci-token
           LOGS_PASSWORD: ci-password
-        run: npm test -- --run src/routes/__tests__/jobs-state-machine.test.ts src/routes/__tests__/decisions.test.ts src/routes/__tests__/briefs-today.test.ts src/routes/__tests__/queue.test.ts
+        # One file at a time: they share this database (activity + progress both
+        # write unit_runs), so parallel files would race each other's cleanup.
+        run: npm test -- --run --no-file-parallelism src/routes/__tests__/jobs-state-machine.test.ts src/routes/__tests__/decisions.test.ts src/routes/__tests__/briefs-today.test.ts src/routes/__tests__/queue.test.ts src/routes/__tests__/activity.test.ts src/routes/__tests__/progress.test.ts
 
   tests-seo-ingest:
     name: tests (seo ingest upsert contract vs real postgres)

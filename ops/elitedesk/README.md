@@ -149,6 +149,31 @@ one-line reason; reasons feed the per-routine acceptance line. Set
 `PUBLIC_BASE_URL` in `.env` to the console URL reachable from the phone
 (LAN or Tailscale), then `docker compose up -d --build ingest`.
 
+## PR review — "second pair of eyes" (since 2026-11-11)
+
+The author of a change never accepts it. `pr-review.timer` (hourly 07–23) runs
+`pr_review.py`: every open, non-draft PR whose **head commit** has no row in
+`pr_reviews` (migration 028) gets an independent review — a fresh `claude -p`
+(subscription, `--tools Read,Grep,Glob`, cwd = a cached checkout in
+`~/.cache/pr-review/<repo>`), two passes (`pr_review/review.md` finds,
+`pr_review/verify.md` re-checks every finding and drops the unconfirmed), max 3
+PRs per run. Result: one comment on the PR, label `review:ok` / `review:zmiany`,
+a row in `pr_reviews`, a `pr-review` card on "Dziś".
+
+`pr_decide.py` asks about a PR only once its current head is reviewed;
+options come from `pr_gate.py` (ok → Scal; findings → Popraw / Scal mimo to;
+after 2 fix rounds no Popraw). The question's ref carries the reviewed SHA and
+the merge uses `--match-head-commit`, so an answer never merges newer,
+unreviewed commits. "Popraw" labels the PR `fix-requested` for `pr-agent`
+(infrastructure repo).
+
+```bash
+psql … -f postgres/migrations/028_pr_reviews.sql        # once (idempotent)
+cp ops/elitedesk/pr-review.{service,timer} ~/.config/systemd/user/
+systemctl --user daemon-reload && systemctl --user enable --now pr-review.timer
+python3 ops/elitedesk/pr_review.py --dry-run --pr job-radar#7   # JSON + comment text to ~/.cache/pr-review/dry/, no DB, no GitHub writes
+```
+
 ## Prerequisites — outbound mail
 
 The digest sends through your own Gmail account over SMTP using an **app
