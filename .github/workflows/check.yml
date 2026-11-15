@@ -76,6 +76,7 @@ jobs:
             ops/elitedesk/gmail_report.py \
             ops/elitedesk/gmail_ratelimit.py \
             ops/elitedesk/gmail_db.py \
+            ops/elitedesk/gmail_labels.py \
             ops/elitedesk/gmail_import.py \
             ops/elitedesk/gmail-daily.py \
             ops/elitedesk/pr_gate.py \
@@ -222,6 +223,14 @@ jobs:
               -f postgres/migrations/016_project_repo_meta.sql \
               -f postgres/migrations/027_project_signals.sql
           done
+          # gmail schema (025): idempotent, and rules_json() must work on empty tables
+          # (gmail-daily reads it before any rule is seeded).
+          for i in 1 2; do
+            psql -h 127.0.0.1 -U postgres -d home_ops -v ON_ERROR_STOP=1 \
+              -f postgres/migrations/025_gmail.sql
+          done
+          psql -h 127.0.0.1 -U postgres -d home_ops -v ON_ERROR_STOP=1 -tA \
+            -c "SELECT gmail.rules_json()" | grep -q '"rules"'
 
       - name: integration tests
         working-directory: ingest

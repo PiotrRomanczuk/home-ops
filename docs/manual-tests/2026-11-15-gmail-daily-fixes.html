@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>gmail-daily — poprawki po recenzji PR #68</title>
+<style>
+  :root { --bg:#fafaf8; --fg:#1d1d1b; --mute:#6b6b66; --line:#e3e2dc; --acc:#2f6b4f; --warn:#9a5b12; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#171716; --fg:#ecebe6; --mute:#a3a29b; --line:#33322f; --acc:#7fc4a0; --warn:#e0a85a; } }
+  body { background:var(--bg); color:var(--fg); font:15px/1.55 -apple-system, system-ui, sans-serif; max-width:860px; margin:0 auto; padding:24px 16px 64px; }
+  h1 { font-size:24px; margin:0 0 4px; } h2 { font-size:18px; margin:32px 0 8px; border-bottom:1px solid var(--line); padding-bottom:4px; }
+  .meta { color:var(--mute); font-size:13px; }
+  code, pre { font:13px/1.45 ui-monospace, Menlo, monospace; } pre { background:rgba(127,127,127,.1); padding:10px 12px; border-radius:6px; overflow-x:auto; }
+  table { border-collapse:collapse; width:100%; font-size:14px; } td, th { border-bottom:1px solid var(--line); padding:5px 8px; text-align:left; vertical-align:top; }
+  .ok { color:var(--acc); font-weight:600; } .warn { color:var(--warn); font-weight:600; }
+  li { margin:4px 0; }
+</style>
+</head>
+<body>
+<h1>gmail-daily — poprawki po recenzji PR #68</h1>
+<div class="meta">2026-11-15 · branch <code>feat/gmail-cleanup</code> · bez danych osobowych (repo publiczne), wszystkie testy na atrapach</div>
+
+<h2>Co zostało zrobione</h2>
+<table>
+<tr><th>Błąd z recenzji</th><th>Poprawka</th></tr>
+<tr><td>1. Nowe maile wykrywane przez <code>COUNT</code>/<code>rowid</code></td><td><code>gmail_import.import_messages(log, db)</code> wysyła do <code>gmail.message</code> <b>wszystkie</b> wiersze SQLite co przebieg (paczki po 20k). <code>ids_before/ids_after</code> tylko do nagłówka karty.</td></tr>
+<tr><td>2. Maile usunięte ze skrzynki</td><td><code>gmail_imap.sync</code> zwraca <code>(done, present)</code>; <code>alive = present ∪ Kosz</code>. Oczekiwane etykiety, <code>known</code> i <code>message_state</code> liczą tylko <code>alive</code>. Pusta odpowiedź IMAP przy niepustej bazie = błąd (bezpiecznik).</td></tr>
+<tr><td>3. Blokada chronionych przy Koszu</td><td><code>gmail_apply.move('trash', …, protected=…)</code>: obowiązkowy zbiór, filtr, <code>skipped_protected</code> w dzienniku; bez <code>protected</code> → <code>ValueError</code>. <code>gmail_labels.protected_ids</code>. Archiwizacja nie jest filtrowana (decyzja Piotra).</td></tr>
+<tr><td>5. <code>gmail_import rules</code></td><td>Poza <code>all</code>; odmawia przy niepustej <code>gmail.rule</code> bez <code>--force</code>; plik z argumentu lub <code>~/.config/home-ops/gmail-rules.json</code>.</td></tr>
+<tr><td>6. Uzgadnianie etykiet</td><td>Zbiór = oczekiwane ∪ etykiety reguł/podreguł ∪ wbudowane; tworzone tylko etykiety z wiadomościami; członkowie przez <code>labelIds</code> (<code>iter_ids(label_ids=…)</code>), nie <code>q=label:"…"</code>.</td></tr>
+<tr><td>7. Dziennik po kawałku</td><td><code>gmail_apply.modify_journaled</code>: wpis + <code>flush()</code> po każdych ≤1000 id (używają go <code>apply_categories</code>, <code>reconcile</code>, <code>gmail-daily</code>).</td></tr>
+<tr><td>8–9. CI, drobne</td><td>Job Postgres: <code>025_gmail.sql</code> dwa razy + <code>SELECT gmail.rules_json()</code> na pustej bazie; <code>gmail_classify.py</code> = 150 linii; <code>imap.logout()</code> w <code>finally</code> (<code>gmail_imap.close</code>); konflikt z <code>main</code> rozwiązany (obie listy <code>py_compile</code>).</td></tr>
+</table>
+
+<h2>Jak sprawdzić ręcznie</h2>
+<pre>python3 -m unittest discover -s ops/elitedesk/tests -p 'test_*.py'
+python3 -m unittest discover -s ops/elitedesk/tests -p 'test_gmail*.py' -v   # 65 testów gmail
+# migracja 025 na jednorazowej bazie (docker), dwa razy + rules_json():
+docker run -d --rm --name pg025 -e POSTGRES_PASSWORD=x -e POSTGRES_DB=home_ops postgres:17-alpine
+for i in 1 2; do docker exec -i pg025 psql -U postgres -d home_ops -v ON_ERROR_STOP=1 -q &lt; postgres/migrations/025_gmail.sql; done
+docker exec pg025 psql -U postgres -d home_ops -tA -c "SELECT gmail.rules_json()"; docker rm -f pg025</pre>
+<p>Czego nie robiono: żadnego połączenia z Gmailem ani z bazą na uwh, <code>gmail-daily.py</code> nie był uruchamiany poza testami z atrapami.</p>
+
+<h2>Wynik</h2>
+<ul>
+  <li class="ok">158/158 testów <code>ops/elitedesk/tests</code> (w tym 65 gmail; nowe: <code>test_gmail_daily.py</code> 7, <code>test_gmail_import.py</code> 6, plus testy w apply/api/imap), <code>py_compile</code> z listy w <code>check.yml</code> OK.</li>
+  <li class="ok">Migracja 025 zastosowana dwa razy na świeżym <code>postgres:17-alpine</code>; <code>rules_json()</code> zwraca puste reguły; smoke <code>upsert → rules_count → replace_state(alive)</code> przez <code>docker exec psql</code> na jednorazowym kontenerze (usunięty).</li>
+  <li><b>Scenariusze w <code>test_gmail_daily.py</code>:</b> wiadomość „przywrócona” (wyższy rowid) i nowa trafiają do upsertu; ponowny przebieg po awarii Postgresa wysyła nową wiadomość mimo <code>new=0</code>; id usunięte ze skrzynki nie trafia do <code>batch_modify</code> (atrapa rzuca 404) ani do <code>message_state</code>; stara etykieta bez wiadomości jest zdejmowana; puste etykiety nie są tworzone; drugi przebieg nic nie zmienia.</li>
+  <li class="warn">Nie sprawdzone na prawdziwym Gmailu: zachowanie <code>labelIds</code> w <code>messages.list</code> (zgodne z dokumentacją) i wykrywanie zmiany <i>nazwy</i> etykiety, której już nie ma w regułach (patrz „Czeka na Piotra” w wyniku zadania).</li>
+</ul>
+</body>
+</html>

@@ -1,12 +1,14 @@
 """Unit tests for gmail_imap parsing (no network)."""
 from __future__ import annotations
 
+import sqlite3
 import sys
 import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from gmail_imap import all_mail_box, epoch_ms, parse_labels, to_message  # noqa: E402
+import gmail_inventory  # noqa: E402
+from gmail_imap import all_mail_box, epoch_ms, parse_labels, sync, to_message  # noqa: E402
 
 META = (b'7 (X-GM-THRID 1780000000000000001 X-GM-MSGID 1780000000000000002 '
         b'X-GM-LABELS ("\\\\Important" \\Inbox "Dev/GitHub" Allegro) UID 42 RFC822.SIZE 5120 '
@@ -48,6 +50,28 @@ class ImapParseTest(unittest.TestCase):
         lines = [b'(\\HasNoChildren) "/" "INBOX"',
                  b'(\\All \\HasNoChildren) "/" "[Gmail]/Wszystkie"']
         self.assertEqual(all_mail_box(lines), '"[Gmail]/Wszystkie"')
+
+
+class FakeImap:
+    def list(self):
+        return 'OK', [b'(\\All \\HasNoChildren) "/" "[Gmail]/Wszystkie"']
+
+    def select(self, box, readonly=False):
+        self.box = box
+
+    def uid(self, cmd, *args):
+        if cmd == 'FETCH':
+            return 'OK', [(META, HEADER), b')']
+        return 'OK', [b'42' if args[0] is None or args[0] == 'X-GM-RAW' and 'promotions' in args[1] else b'']
+
+
+class SyncTest(unittest.TestCase):
+    def test_sync_returns_the_rest_ids_present_in_all_mail(self):
+        db = sqlite3.connect(':memory:')
+        db.executescript(gmail_inventory.SCHEMA)
+        done, present = sync(FakeImap(), db, log=lambda *_: None)
+        self.assertEqual((done, present), (1, {format(1780000000000000002, 'x')}))
+        self.assertEqual(db.execute('SELECT COUNT(*) FROM messages').fetchone()[0], 1)
 
 
 if __name__ == '__main__':

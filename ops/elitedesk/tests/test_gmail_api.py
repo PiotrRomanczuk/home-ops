@@ -46,6 +46,13 @@ class GmailApiTest(unittest.TestCase):
         self.assertEqual(second['pageToken'], ['p2'])
         self.assertEqual(second['q'], ['from:x'])
 
+    def test_iter_ids_by_label_id_sends_label_ids_not_a_query(self):
+        g, op = client({'messages': [{'id': 'a'}]})
+        self.assertEqual(list(g.iter_ids(label_ids=['Label_1'])), ['a'])
+        q = parse_qs(urlparse(op.requests[0].full_url).query)
+        self.assertEqual(q['labelIds'], ['Label_1'])
+        self.assertNotIn('q', q)
+
     def test_iter_ids_limit(self):
         g, _ = client({'messages': [{'id': 'a'}, {'id': 'b'}], 'nextPageToken': 'p2'})
         self.assertEqual(list(g.iter_ids('', limit=1)), ['a'])

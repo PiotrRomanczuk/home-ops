@@ -34,7 +34,11 @@ def cmd_inventory(args: argparse.Namespace) -> None:
         gmail_inventory.sync(gmail, db, workers=args.workers, query=args.query)
     else:
         email = gmail.call('GET', '/profile')['emailAddress']
-        gmail_imap.sync(gmail_imap.connect(email, gmail_auth.access_token()), db)
+        imap = gmail_imap.connect(email, gmail_auth.access_token())
+        try:
+            gmail_imap.sync(imap, db)
+        finally:
+            gmail_imap.close(imap)
     total = db.execute('SELECT COUNT(*) FROM messages').fetchone()[0]
     print(f'inventory: {total} messages in {gmail_inventory.DB_PATH}')
 

@@ -1,13 +1,14 @@
 """Unit tests for gmail_apply: label creation order, add-only writes, journal + undo."""
 from __future__ import annotations
 
+import json
 import sys
 import tempfile
 import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from gmail_apply import apply_categories, ensure_labels, move, reconcile, undo  # noqa: E402
+from gmail_apply import apply_categories, ensure_labels, modify_journaled, move, reconcile, undo  # noqa: E402
 
 
 class FakeGmail:
@@ -54,13 +55,52 @@ class ApplyTest(unittest.TestCase):
         g = FakeGmail()
         with tempfile.TemporaryDirectory() as d:
             journal = Path(d) / 'j.jsonl'
-            move(g, 'trash', ['a', 'b'], {'a'}, journal, 'x', log=lambda *_: None)
+            move(g, 'trash', ['a', 'b'], {'a'}, journal, 'x', log=lambda *_: None, protected=set())
             move(g, 'archive', ['c'], {'c'}, journal, 'y', log=lambda *_: None)
             self.assertEqual(g.modified, [(('a', 'b'), ('TRASH',), ()), (('c',), (), ('INBOX',))])
             g.modified.clear()
             undo(g, journal, log=lambda *_: None)
             self.assertEqual(g.modified, [(('c',), ('INBOX',), ()),
                                           (('a', 'b'), (), ('TRASH',)), (('a',), ('INBOX',), ())])
+
+    def test_trash_never_touches_protected_ids_and_journals_the_skip(self):
+        g = FakeGmail()
+        with tempfile.TemporaryDirectory() as d:
+            journal = Path(d) / 'j.jsonl'
+            n = move(g, 'trash', ['a', 'b', 'c'], {'a', 'b'}, journal, 'x', log=lambda *_: None, protected={'b', 'z'})
+            self.assertEqual(n, 2)
+            self.assertEqual(g.modified, [(('a', 'c'), ('TRASH',), ())])
+            entry = json.loads(journal.read_text())
+            self.assertEqual((entry['ids'], entry['inbox_ids'], entry['skipped_protected']), (['a', 'c'], ['a'], 1))
+
+    def test_trash_of_only_protected_ids_is_a_noop(self):
+        g = FakeGmail()
+        with tempfile.TemporaryDirectory() as d:
+            journal = Path(d) / 'j.jsonl'
+            self.assertEqual(move(g, 'trash', ['b'], set(), journal, log=lambda *_: None, protected={'b'}), 0)
+            self.assertEqual(g.modified, [])
+            self.assertFalse(journal.exists())
+
+    def test_trash_without_protected_is_refused(self):
+        g = FakeGmail()
+        with self.assertRaises(ValueError):
+            move(g, 'trash', ['a'], set(), Path('/dev/null'), log=lambda *_: None)
+        self.assertEqual(g.modified, [])
+
+    def test_modify_journaled_writes_a_line_per_chunk_even_if_a_later_chunk_fails(self):
+        class Flaky(FakeGmail):
+            def batch_modify(self, ids, add=(), remove=()):
+                if len(self.modified) == 1:
+                    raise RuntimeError('boom')
+                super().batch_modify(ids, add, remove)
+
+        g = Flaky()
+        with tempfile.TemporaryDirectory() as d:
+            journal = Path(d) / 'j.jsonl'
+            with self.assertRaises(RuntimeError):
+                modify_journaled(g, journal, 'add', 'L', 'id-L', [str(i) for i in range(2500)])
+            lines = [json.loads(x) for x in journal.read_text().splitlines()]
+            self.assertEqual([len(e['ids']) for e in lines], [1000])   # the applied chunk is undoable
 
     def test_read_undo_restores_unread_only_where_it_was(self):
         g = FakeGmail()

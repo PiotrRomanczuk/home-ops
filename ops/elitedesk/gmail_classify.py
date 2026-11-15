@@ -92,8 +92,7 @@ def is_protected(label: str, subject: str, labels: str, cfg: dict) -> bool:
 def correspondents(db: sqlite3.Connection, me: set[str]) -> set[str]:
     """Every address Piotr has sent mail to (people he actually talks to)."""
     out: set[str] = set()
-    marks = ','.join('?' * len(me))
-    for (to_addrs,) in db.execute(f'SELECT to_addrs FROM messages WHERE from_addr IN ({marks})', tuple(me)):
+    for (to_addrs,) in db.execute(f"SELECT to_addrs FROM messages WHERE from_addr IN ({','.join('?' * len(me))})", tuple(me)):
         out.update(a for a in (to_addrs or '').split(',') if a and a not in me)
     return out
 

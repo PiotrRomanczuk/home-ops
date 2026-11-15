@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """gmail-daily.py — the Gmail cleanup as a routine (timer on elitedesk).
 
-Every run: (1) inventory new messages over IMAP into the local SQLite and
-gmail.message, (2) classify every non-trashed message with the rules in
-Postgres (gmail.rules_json), (3) add the category labels new/changed messages
-are missing (labels only — never trash, never delete), (4) rewrite
-gmail.message_state, (5) post one digest card. Journals go to the same
-~/.local/state/home-ops/gmail/ as on the Mac, and into gmail.applied.
+Every run: (1) mirror All Mail over IMAP into the local SQLite and upsert every SQLite row
+into gmail.message, (2) work out which messages are still in the mailbox (All Mail ∪ Trash —
+anything else was deleted and has no state), (3) classify those with the rules in Postgres
+(gmail.rules_json), (4) add/remove the category labels so Gmail matches (labels only — never
+trash, never delete; each chunk is journaled), (5) rewrite gmail.message_state, (6) post one
+digest card. Journals go to the same ~/.local/state/home-ops/gmail/ as on the Mac, and into
+gmail.applied.
 """
 from __future__ import annotations
 
@@ -26,17 +27,19 @@ import gmail_db  # noqa: E402
 import gmail_imap  # noqa: E402
 import gmail_import  # noqa: E402
 import gmail_inventory  # noqa: E402
+import gmail_labels  # noqa: E402
 from gmail_api import Gmail  # noqa: E402
 
 ROUTINE = 'gmail-daily'
 
 
-def expected_labels(db: sqlite3.Connection, cfg: dict, trash: set[str]) -> dict[str, set[str]]:
+def expected_labels(db: sqlite3.Connection, cfg: dict, alive: set[str], trash: set[str]) -> dict[str, set[str]]:
+    """label -> ids that should carry it: alive, not trashed (parent labels included for children)."""
     db.row_factory = sqlite3.Row
     people = gmail_classify.correspondents(db, cfg['me'])
     out: dict[str, set[str]] = collections.defaultdict(set)
     for r in db.execute('SELECT * FROM messages'):
-        if r['id'] in trash:
+        if r['id'] in trash or r['id'] not in alive:
             continue
         label = gmail_classify.classify(r, cfg, people)[0]
         out[label].add(r['id'])
@@ -46,53 +49,68 @@ def expected_labels(db: sqlite3.Connection, cfg: dict, trash: set[str]) -> dict[
     return out
 
 
-def reconcile_live(gmail: Gmail, expected: dict[str, set[str]], known: set[str], journal: Path, log=print) -> tuple[int, int]:
-    """Add missing / remove stale category labels so Gmail matches `expected`. Returns (added, removed)."""
-    ids_by_label = gmail_apply.ensure_labels(gmail, sorted(expected), log)
+def reconcile_live(gmail: Gmail, expected: dict[str, set[str]], known: set[str], journal: Path, log=print,
+                   names: list[str] | None = None) -> tuple[int, int]:
+    """Add missing / remove stale category labels so Gmail matches `expected`. Returns (added, removed).
+
+    `names` = every label the routine manages (default: those in `expected`). A label is created only
+    when it has messages to carry; one with none is still cleaned if it already exists. Current members
+    are read by exact label id, not by a `label:"…"` search.
+    """
+    names = sorted(set(names or ()) | set(expected))
+    existing = {lab['name']: lab['id'] for lab in gmail.labels()}
+    existing.update(gmail_apply.ensure_labels(gmail, [n for n in names if expected.get(n) and n not in existing], log))
     added = removed = 0
-    import json
-    with journal.open('a') as j:
-        for name, lid in sorted(ids_by_label.items()):
-            live = {i for i in gmail.iter_ids(f'label:"{name}" -in:trash') if i in known}
-            extra, missing = sorted(live - expected[name]), sorted(expected[name] - live)
-            if extra:
-                gmail.batch_modify(extra, remove=[lid])
-                j.write(json.dumps({'ts': int(time.time()), 'op': 'remove', 'label': name, 'label_id': lid, 'ids': extra}) + '\n')
-            if missing:
-                gmail.batch_modify(missing, add=[lid])
-                j.write(json.dumps({'ts': int(time.time()), 'op': 'add', 'label': name, 'label_id': lid, 'ids': missing}) + '\n')
-            added, removed = added + len(missing), removed + len(extra)
+    for name in names:
+        if name not in existing:
+            continue
+        lid, want = existing[name], expected.get(name, set())
+        live = {i for i in gmail.iter_ids(label_ids=[lid]) if i in known}
+        removed += gmail_apply.modify_journaled(gmail, journal, 'remove', name, lid, sorted(live - want))
+        added += gmail_apply.modify_journaled(gmail, journal, 'add', name, lid, sorted(want - live))
     return added, removed
+
+
+def daily(gmail: Gmail, db: sqlite3.Connection, sync, journal: Path, log=print) -> dict:
+    """One run without the card. `sync(db, log)` mirrors All Mail and returns (rows, present REST ids)."""
+    ids_before = {r[0] for r in db.execute('SELECT id FROM messages')}
+    _, present = sync(db, log)
+    all_ids = {r[0] for r in db.execute('SELECT id FROM messages')}
+    new_ids = all_ids - ids_before  # headline only — nothing downstream depends on it
+    if ids_before and not present:
+        raise RuntimeError('IMAP returned an empty All Mail — refusing to treat the whole mailbox as deleted')
+    gmail_import.import_messages(log, db)  # every row, so message_state's FK can never dangle
+    cfg = gmail_classify.load_rules(Path('db'))
+    trash = set(gmail.iter_ids('in:trash'))
+    alive = present | trash
+    expected = expected_labels(db, cfg, alive, trash)
+    known = all_ids & alive
+    added, removed = reconcile_live(gmail, expected, known, journal, log, gmail_labels.managed_labels(cfg, expected))
+    if journal.exists():
+        gmail_db.insert_applied(gmail_db.journal_rows(journal))
+    inbox, unread = set(gmail.iter_ids('in:inbox')), set(gmail.iter_ids('is:unread -in:trash'))
+    gmail_db.replace_state(gmail_import.state_rows(db, cfg, trash, inbox, unread, alive))
+    return {'new': len(new_ids), 'added': added, 'removed': removed, 'inbox': len(inbox),
+            'review': len(expected.get(gmail_classify.FALLBACK, ())), 'gone': len(all_ids - alive)}
 
 
 def main() -> int:
     log = print
     gmail = Gmail(gmail_auth.access_token)
     db = gmail_inventory.connect()
-    before = db.execute('SELECT COUNT(*) FROM messages').fetchone()[0]
-    email = gmail.call('GET', '/profile')['emailAddress']
-    gmail_imap.sync(gmail_imap.connect(email, gmail_auth.access_token()), db, log=log)
-    new_ids = [r[0] for r in db.execute('SELECT id FROM messages ORDER BY rowid DESC LIMIT ?',
-                                        (db.execute('SELECT COUNT(*) FROM messages').fetchone()[0] - before,))]
-    gmail_db.upsert_messages([gmail_db.message_row(r) for r in db.execute(
-        f"SELECT * FROM messages WHERE id IN ({','.join('?' * len(new_ids))})", new_ids)] if new_ids else [])
-    cfg = gmail_classify.load_rules(Path('db'))
-    trash = set(gmail.iter_ids('in:trash'))
-    expected = expected_labels(db, cfg, trash)
-    known = {r[0] for r in db.execute('SELECT id FROM messages')}
+    imap = gmail_imap.connect(gmail.call('GET', '/profile')['emailAddress'], gmail_auth.access_token())
     journal = gmail_inventory.STATE_DIR / f'journal-daily-{time.strftime("%Y%m%d-%H%M%S")}.jsonl'
-    added, removed = reconcile_live(gmail, expected, known, journal, log)
-    if journal.exists():
-        gmail_db.insert_applied(gmail_db.journal_rows(journal))
-    inbox, unread = set(gmail.iter_ids('in:inbox')), set(gmail.iter_ids('is:unread -in:trash'))
-    gmail_db.replace_state(gmail_import.state_rows(db, cfg, trash, inbox, unread))
-    review = len(expected.get(gmail_classify.FALLBACK, ()))
-    headline = f'{len(new_ids)} nowych, {added} etykiet dodanych, {removed} zdjętych, INBOX {len(inbox)}, do przejrzenia {review}'
-    log(headline)
+    try:
+        r = daily(gmail, db, lambda d, lg: gmail_imap.sync(imap, d, log=lg), journal, log)
+    finally:
+        gmail_imap.close(imap)
+    headline = (f'{r["new"]} nowych, {r["added"]} etykiet dodanych, {r["removed"]} zdjętych, '
+                f'INBOX {r["inbox"]}, do przejrzenia {r["review"]}')
+    log(headline + (f', zniknęło ze skrzynki {r["gone"]}' if r['gone'] else ''))
     try:
         from agents.routine_report import Reporter
-        Reporter.from_env(ROUTINE).card(headline, status='ok' if len(inbox) == 0 else 'warn',
-                                        metric={'label': 'INBOX', 'value': len(inbox)})
+        Reporter.from_env(ROUTINE).card(headline, status='ok' if r['inbox'] == 0 else 'warn',
+                                        metric={'label': 'INBOX', 'value': r['inbox']})
     except Exception as e:  # the card is best-effort; the run itself succeeded
         log(f'card not posted: {e}')
     return 0

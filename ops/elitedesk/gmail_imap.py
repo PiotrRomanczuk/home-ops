@@ -39,6 +39,14 @@ def connect(email: str, token: str) -> imaplib.IMAP4_SSL:
     return imap
 
 
+def close(imap: imaplib.IMAP4_SSL) -> None:
+    """Best-effort LOGOUT (the connection may already be gone after an error)."""
+    try:
+        imap.logout()
+    except (imaplib.IMAP4.error, OSError):
+        pass
+
+
 def all_mail_box(list_lines: list[bytes]) -> str:
     """Quoted name of the \\All folder ('"[Gmail]/Wszystkie"' on a Polish account)."""
     for line in list_lines:
@@ -89,17 +97,23 @@ def category_uids(imap: imaplib.IMAP4_SSL) -> dict[int, str]:
     return out
 
 
-def sync(imap: imaplib.IMAP4_SSL, db: sqlite3.Connection, chunk: int = 2000, log=print) -> int:
+def sync(imap: imaplib.IMAP4_SSL, db: sqlite3.Connection, chunk: int = 2000, log=print) -> tuple[int, set[str]]:
+    """Mirror All Mail into `messages`. Returns (rows written, REST ids present in All Mail right now).
+
+    The table only grows (INSERT OR REPLACE), so a message deleted from the mailbox stays in it;
+    `present` (+ the Trash ids) is how the caller tells live messages from vanished ones.
+    """
     imap.select(all_mail_box(imap.list()[1]), readonly=True)
     uids = imap.uid('SEARCH', None, 'ALL')[1][0].split()
     cats = category_uids(imap)
     log(f'{len(uids)} messages in All Mail, {len(cats)} with a category tab')
-    done = 0
+    done, present = 0, set()
     for i in range(0, len(uids), chunk):
         data = imap.uid('FETCH', b','.join(uids[i:i + chunk]).decode(), FETCH)[1]
         rows = [to_row(to_message(it[0], it[1], cats)) for it in data if isinstance(it, tuple)]
         db.executemany(f'INSERT OR REPLACE INTO messages VALUES ({",".join("?" * 11)})', rows)
         db.commit()
+        present.update(r[0] for r in rows)
         done += len(rows)
         log(f'  {done}/{len(uids)}')
-    return done
+    return done, present

@@ -68,9 +68,15 @@ class Gmail:
         return self._limit.rate
 
     # --- messages -------------------------------------------------------
-    def iter_ids(self, query: str, *, limit: int | None = None) -> Iterator[str]:
-        """Message ids matching a Gmail search query (all pages, newest first)."""
-        params: dict[str, Any] = {'q': query, 'maxResults': 500}
+    def iter_ids(self, query: str = '', *, label_ids: list[str] | None = None,
+                 limit: int | None = None) -> Iterator[str]:
+        """Message ids matching a Gmail search query and/or carrying all of `label_ids`
+        (exact label ids, no name parsing; Trash and Spam are excluded by the API default)."""
+        params: dict[str, Any] = {'maxResults': 500}
+        if query or not label_ids:
+            params['q'] = query
+        if label_ids:
+            params['labelIds'] = list(label_ids)
         seen = 0
         while True:
             page = self.call('GET', '/messages', params=params)
