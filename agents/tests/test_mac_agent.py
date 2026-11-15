@@ -13,6 +13,7 @@ import json
 import sys
 import tempfile
 import unittest
+from datetime import date, datetime
 from pathlib import Path
 
 AGENTS = Path(__file__).resolve().parent.parent
@@ -122,6 +123,13 @@ JOURNAL = {
 
 
 class DayPromptTest(unittest.TestCase):
+    def test_pick_day_catches_up_on_yesterday_after_a_missed_evening(self):
+        at = lambda h, m: datetime(2026, 11, 15, h, m)  # noqa: E731
+        self.assertEqual(day_prompt.pick_day(at(8, 0)), date(2026, 11, 14))
+        self.assertEqual(day_prompt.pick_day(at(20, 59)), date(2026, 11, 14))
+        self.assertEqual(day_prompt.pick_day(at(21, 30)), date(2026, 11, 15))
+        self.assertEqual(day_prompt.pick_day(at(22, 15)), date(2026, 11, 15))
+
     def test_prompt_has_facts_and_tasks_of_todays_projects_first(self):
         p = day_prompt.build_prompt(JOURNAL, ['strummy: karnety', 'home-ops: wdrożyć 032'])
         for want in ('3 h 05 min', 'projekt home-ops', 'ollama pull gemma4:26b', '\n## Dzień\n', '\n## Co dalej\n'):

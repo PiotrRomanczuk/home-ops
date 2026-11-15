@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<!-- home-ops: the day as a card on Dziś, 21:30 (or at wake-up if the Mac slept through it).
+<!-- home-ops: the day as a card on Dziś, 21:30. If the Mac slept through it, launchd runs it
+     at wake-up (the next morning) and day-summary.py then summarises yesterday (before 21:00 = yesterday).
      Installed by scripts/deploy-agent.sh mac day-summary (__HOME__ is replaced on install). -->
 <plist version="1.0">
 <dict>

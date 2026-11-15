@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """day-summary — the Mac's day as one card on Dziś, written by the local model.
 
-launchd runs it at 21:30 (or at wake-up if the Mac slept through it):
-  1. GET /api/journal/day for today (and yesterday, for the trend);
+launchd runs it at 21:30; if the Mac slept through it launchd runs it at wake-up,
+which is the next morning — so without an argument it takes today only from
+21:00 on and yesterday before that (day_prompt.pick_day):
+  1. GET /api/journal/day for that day (and the one before it, for the trend);
   2. GET /api/today for the Now tasks of hot/warm projects;
   3. ask the local Ollama (DAY_MODEL if installed, else the first installed of
      qwen3.5:9b / gemma4:12b / gemma4:26b / qwen3.5:35b) for "Dzień" + "Co
@@ -10,7 +12,7 @@ launchd runs it at 21:30 (or at wake-up if the Mac slept through it):
   4. POST /api/journal (rollup + summary → day_journal, kept for good) and the
      card "mac-dziennik" via routine_report.
 
-Usage: day-summary.py [YYYY-MM-DD]   (default: today, local time)
+Usage: day-summary.py [YYYY-MM-DD]   (default: pick_day(now), local time)
 Env: INGEST_URL / INGEST_TOKEN, HOST_NAME (default mac), DAY_MODEL, OLLAMA_URL.
 """
 from __future__ import annotations
@@ -19,14 +21,14 @@ import json
 import os
 import sys
 import urllib.request
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 _here = Path(__file__).resolve().parent
 sys.path.insert(0, str(_here))
 sys.path.insert(0, str(_here.parent))
-from day_prompt import build_prompt, card, next_steps  # noqa: E402
+from day_prompt import build_prompt, card, next_steps, pick_day  # noqa: E402
 from routine_report import Reporter  # noqa: E402
 
 HOST = os.environ.get('HOST_NAME', 'mac')
@@ -64,7 +66,7 @@ def now_tasks(today: dict[str, Any]) -> list[str]:
 
 
 def main(argv: list[str]) -> int:
-    day = date.fromisoformat(argv[1]) if len(argv) > 1 else date.today()
+    day = date.fromisoformat(argv[1]) if len(argv) > 1 else pick_day(datetime.now())
     r = Reporter.from_env('mac-dziennik')
     journal = r._call('GET', f'/api/journal/day?host={HOST}&day={day.isoformat()}')
     prev = r._call('GET', f'/api/journal/day?host={HOST}&day={(day - timedelta(days=1)).isoformat()}')

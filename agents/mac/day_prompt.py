@@ -5,10 +5,21 @@ Pure functions (no network) so day-summary's wording is testable:
   build_prompt(j, tasks)  the full prompt (facts + Now tasks of hot/warm projects)
   next_steps(text)        the "Co dalej" bullets out of the model's answer
   card(j, steps, prev)    headline / items / metric for routine_report.card()
+  pick_day(now)           which day a run without an argument summarises
 """
 from __future__ import annotations
 
+from datetime import date, datetime, timedelta
 from typing import Any
+
+# A run before this local hour is a catch-up after the Mac slept through 21:30
+# (launchd fires the missed slot on wake-up), so it summarises yesterday.
+EVENING_HOUR = 21
+
+
+def pick_day(now: datetime) -> date:
+    """Today from 21:00 on, otherwise yesterday (the 21:30 slot that was missed)."""
+    return now.date() if now.hour >= EVENING_HOUR else now.date() - timedelta(days=1)
 
 WEEKDAYS = ['pon', 'wt', 'śr', 'czw', 'pt', 'sob', 'nd']
 
