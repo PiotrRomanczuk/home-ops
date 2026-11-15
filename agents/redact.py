@@ -3,7 +3,8 @@
 Used by claude-collector (prompts, Bash commands) and mac-watcher (process
 command lines: MCP servers get API keys and DSNs as arguments). A secret keeps
 its first 6 characters plus '...', the convention from the global secrets
-rule, so a reader can still tell which key it was.
+rule, so a reader can still tell which key it was. A password is masked whole
+('[hasło]'): a prefix of a short password is most of the password.
 
     from redact import redact
     redact('npx mcp --api-key ctx7sk-abcdef123456')  # → '... --api-key ctx7sk...'
@@ -13,6 +14,8 @@ from __future__ import annotations
 import re
 
 KEEP = 6
+PASSWORD = '[hasło]'
+_PW_NAME = re.compile(r'password|passwd|pwd|\bhas(?:ł|l)[oa]|sshpass|basic', re.I)
 
 # Tokens recognisable by their prefix, anywhere in the text.
 _PREFIXED = re.compile(
@@ -39,7 +42,7 @@ _PL_TO = re.compile(r'(?P<pre>\bhas(?:ł|l)[oa]\s+(?:to|is)\s+["\']?)'
 
 # sshpass -p X (the pattern from secrets.md) and `Authorization: Basic <base64>`.
 _SSHPASS = re.compile(r'(?P<pre>\bsshpass\s+-p\s*["\']?)(?P<secret>(?!\$)[^\s"\']+)')
-_BASIC = re.compile(r'(?P<pre>\bBasic\s+)(?P<secret>(?=[A-Za-z0-9+/]*[\d+/=])[A-Za-z0-9+/=]{12,})')
+_BASIC = re.compile(r'(?P<pre>(?i:authorization:\s*basic\s+)|\bBasic\s+)(?P<secret>(?=[A-Za-z0-9+/]*[\d+/=])[A-Za-z0-9+/=]{12,})')
 
 
 def mask(secret: str) -> str:
@@ -52,8 +55,15 @@ def redact(text: str) -> str:
         return text
     out = _URL_CRED.sub(lambda m: m.group('pre') + mask(m.group('secret')), text)
     for rx in (_NAMED, _PL_SEP, _PL_TO, _SSHPASS, _BASIC):
-        out = rx.sub(lambda m: m.group('pre') + _keep_masked(m.group('secret')), out)
+        out = rx.sub(_sub_named, out)
     return _PREFIXED.sub(lambda m: _keep_masked(m.group(0)), out)
+
+
+def _sub_named(m: re.Match) -> str:
+    pre, secret = m.group('pre'), m.group('secret')
+    if _PW_NAME.search(pre):
+        return pre + PASSWORD
+    return pre + _keep_masked(secret)
 
 
 def _keep_masked(secret: str) -> str:
