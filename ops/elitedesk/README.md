@@ -169,7 +169,7 @@ unreviewed commits. "Popraw" labels the PR `fix-requested` for `pr-agent`
 
 ```bash
 psql … -f postgres/migrations/028_pr_reviews.sql        # once (idempotent)
-cp ops/elitedesk/pr-review.{service,timer} ~/.config/systemd/user/
+ln -sfn ~/code/logs-stack/ops/elitedesk/pr-review.{service,timer} ~/.config/systemd/user/
 systemctl --user daemon-reload && systemctl --user enable --now pr-review.timer
 python3 ops/elitedesk/pr_review.py --dry-run --pr job-radar#7   # JSON + comment text to ~/.cache/pr-review/dry/, no DB, no GitHub writes
 ```

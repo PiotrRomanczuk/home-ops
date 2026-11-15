@@ -45,7 +45,10 @@ beforeEach(async () => {
 const req = (method: string, path: string, body?: unknown, headers: Record<string, string> = tokenHdr) =>
   app.fetch(new Request(`http://x${path}`, { method, headers, body: body ? JSON.stringify(body) : undefined }));
 const json = async (r: Response) => (await r.json()) as Json;
-const day = (back: number) => new Date(Date.now() - back * 86_400_000).toISOString().slice(0, 10);
+// Days are Europe/Warsaw calendar days, like the route (TZ in progress.ts), whatever TZ the process runs in.
+// The clock is not frozen: the route reads Postgres now(), which a fake JS clock cannot move.
+const warsawDay = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Warsaw' });
+const day = (back: number) => warsawDay.format(new Date(Date.now() - back * 86_400_000));
 const sig = (slug: string, signal: string, n: number, back = 0) => ({ project_slug: slug, day: day(back), signal, n });
 
 describe.skipIf(skip)('progress routes', () => {
