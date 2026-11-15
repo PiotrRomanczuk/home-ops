@@ -1,7 +1,7 @@
 ---
 project: sprint
 cwd: ~/Obsidian/MainCV-Planner
-model: fable
+model: opus
 effort: high
 kind: planner
 priority: 1
@@ -21,8 +21,8 @@ Jesteś planistą sprintu. Kolejka zadań się kończy. Dopisz 10–15 nowych za
 4. Dla każdego zadania sam wybierz model i wysiłek:
    - `haiku`: praca mechaniczna (przenoszenie wpisów, proste zestawienia);
    - `sonnet`: wykonanie według jasnego opisu (naprawa CI, rebase, testy, porządek w notatce);
-   - `opus`: recenzje PR-ów, audyty, zadania wymagające oceny;
-   - `fable`: tylko planowanie i najtrudniejsze recenzje (zadania 🔴); Fable ma osobny, mniejszy limit.
+   - `opus`: recenzje PR-ów, audyty, zadania wymagające oceny, najtrudniejsze zadania (🔴). To najwyższy model, od którego zadanie może zacząć;
+   - `fable`: nigdy jako pierwszy wybór. Tylko dla zadania, które Opus już próbował i faktycznie nie rozwiązał (wpis `retry` albo stan „nie zrobione” z powodu trudności w `runs.jsonl` / `results/`, nie limit ani błąd środowiska). W treści zadania podaj id nieudanej próby Opusa.
    Jeśli `runs.jsonl` pokazuje, że dany model zawodził w danym rodzaju zadań, wybierz mocniejszy; jeśli tani model radził sobie dobrze, używaj go częściej.
 5. Każde zadanie zapisz jako osobny plik `queue/<id>.md` w formacie:
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """seed.py — write the sprint's starting queue (run once, before the runner).
 
-  1. vault pilot (one note) → Fable review of the pilot → the other notes
+  1. vault pilot (one note) → Opus review of the pilot → the other notes
   2. one independent review per open PR (read-only, verdict in results/)
 Everything after that is the planner's choice (planner.md).
 
@@ -78,7 +78,7 @@ def main() -> None:
         f'3. Popraw plik metody `{METHOD}` tak, żeby kolejne notatki wyszły lepiej (doprecyzuj to, co pilotaż zrobił źle; '
         'nie wydłużaj bez potrzeby).\n'
         'W wyniku: ocena pilotażu i lista zmian w metodzie.'),
-         project='sprint', cwd=str(VAULT), model='fable', effort='high', kind='vault-review', priority=10,
+         project='sprint', cwd=str(VAULT), model='opus', effort='high', kind='vault-review', priority=10,
          max_minutes=45, lock='vault', after=f'vault-pilot-{pilot.stem}')
     for note in notes:
         if note != pilot:

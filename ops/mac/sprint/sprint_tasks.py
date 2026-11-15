@@ -4,7 +4,7 @@
     id: vault-lesson-notes
     project: lesson-notes
     cwd: ~/Obsidian/MainCV-Planner
-    model: sonnet            # haiku | sonnet | opus | fable
+    model: sonnet            # haiku | sonnet | opus (fable only by escalation after Opus failed)
     effort: medium
     kind: vault              # free text, used in the report
     priority: 10             # lower runs first

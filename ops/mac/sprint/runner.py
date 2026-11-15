@@ -37,7 +37,7 @@ DEADLINE = datetime.fromisoformat(os.environ.get('SPRINT_DEADLINE', '2026-11-16T
 WORKERS = int(os.environ.get('SPRINT_WORKERS', '3'))
 REPORT = Path(os.environ.get('SPRINT_REPORT', '~/Obsidian/MainCV-Planner/3-Zasoby/analysis/2026-11-14-sprint-48h.md')).expanduser()
 CLAUDE = os.environ.get('CLAUDE_BIN', '/opt/homebrew/bin/claude')
-LIMIT_RE = re.compile(r'usage limit|limit reached|rate limit|hit your limit|out of .*usage', re.I)
+LIMIT_RE = re.compile(r'usage.?limit|session.?limit|limit.?reached|rate.?limit|hit your .{0,20}limit|out of .*usage', re.I)
 PAUSE_S, LOW_QUEUE, SUMMARY_EVERY_S = 600, 6, 5 * 3600
 PLANNER = os.environ.get('SPRINT_PLANNER', '1') != '0'  # 0 = dry runs: never add planner/summary tasks
 lock = threading.Lock()
