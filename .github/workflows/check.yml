@@ -67,6 +67,7 @@ jobs:
             ops/elitedesk/pr_decide.py \
             ops/elitedesk/pr_gate.py \
             ops/elitedesk/pr_review.py \
+            ops/elitedesk/pr_review_filter.py \
             ops/elitedesk/pr_review_gh.py \
             ops/elitedesk/pr_review_llm.py \
             ops/elitedesk/review_db.py \

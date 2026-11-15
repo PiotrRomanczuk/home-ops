@@ -11,7 +11,8 @@ pr-review reviewed its current head commit, and the options follow that review (
   2. ask about reviewed PRs with no question waiting, oldest first, at most MAX_OPEN
      waiting at once; a question about an older commit is superseded by the new one
 
-Skipped: drafts, archived repos, `seo-auto` PRs (seo_decide.py owns those).
+Skipped: drafts, archived repos, `seo-auto` PRs (seo_decide.py owns those), PRs from forks
+or from authors outside pr_review_filter.ALLOWED_AUTHORS (never asked, so never merged).
 Env: INGEST_URL + INGEST_TOKEN, PR_OWNER (default PiotrRomanczuk).
 """
 from __future__ import annotations
@@ -28,6 +29,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from agents.routine_report import Reporter  # noqa: E402
 
 import pr_gate  # noqa: E402
+import pr_review_filter  # noqa: E402
 
 ROUTINE = 'pr-decide'
 OWNER = os.environ.get('PR_OWNER', 'PiotrRomanczuk')
@@ -45,14 +47,15 @@ def gh(args: list[str]) -> str:
     return subprocess.run(['gh', *args], check=True, capture_output=True, text=True).stdout
 
 
-def candidates(run: Gh) -> list[dict[str, Any]]:
-    """Open, non-draft PRs in live repos, oldest first."""
+def candidates(run: Gh, log: Log = lambda m: None) -> list[dict[str, Any]]:
+    """Open, non-draft PRs in live repos by allowed authors from the same repo, oldest first."""
     archived = {r['name'] for r in json.loads(run(['repo', 'list', OWNER, '--limit', '200', '--archived',
                                                    '--json', 'name']) or '[]')}
     prs = json.loads(run(['search', 'prs', '--owner', OWNER, '--state', 'open', '--limit', '200', '--json',
                           'repository,number,title,url,isDraft,author,createdAt,labels']) or '[]')
     out = [p for p in prs if not p['isDraft'] and p['repository']['name'] not in archived
            and not SKIP_LABELS & {lb['name'] for lb in p.get('labels', [])}]
+    out = [p for p in out if pr_review_filter.allowed_pr(run, p, log)]
     return sorted(out, key=lambda p: p['createdAt'])
 
 
@@ -131,7 +134,7 @@ def main() -> int:
     log: Log = lambda m: print(f'pr-decide: {m}', file=sys.stderr)  # noqa: E731
     now = datetime.now(timezone.utc)
     acted = act(r, gh, log)
-    prs = candidates(gh)
+    prs = candidates(gh, log)
     asked = ask(r, gh, prs, log, acted, now, review_db.for_sha)
     log(f'{len(prs)} open PRs · acted on {len(acted)} · asked {asked}')
     return 0
