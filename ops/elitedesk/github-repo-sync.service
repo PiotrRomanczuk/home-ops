@@ -1,14 +1,18 @@
 [Unit]
-Description=home-ops github-repo-sync — stack/version/deploy/git metadata for Piotr's other projects
+Description=home-ops github-repo-sync — repo metadata + daily progress signals (Postęp tab)
 After=docker.service network-online.target
 Wants=network-online.target
+OnFailure=unit-failure-mail@%n.service
 
 [Service]
 Type=oneshot
 WorkingDirectory=%h/code/logs-stack
-EnvironmentFile=%h/code/logs-stack/ops/elitedesk/github-repo-sync.env
+# INGEST_URL/INGEST_TOKEN like every elitedesk agent; the own env file is
+# optional now (GITHUB_TOKEN falls back to `gh auth token`).
+EnvironmentFile=%h/.config/elitedesk-watcher.env
+EnvironmentFile=-%h/code/logs-stack/ops/elitedesk/github-repo-sync.env
 ExecStart=/usr/bin/python3 %h/code/logs-stack/ops/elitedesk/github-repo-sync.py
-# Stream stdout/stderr to journald — elitedesk-watcher picks it up into host_logs.
+# stdout/stderr → journald; activity-watcher turns each run into a unit_runs row.
 StandardOutput=journal
 StandardError=journal
 

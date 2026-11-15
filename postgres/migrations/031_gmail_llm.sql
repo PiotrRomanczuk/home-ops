@@ -59,4 +59,4 @@ CREATE OR REPLACE FUNCTION gmail.rules_json() RETURNS jsonb LANGUAGE sql STABLE 
                  FROM gmail.rule WHERE kind = 'subrule' AND enabled), '[]'::jsonb));
 $$;
 
-COMMENT ON TABLE gmail.rule_proposal IS 'Rules proposed by a local LLM for uncovered senders; accepted ones become gmail.rule rows.';
+COMMENT ON TABLE gmail.rule_proposal IS 'Rules proposed by Claude (headless claude -p) for uncovered senders; accepted ones become gmail.rule rows.';

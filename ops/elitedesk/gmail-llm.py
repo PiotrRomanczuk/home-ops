@@ -46,7 +46,7 @@ def main() -> int:
         print(f'{len(weak)} senders without a rule or proposal ({len(labelled)} rule-filed as examples); '
               f'asking Claude about {min(args.limit, len(weak))}')
         rows, _ = gmail_llm_daily.propose(weak, gmail_llm_daily.model_labels(cfg), labelled, limit=args.limit,
-                                          guide=gmail_llm_db.load_guide()[0])
+                                          guide=gmail_llm_db.load_guide()[0], freemail=cfg['freemail'])
         print(f'{len(rows)} proposals' + (' (dry run, not stored)' if args.dry else f', stored {gmail_llm_db.insert_proposals(rows)}'))
     elif args.step == 'archive':
         ids = gmail_llm_daily.archive_ids(db, cfg, state_ids('in_inbox AND NOT in_trash'))

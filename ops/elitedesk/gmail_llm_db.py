@@ -1,7 +1,9 @@
 """gmail_llm_db.py — gmail.rule_proposal (migration 031): store, list, accept, reject.
 
-Accepting a proposal appends an ordinary gmail.rule row (end of the order, so it
-only ever catches senders no earlier rule matched) and links it back. Writes go
+Accepting a proposal appends an ordinary gmail.rule row at the end of the order and links it
+back. It is checked AFTER the earlier rules but BEFORE classify's "person" step, so an '@domain' rule
+also catches people of that domain — gmail_llm_daily keeps domain proposals to unmixed domains and
+archive_ids never archives a correspondent's mail. Writes go
 through psql variables (seo_db.psql_exec), never string-built SQL values.
 """
 from __future__ import annotations
@@ -16,14 +18,16 @@ PROPOSAL_COLS = ('sender', 'sender_key', 'scope', 'label', 'inbox', 'confidence'
                  'prompt_version', 'sample', 'response')
 
 ACCEPT_SQL = """
-WITH p AS (SELECT * FROM gmail.rule_proposal WHERE id = :'id' AND status = 'proposed'),
+WITH p AS (SELECT *, COALESCE(NULLIF(:'sender_key', ''), sender_key) AS key
+           FROM gmail.rule_proposal WHERE id = :'id' AND status = 'proposed'),
 r AS (INSERT INTO gmail.rule (position, kind, label, senders, inbox, note)
       SELECT (SELECT COALESCE(max(position), 0) + 1 FROM gmail.rule WHERE kind = 'rule'), 'rule', :'label',
-             ARRAY[p.sender_key], :'inbox', 'llm ' || p.model || ' ' || current_date FROM p
+             ARRAY[p.key], :'inbox', 'llm ' || p.model || ' ' || current_date FROM p
       RETURNING id)
-UPDATE gmail.rule_proposal SET status = 'accepted', label = :'label', inbox = :'inbox',
+UPDATE gmail.rule_proposal q SET status = 'accepted', label = :'label', inbox = :'inbox',
+       sender_key = p.key, scope = CASE WHEN p.key LIKE '@%' THEN 'domain' ELSE 'address' END,
        rule_id = (SELECT id FROM r), decided_via = :'via', decided_at = now()
-WHERE id = :'id' AND status = 'proposed';
+FROM p WHERE q.id = p.id AND q.status = 'proposed';
 """
 REJECT_SQL = """UPDATE gmail.rule_proposal SET status = 'rejected', decided_via = :'via', decided_at = now()
 WHERE id = :'id' AND status = 'proposed';"""
@@ -60,8 +64,10 @@ def proposed() -> list[dict]:
                      "ORDER BY (sample->>'n')::int DESC NULLS LAST, id")
 
 
-def accept(proposal_id: int, label: str, inbox: str, via: str) -> None:
-    psql_exec(ACCEPT_SQL, {'id': str(proposal_id), 'label': label, 'inbox': inbox, 'via': via})
+def accept(proposal_id: int, label: str, inbox: str, via: str, sender_key: str | None = None) -> None:
+    """New gmail.rule from the proposal; `sender_key` overrides the proposed address/'@domain' when given."""
+    psql_exec(ACCEPT_SQL, {'id': str(proposal_id), 'label': label, 'inbox': inbox, 'via': via,
+                           'sender_key': sender_key or ''})
 
 
 def reject(proposal_id: int, via: str) -> None:

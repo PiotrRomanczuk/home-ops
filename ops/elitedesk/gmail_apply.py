@@ -11,7 +11,7 @@ import json
 import time
 from pathlib import Path
 
-from gmail_api import Gmail
+from gmail_api import BATCH_LIMIT, Gmail
 
 
 def ensure_labels(gmail: Gmail, names: list[str], log=print) -> dict[str, str]:
@@ -28,20 +28,31 @@ def ensure_labels(gmail: Gmail, names: list[str], log=print) -> dict[str, str]:
     return {n: existing[n] for n in names}
 
 
+def modify_journaled(gmail: Gmail, journal: Path, op: str, label: str, label_id: str, ids: list[str]) -> int:
+    """op 'add'/'remove' one label on `ids`, BATCH_LIMIT at a time; each chunk gets its journal line
+    (flushed) right after it succeeds, so a failure half-way leaves every applied chunk undoable."""
+    if not ids:
+        return 0
+    journal.parent.mkdir(parents=True, exist_ok=True)
+    labels = {'add': [label_id]} if op == 'add' else {'remove': [label_id]}
+    with journal.open('a') as j:
+        for i in range(0, len(ids), BATCH_LIMIT):
+            chunk = ids[i:i + BATCH_LIMIT]
+            gmail.batch_modify(chunk, **labels)
+            j.write(json.dumps({'ts': int(time.time()), 'op': op, 'label': label,
+                                'label_id': label_id, 'ids': chunk}) + '\n')
+            j.flush()
+    return len(ids)
+
+
 def apply_categories(gmail: Gmail, mapping: dict[str, list[str]], journal: Path,
                      log=print) -> int:
     """Add label L to every id in mapping[L]; returns number of messages labelled."""
     ids_by_label = ensure_labels(gmail, sorted(mapping), log)
-    journal.parent.mkdir(parents=True, exist_ok=True)
     done = 0
-    with journal.open('a') as j:
-        for name, ids in sorted(mapping.items(), key=lambda kv: -len(kv[1])):
-            gmail.batch_modify(ids, add=[ids_by_label[name]])
-            j.write(json.dumps({'ts': int(time.time()), 'op': 'add', 'label': name,
-                                'label_id': ids_by_label[name], 'ids': ids}) + '\n')
-            j.flush()
-            done += len(ids)
-            log(f'  {name}: {len(ids)}')
+    for name, ids in sorted(mapping.items(), key=lambda kv: -len(kv[1])):
+        done += modify_journaled(gmail, journal, 'add', name, ids_by_label[name], ids)
+        log(f'  {name}: {len(ids)}')
     return done
 
 
@@ -64,29 +75,38 @@ def reconcile(gmail: Gmail, old: dict[str, list[str]], new: dict[str, list[str]]
     ids_by_label = ensure_labels(gmail, sorted(set(stale) | set(new)), log)
     for name, ids in stale.items():
         ids = sorted(set(ids))
-        gmail.batch_modify(ids, remove=[ids_by_label[name]])
-        with journal.open('a') as j:
-            j.write(json.dumps({'ts': int(time.time()), 'op': 'remove', 'label': name,
-                                'label_id': ids_by_label[name], 'ids': ids}) + '\n')
+        modify_journaled(gmail, journal, 'remove', name, ids_by_label[name], ids)
         log(f'  -{name}: {len(ids)}')
     return apply_categories(gmail, new, journal, log) + sum(len(v) for v in stale.values())
 
 
 def move(gmail: Gmail, op: str, ids: list[str], restore_ids: set[str], journal: Path,
-         note: str = '', log=print) -> int:
+         note: str = '', log=print, *, protected: set[str] | None = None) -> int:
     """trash → add TRASH; archive → remove INBOX; read → remove UNREAD.
 
     restore_ids = messages that had INBOX (trash/archive) or UNREAD (read) before,
     so undo puts back exactly that state.
+
+    Trash needs `protected` (gmail_labels.protected_ids): those ids are never trashed, whoever built
+    the list; the count lands in the journal entry as skipped_protected. Archive/read are not filtered.
     """
     if op not in OPS:
         raise ValueError(op)
+    if op == 'trash' and protected is None:
+        raise ValueError('move(trash) requires protected= (see gmail_labels.protected_ids)')
+    skipped = [i for i in ids if i in protected] if op == 'trash' else []
+    if skipped:
+        ids = [i for i in ids if i not in protected]
+        log(f'  {op} {note}: SKIPPED {len(skipped)} protected ({", ".join(skipped[:20])}{" …" if len(skipped) > 20 else ""})')
+    if not ids:
+        return 0
     add, remove = OPS[op]
     gmail.batch_modify(ids, add=add, remove=remove)
     journal.parent.mkdir(parents=True, exist_ok=True)
     with journal.open('a') as j:
         j.write(json.dumps({'ts': int(time.time()), 'op': op, 'note': note, 'ids': ids,
-                            'inbox_ids': sorted(restore_ids & set(ids))}) + '\n')
+                            'inbox_ids': sorted(restore_ids & set(ids)),
+                            'skipped_protected': len(skipped)}) + '\n')
     log(f'  {op} {note}: {len(ids)}')
     return len(ids)
 

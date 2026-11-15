@@ -1,6 +1,6 @@
 ---
 created: 2026-10-26
-updated: 2026-10-26
+updated: 2026-11-15
 status: accepted
 ---
 
@@ -70,6 +70,22 @@ of home-ops.
 - Undo of any batch is still possible from the journals (files and
   `gmail.applied`), but Gmail empties its Trash 30 days after a trash operation
   regardless — the schema records the fact, it cannot bring the mail back.
+
+## Addendum 2026-11-15 (review fixes, PR #68)
+
+- **A message deleted from the mailbox has no state.** The SQLite inventory only grows. Each run
+  therefore asks IMAP which REST ids are in All Mail (`gmail_imap.sync` returns them) and REST which
+  are in Trash; `alive = All Mail ∪ Trash`. Messages outside `alive` (permanently deleted after
+  the 30-day Trash window, or moved to Spam) keep their `gmail.message` header row but are excluded
+  from classification, label reconciliation and `gmail.message_state` — "gone from the mailbox =
+  no state". Refused as a safety net: an empty All Mail result for a non-empty inventory.
+- **All inventory rows go to `gmail.message` every run** (not a computed "new" subset), so the
+  `message_state → message` foreign key cannot dangle after a restore or a failed earlier run.
+- **Trash is guarded in code.** `gmail_apply.move('trash', …)` takes a mandatory `protected` set
+  (`gmail_labels.protected_ids`) and skips those ids, recording `skipped_protected` in the journal.
+  Archive is not filtered (open decision, see the PR).
+- **Rules seed is one-off.** `gmail_import.py rules` is outside `all` and refuses a non-empty
+  `gmail.rule` without `--force`; Postgres is the source of truth for rules once seeded.
 
 ## Not chosen
 

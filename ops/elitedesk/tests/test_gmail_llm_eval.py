@@ -72,10 +72,21 @@ class ReviewTest(unittest.TestCase):
         store, out = FakeStore(props), []
         feed = iter(['t', 'z', '2', 'a', 't', 'n', 'q'])
         done = gmail_review.review(store, ['Urzędy', 'Zakupy/Sklepy'], ask=lambda _p: next(feed), out=out.append)
-        self.assertEqual(store.accepted, [(1, 'Zakupy', 'archive', 'terminal'), (2, 'Zakupy/Sklepy', 'keep', 'terminal')])
+        self.assertEqual(store.accepted, [(1, 'Zakupy', 'archive', 'terminal', '@x1.pl'), (2, 'Zakupy/Sklepy', 'keep', 'terminal', '@x2.pl')])
         self.assertEqual(store.rejected, [(3, 'terminal')])
         self.assertEqual(done, Counter({'accepted': 2, 'rejected': 1}))
         self.assertTrue(any('[4/4]' in line for line in out))
+
+    def test_s_toggles_domain_rule_to_the_address_and_back_but_not_for_freemail(self):
+        props = [{'id': 1, 'sender': 'bot@firma.pl', 'sender_key': '@firma.pl', 'label': 'Zakupy', 'inbox': 'archive',
+                  'model': 'm', 'confidence': 0.8, 'reason': '', 'decision_id': 7, 'sample': {}},
+                 {'id': 2, 'sender': 'a@proton.me', 'sender_key': 'a@proton.me', 'label': 'Zakupy', 'inbox': 'keep',
+                  'model': 'm', 'confidence': 0.8, 'reason': '', 'sample': {}}]
+        store, out = FakeStore(props), []
+        feed = iter(['s', 't', 's', 't'])
+        gmail_review.review(store, ['Zakupy'], ask=lambda _p: next(feed), out=out.append, freemail={'proton.me'})
+        self.assertEqual([a[4] for a in store.accepted], ['bot@firma.pl', 'a@proton.me'])
+        self.assertTrue(any('zostaje otwarte' in line for line in out))  # proposal 1 has an open "Dziś" question
 
 
 if __name__ == '__main__':

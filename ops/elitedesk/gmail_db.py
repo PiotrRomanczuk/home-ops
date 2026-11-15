@@ -104,6 +104,11 @@ def load_rules() -> dict:
     return out[0]['r'] if out else {}
 
 
+def rules_count() -> int:
+    """Rows in gmail.rule (the rules in Postgres are the source of truth once there are any)."""
+    return psql_json('SELECT count(*)::int AS n FROM gmail.rule')[0]['n']
+
+
 def import_rules(raw: dict) -> int:
     """Replace gmail.rule + gmail.config with the contents of a rules JSON dict."""
     rows = [(n, 'rule', None, r['label'], '{' + ','.join(r.get('from', [])) + '}', r.get('subject'),

@@ -50,6 +50,41 @@ class WeakSendersTest(unittest.TestCase):
         self.assertIn(gmail_llm.REVIEW, labels)
 
 
+class MixedDomainTest(unittest.TestCase):
+    """B1: a bot and a correspondent share a domain → the bot gets an address rule, never '@domain'."""
+
+    CFG = rules_from_dict({'me': [ME], 'freemail': ['gmail.com'], 'rules': []})
+
+    def rows(self):
+        inv = inventory([('1', 3, 'noreply@firma.pl', 'Firma', 'Info', 'CATEGORY_UPDATES', 0),
+                         ('2', 2, 'jan@firma.pl', 'Jan', 'Cześć', 'INBOX', 0),
+                         ('3', 1, 'news@solo.pl', '', 'x', 'CATEGORY_PROMOTIONS', 1)])
+        inv.execute("INSERT INTO messages (id, internal_ms, from_addr, to_addrs, subject, labels) "
+                    "VALUES ('9', 5, ?, 'jan@firma.pl', 'Re', 'SENT')", (ME,))  # the owner wrote to jan → correspondent
+        return inv
+
+    def test_digest_flags_the_mixed_domain(self):
+        weak, _ = daily.sender_digests(self.rows(), self.CFG, trash=set(), skip=set())
+        by = {d['sender']: d for d in weak}
+        self.assertEqual((by['noreply@firma.pl']['domain_mixed'], by['noreply@firma.pl']['domain_people']), (True, 1))
+        self.assertEqual((by['news@solo.pl']['domain_mixed'], by['news@solo.pl']['domain_people']), (False, 0))
+
+    def test_model_asking_for_the_domain_gets_the_address(self):
+        weak, _ = daily.sender_digests(self.rows(), self.CFG, trash=set(), skip=set())
+        answer = {'structured_output': {'proposals': [
+            {'sender': d['sender'], 'label': 'Powiadomienia', 'inbox': 'archive', 'scope': 'domain',
+             'confidence': 0.9, 'reason': 'r'} for d in weak]}}
+        with mock.patch('gmail_llm.claude', return_value=answer):
+            rows, _ = daily.propose(weak, ['Powiadomienia'], [], log=lambda *_: None, freemail=set())
+        keys = {r[0]: r[1] for r in rows}  # sender → sender_key
+        self.assertEqual(keys, {'noreply@firma.pl': 'noreply@firma.pl', 'news@solo.pl': '@solo.pl'})
+
+    def test_a_correspondent_is_never_archived_even_by_a_domain_rule(self):
+        cfg = rules_from_dict({'me': [ME], 'freemail': ['gmail.com'],
+                               'rules': [{'label': 'Powiadomienia', 'from': ['@firma.pl'], 'inbox': 'archive'}]})
+        self.assertEqual(daily.archive_ids(self.rows(), cfg, inbox={'1', '2'}), ['1'])
+
+
 class ArchiveTest(unittest.TestCase):
     def test_archive_only_inbox_mail_of_archive_rules_and_never_protected(self):
         db = inventory([('1', 1, 'sklep@allegro.pl', '', 'Zamówienie', 'INBOX', 0),
@@ -105,6 +140,21 @@ class DzisTest(unittest.TestCase):
         self.assertEqual([kw['ref'] for _, kw in rep.asked], ['gmail-proposal:2', 'gmail-proposal:3'])
         self.assertIn('do archiwum', rep.asked[0][0])
         set_decision.assert_any_call(2, 101)
+
+    def test_expired_question_is_asked_again_and_decision_id_is_overwritten(self):
+        rep = FakeReporter(open_refs=set())  # decision 55 expired: no longer open on "Dziś"
+        stale = [{**PROPOSALS[0], 'decision_id': 55}]
+        with mock.patch('gmail_llm_db.proposed', return_value=stale), \
+             mock.patch('gmail_llm_db.set_decision') as set_decision:
+            self.assertEqual(daily.ask(rep, log=lambda *_: None), 1)
+        set_decision.assert_called_once_with(1, 101)
+        with mock.patch('gmail_llm_db.proposed', return_value=stale), mock.patch('gmail_llm_db.set_decision'):
+            self.assertEqual(daily.ask(FakeReporter(open_refs={'gmail-proposal:1'}), log=lambda *_: None), 0)
+
+    def test_unusable_model_answers_are_not_stored_so_the_sender_comes_back(self):
+        with mock.patch('gmail_llm.claude', return_value={'structured_output': {'proposals': []}}):
+            rows, _ = daily.propose([{'sender': 'a@x.pl'}], ['Zakupy'], [], log=lambda *_: None)
+        self.assertEqual(rows, [])
 
     def test_propose_batches_and_stops_when_claude_fails(self):
         ok = ([gmail_llm.Proposal('a@x.pl', 'Zakupy', 'keep', 'address', 0.9, 'r')],

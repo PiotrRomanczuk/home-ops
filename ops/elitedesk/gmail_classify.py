@@ -1,7 +1,6 @@
 """gmail_classify.py — assign exactly one category label to every inventoried message.
 
-Pure functions over inventory rows + gmail_rules.json; no Gmail calls here.
-Order of precedence (first hit wins):
+Pure functions over inventory rows + gmail_rules.json; no Gmail calls here. Order of precedence (first hit wins):
   1. explicit rules (sender address/domain, optional subject regex)
   2. own mail (from: me) → classified by its recipients, else Ludzie/Wysłane
   3. people Piotr has written to, or free-mail senders without List-Unsubscribe → Ludzie
@@ -38,7 +37,7 @@ class Rule:
     senders: tuple[str, ...] = ()   # 'addr@x.pl', '@x.pl' (exact domain) or 'x.pl' (domain + subdomains)
     subject: re.Pattern | None = None
     automated_only: bool = False    # subject rule applies only to bot-like local parts (never to a person)
-    inbox: str = 'keep'             # 'archive' = matched mail leaves the inbox (gmail_llm_daily.archive)
+    inbox: str = 'keep'             # 'archive': matched mail leaves the inbox (gmail_llm_daily)
 
     def hits(self, addr: str, subject: str) -> bool:
         if self.senders and not any(_sender_match(addr, s) for s in self.senders):
@@ -93,8 +92,7 @@ def is_protected(label: str, subject: str, labels: str, cfg: dict) -> bool:
 def correspondents(db: sqlite3.Connection, me: set[str]) -> set[str]:
     """Every address Piotr has sent mail to (people he actually talks to)."""
     out: set[str] = set()
-    marks = ','.join('?' * len(me))
-    for (to_addrs,) in db.execute(f'SELECT to_addrs FROM messages WHERE from_addr IN ({marks})', tuple(me)):
+    for (to_addrs,) in db.execute(f"SELECT to_addrs FROM messages WHERE from_addr IN ({','.join('?' * len(me))})", tuple(me)):
         out.update(a for a in (to_addrs or '').split(',') if a and a not in me)
     return out
 

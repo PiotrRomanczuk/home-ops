@@ -12,7 +12,7 @@ stack. They're version-controlled here; installed by symlinking into
 | File | What | Install pattern |
 | --- | --- | --- |
 | `gmail_cleanup.py` (+ `gmail_*.py`) | Personal Gmail cleanup CLI: IMAP inventory → SQLite, rule-based categorisation of every message, add-only labelling with undo journal. Token/client in `~/.config/home-ops/gmail-*.json`, state in `~/.local/state/home-ops/gmail/` | `python3 gmail_cleanup.py -h` |
-| `gmail_db.py` + `gmail_import.py` | Schema `gmail` (migration 025): headers, rules as rows, applied-ops log, current category per message. `gmail_import.py all` backfills from the SQLite + journals + rules JSON | see "Gmail routine" below |
+| `gmail_db.py` + `gmail_import.py` | Schema `gmail` (migration 025): headers, rules as rows, applied-ops log, current category per message. `gmail_import.py rules FILE` seeds the rules once (refuses a non-empty `gmail.rule` without `--force`); `all` backfills messages + journals + state (never rules) | see "Gmail routine" below |
 | `gmail-daily.py` / `.service` / `.timer` | 06:40 — inventory new mail over IMAP, classify with `gmail.rules_json()`, reconcile category labels (never trashes), rewrite `gmail.message_state`, one digest card | `systemctl --user link` / `enable --now` |
 | `gmail-daily.env.example` | Template for `gmail-daily.env` (ingest token, `GMAIL_RULES=db`) | copy, `chmod 600` |
 | `gmail_llm.py`, `gmail_llm_db.py`, `gmail_llm_daily.py`, `gmail_llm_guide.py` | Claude (headless `claude -p`, Max subscription) proposes rules for senders no rule covers; proposals in `gmail.rule_proposal` (migration 031); daily steps consume / propose / ask / archive | (imported by `gmail-daily.py`) |
@@ -156,6 +156,31 @@ so mail-client link prefetching can never answer for you. "No" asks for a
 one-line reason; reasons feed the per-routine acceptance line. Set
 `PUBLIC_BASE_URL` in `.env` to the console URL reachable from the phone
 (LAN or Tailscale), then `docker compose up -d --build ingest`.
+
+## PR review — "second pair of eyes" (since 2026-11-11)
+
+The author of a change never accepts it. `pr-review.timer` (hourly 07–23) runs
+`pr_review.py`: every open, non-draft PR whose **head commit** has no row in
+`pr_reviews` (migration 028) gets an independent review — a fresh `claude -p`
+(subscription, `--tools Read,Grep,Glob`, cwd = a cached checkout in
+`~/.cache/pr-review/<repo>`), two passes (`pr_review/review.md` finds,
+`pr_review/verify.md` re-checks every finding and drops the unconfirmed), max 3
+PRs per run. Result: one comment on the PR, label `review:ok` / `review:zmiany`,
+a row in `pr_reviews`, a `pr-review` card on "Dziś".
+
+`pr_decide.py` asks about a PR only once its current head is reviewed;
+options come from `pr_gate.py` (ok → Scal; findings → Popraw / Scal mimo to;
+after 2 fix rounds no Popraw). The question's ref carries the reviewed SHA and
+the merge uses `--match-head-commit`, so an answer never merges newer,
+unreviewed commits. "Popraw" labels the PR `fix-requested` for `pr-agent`
+(infrastructure repo).
+
+```bash
+psql … -f postgres/migrations/028_pr_reviews.sql        # once (idempotent)
+cp ops/elitedesk/pr-review.{service,timer} ~/.config/systemd/user/
+systemctl --user daemon-reload && systemctl --user enable --now pr-review.timer
+python3 ops/elitedesk/pr_review.py --dry-run --pr job-radar#7   # JSON + comment text to ~/.cache/pr-review/dry/, no DB, no GitHub writes
+```
 
 ## Prerequisites — outbound mail
 
@@ -431,9 +456,17 @@ the „Dziś” tab under Problemy); network/5xx failures retry on the next tick
 
 _Added 2026-10-26._ ADR: `docs/adr/2026-10-26-gmail-postgres.md`. The mailbox
 catalogue lives in schema `gmail` of `home_ops`; the routine adds/removes
-*category* labels and journals every batch (`~/.local/state/home-ops/gmail/journal-daily-*.jsonl`
-+ `gmail.applied`). Trash is never automated; archiving happens only for rules a human
-gave `inbox = 'archive'` (see "LLM rule proposals"), never for protected mail.
+*category* labels and journals every chunk of 1000 (`~/.local/state/home-ops/gmail/journal-daily-*.jsonl`
++ `gmail.applied`). Trash is never automated (`gmail_apply.move('trash', …)` refuses ids in `gmail_labels.protected_ids`:
+starred, protected categories, document-like subjects); archiving happens only for rules a human
+gave `inbox = 'archive'` (see "LLM rule proposals"), never for protected mail or a correspondent's mail.
+
+_Updated 2026-11-15._ Every run sends **all** SQLite rows to `gmail.message` (no "which rows are new"
+guessing, so a restored message or a rerun after a Postgres failure cannot leave a hole). A message
+that is neither in All Mail (IMAP) nor in Trash (REST) was deleted from the mailbox: it stays in
+`gmail.message` as history but gets no `message_state`, no label and no API call. Labels are reconciled
+for the rule/subrule/built-in category names too (a category that lost all its messages is cleaned
+up) and only created when they have messages; members are read by label id.
 
 ## One-time setup (elitedesk)
 
@@ -441,8 +474,10 @@ gave `inbox = 'archive'` (see "LLM rule proposals"), never for protected mail.
 cd ~/code/logs-stack && git pull && scripts/apply-migrations.sh      # 025_gmail.sql
 # OAuth client + refresh token made on the Mac (`gmail_cleanup.py auth`; GCP consent screen must be *In production*):
 #   scp ~/.config/home-ops/gmail-{client,token}.json uwh:~/.config/home-ops/   (then chmod 600 on the host)
-# Backfill from the Mac-side state (inventory.sqlite, journal-*.jsonl, gmail-rules.json copied to the same paths):
-python3 ops/elitedesk/gmail_import.py all
+# Copy the Mac-side state to the same paths on the host first (inventory.sqlite + journal-*.jsonl in
+# ~/.local/state/home-ops/gmail/, gmail-rules.json in ~/.config/home-ops/), then seed and backfill:
+python3 ops/elitedesk/gmail_import.py rules      # once; refuses if gmail.rule already has rows
+python3 ops/elitedesk/gmail_import.py all        # messages + journals + state; never touches rules
 cp ops/elitedesk/gmail-daily.env.example ops/elitedesk/gmail-daily.env && chmod 600 ops/elitedesk/gmail-daily.env   # fill INGEST_TOKEN
 systemctl --user link ~/code/logs-stack/ops/elitedesk/gmail-daily.service ~/code/logs-stack/ops/elitedesk/gmail-daily.timer
 systemctl --user enable --now gmail-daily.timer
@@ -460,7 +495,8 @@ docker exec home-ops-postgres-1 psql -U postgres -d home_ops \
 
 Rules are rows in `gmail.rule` (first match wins by `position`; `kind='subrule'`
 refines `parent`). `gmail.rules_json()` is what the classifier reads. Export /
-re-import from a JSON file: `gmail_import.py rules path.json`. A rule change
+seed from a JSON file (empty table only; `--force` overwrites, and drops rules added in Postgres
+since): `gmail_import.py rules [path.json]` (default `~/.config/home-ops/gmail-rules.json`). A rule change
 takes effect on the next run, which also moves already-labelled messages
 (reconcile), journaled as usual.
 

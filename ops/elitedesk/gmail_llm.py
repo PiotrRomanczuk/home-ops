@@ -101,8 +101,9 @@ def schema(labels: list[str], senders: list[str]) -> dict:
     return {'type': 'object', 'required': ['proposals'], 'properties': {'proposals': {'type': 'array', 'items': item}}}
 
 
-def parse(raw: dict | None, sender: str, labels: list[str]) -> Proposal:
-    """Validate one item of the answer; anything off-schema becomes a low-confidence review proposal."""
+def parse(raw: dict | None, sender: str, labels: list[str], freemail=FREEMAIL, domain_mixed: bool = False) -> Proposal:
+    """Validate one item; anything off-schema becomes a low-confidence review proposal.
+    scope 'domain' → 'address' for `freemail` domains and for a mixed domain (people or filed senders in it)."""
     try:
         label, inbox, scope = raw['label'], raw['inbox'], raw['scope']  # type: ignore[index]
         conf = min(max(float(raw.get('confidence', 0)), 0.0), 1.0)  # type: ignore[union-attr]
@@ -110,8 +111,8 @@ def parse(raw: dict | None, sender: str, labels: list[str]) -> Proposal:
         return Proposal(sender, REVIEW, 'keep', 'address', 0.0, 'brak odpowiedzi dla nadawcy', valid=False)
     if label not in labels or inbox not in ('keep', 'archive') or scope not in ('address', 'domain'):
         return Proposal(sender, REVIEW, 'keep', 'address', 0.0, f'spoza schematu: {label!r}', valid=False)
-    if scope == 'domain' and domain(sender) in FREEMAIL:
-        scope = 'address'  # never a rule for all of gmail.com
+    if scope == 'domain' and (domain(sender) in freemail or domain_mixed):
+        scope = 'address'  # never a rule for all of gmail.com, nor for a domain that also holds people
     return Proposal(sender, label, inbox, scope, conf, str(raw.get('reason', ''))[:300])  # type: ignore[union-attr]
 
 
@@ -140,9 +141,10 @@ def claude(prompt: str, fmt: dict, model: str = MODEL, runner=subprocess.run, sy
 
 
 def propose_batch(batch: list[dict], labels: list[str], shots: dict[str, list[str]], model: str = MODEL,
-                  runner=subprocess.run, guide: str = '') -> tuple[list[Proposal], dict]:
+                  runner=subprocess.run, guide: str = '', freemail=FREEMAIL) -> tuple[list[Proposal], dict]:
     """Up to BATCH senders → one Proposal each (missing answers become review) + the full CLI response."""
     senders = [s['sender'] for s in batch]
     response = claude(render(batch, labels, shots), schema(labels, senders), model, runner, system_prompt(guide))
     by_sender = {i.get('sender'): i for i in response['structured_output'].get('proposals', []) if isinstance(i, dict)}
-    return [parse(by_sender.get(s), s, labels) for s in senders], response
+    mixed = {s['sender'] for s in batch if s.get('domain_mixed')}
+    return [parse(by_sender.get(s), s, labels, freemail, s in mixed) for s in senders], response

@@ -47,6 +47,13 @@ class ParseTest(unittest.TestCase):
         p = gmail_llm.parse(item(), 'jan.kowalski@gmail.com', LABELS)
         self.assertEqual((p.scope, p.sender_key), ('address', 'jan.kowalski@gmail.com'))
 
+    def test_configured_freemail_and_mixed_domains_get_the_address_not_the_domain(self):
+        self.assertEqual(gmail_llm.parse(item(), 'anna@proton.me', LABELS).scope, 'domain')  # not in the built-in list
+        p = gmail_llm.parse(item(), 'anna@proton.me', LABELS, freemail={'proton.me'} | gmail_llm.FREEMAIL)
+        self.assertEqual(p.sender_key, 'anna@proton.me')
+        p = gmail_llm.parse(item(), 'bot@firma.pl', LABELS, domain_mixed=True)
+        self.assertEqual((p.scope, p.sender_key), ('address', 'bot@firma.pl'))
+
     def test_confidence_is_clamped(self):
         self.assertEqual(gmail_llm.parse(item(confidence=4), 'a@b.pl', LABELS).confidence, 1.0)
 
