@@ -61,6 +61,15 @@ class RenderDigestTest(unittest.TestCase):
         self.assertIn('Merge PR #52 &lt;title&gt;?', html)
         self.assertNotIn('<title>?', html)
 
+    def test_review_required_decision_links_to_its_review_page_only(self):
+        d = {'id': 10, 'routine': 'pr-decide', 'question': 'strummy #1079: fix', 'context_url': None,
+             'expires_at': '2026-10-16T05:00:00Z', 'options': [{'key': 'yes', 'label': 'Scal'}, {'key': 'no', 'label': 'Odrzuć'}],
+             'links': {}, 'review_url': 'http://c/review/10'}
+        html = rd.render(model(decisions=[d]), NOW)
+        self.assertIn('href="http://c/review/10"', html)
+        self.assertIn('Przejrzyj i zdecyduj', html)
+        self.assertNotIn('>Scal<', html)
+
     def test_problem_shows_count_and_since(self):
         html = rd.render(model(), NOW)
         self.assertIn('1438× in 24 h · 2 other messages', html)

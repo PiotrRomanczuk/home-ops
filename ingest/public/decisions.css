@@ -53,6 +53,8 @@
 }
 .dec-opt:hover { background: rgba(63, 185, 80, 0.14); }
 .dec-opt.no { border-color: var(--lv-error); color: var(--lv-error); }
+/* review-required decisions: a link to /review/:id instead of buttons (033) */
+a.dec-opt.dec-review { display: inline-block; text-decoration: none; }
 .dec-opt.no:hover { background: rgba(248, 81, 73, 0.14); }
 .dec-reason {
   flex: 1 1 200px; min-width: 0; font: inherit; font-size: 12px; padding: 5px 8px;

@@ -1,7 +1,7 @@
 import type { Hono } from 'hono';
 import { tokenOnly } from '../auth.ts';
 import { pool } from '../db.ts';
-import { DECISION_COLS, type DecisionRow, linksFor, normalizeOptions } from '../decisions-store.ts';
+import { DECISION_COLS, type DecisionRow, linksFor, normalizeOptions, reviewUrlFor } from '../decisions-store.ts';
 import {
   ACCEPTANCE_SQL,
   CARDS_SQL,
@@ -83,6 +83,7 @@ export function registerDigestRoutes(app: Hono): void {
       ...d,
       options: normalizeOptions(d.options),
       links: linksFor(d),
+      review_url: reviewUrlFor(d),
     }));
 
     const attention = visibleProblems.length + hostRows.filter((h) => h.status === 'warn' || h.status === 'bad').length;

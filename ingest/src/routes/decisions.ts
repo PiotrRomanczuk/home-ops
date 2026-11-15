@@ -10,6 +10,7 @@ import {
   getDecision,
   linksFor,
   normalizeOptions,
+  reviewUrlFor,
 } from '../decisions-store.ts';
 import { env } from '../env.ts';
 
@@ -24,7 +25,12 @@ const MAX_QUESTION = 300;
 const MAX_REASON = 200;
 
 function withLinks(rows: DecisionRow[], include: boolean) {
-  return rows.map((d) => ({ ...d, options: normalizeOptions(d.options), links: include ? linksFor(d) : undefined }));
+  return rows.map((d) => ({
+    ...d,
+    options: normalizeOptions(d.options),
+    links: include ? linksFor(d) : undefined,
+    review_url: reviewUrlFor(d),
+  }));
 }
 
 export function registerDecisionsRoutes(app: Hono): void {
@@ -72,11 +78,25 @@ export function registerDecisionsRoutes(app: Hono): void {
     if (!Number.isFinite(expiresHours) || expiresHours < 1 || expiresHours > 24 * 30) {
       return c.json({ error: 'expires_hours must be 1..720' }, 400);
     }
+    // Merging code is answered from the review page only (migration 033).
+    const requiresReview = b.requires_review === true;
     const r = await pool.query(
-      `INSERT INTO public.decisions (routine, slug, question, detail, context_url, options, ref, parent_id, expires_at)
-       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, now() + make_interval(hours => $9::int))
+      `INSERT INTO public.decisions
+         (routine, slug, question, detail, context_url, options, ref, parent_id, expires_at, requires_review)
+       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, now() + make_interval(hours => $9::int), $10)
        RETURNING ${DECISION_COLS}`,
-      [routine, slug, question, detail, contextUrl, JSON.stringify(options), ref, parentId, expiresHours],
+      [
+        routine,
+        slug,
+        question,
+        detail,
+        contextUrl,
+        JSON.stringify(options),
+        ref,
+        parentId,
+        expiresHours,
+        requiresReview,
+      ],
     );
     return c.json({ decision: withLinks(r.rows as DecisionRow[], true)[0] }, 201);
   });
