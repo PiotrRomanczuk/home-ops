@@ -1,0 +1,652 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="Definitions_mac_worker" targetNamespace="https://github.com/PiotrRomanczuk/home-ops" exporter="home-ops gen.py" exporterVersion="2026-11-15">
+  <bpmn:documentation>Mac worker (home-ops PR #83), 2026-11-15: agenci Claude w oknach i w 80% limitu, lokalne LLM, nadzorca GPU, pomysły z notatki i WhatsAppa.</bpmn:documentation>
+  <bpmn:collaboration id="Collaboration_mac_worker">
+    <bpmn:participant id="Pool_Piotr" name="Piotr" processRef="Process_Piotr" />
+    <bpmn:participant id="Pool_OpenClaw" name="OpenClaw (WhatsApp)" processRef="Process_OpenClaw" />
+    <bpmn:participant id="Pool_Runner" name="Runner: agenci Claude (pl.pionat.home-ops.sprint)" processRef="Process_Runner" />
+    <bpmn:participant id="Pool_GPU" name="Nadzorca GPU (pl.pionat.mac-worker.gpu)" processRef="Process_GPU" />
+    <bpmn:messageFlow id="Msg_p_idea_o_start" name="WhatsApp" sourceRef="p_idea" targetRef="o_start" />
+    <bpmn:messageFlow id="Msg_o_idea_pl_ideas" name="linia w notatce mac-praca-w-tle" sourceRef="o_idea" targetRef="pl_ideas" />
+    <bpmn:messageFlow id="Msg_w_save_p_pr" name="PR + „Czeka na Piotra”" sourceRef="w_save" targetRef="p_pr" />
+    <bpmn:messageFlow id="Msg_p_gpu_g_collect" name="gpu-jobs.json (root, sudo)" sourceRef="p_gpu" targetRef="g_collect" />
+    <bpmn:messageFlow id="Msg_w_borrow_g_read" name="plik gpu/borrow" sourceRef="w_borrow" targetRef="g_read" />
+  </bpmn:collaboration>
+  <bpmn:dataStore id="DataStore_ds_queue" name="queue/" />
+  <bpmn:dataStore id="DataStore_ds_usage" name="usage.json" />
+  <bpmn:dataStore id="DataStore_ds_note" name="mac-praca-w-tle.md" />
+  <bpmn:dataStore id="DataStore_ds_jobs" name="gpu-jobs.json" />
+  <bpmn:process id="Process_Piotr" isExecutable="false">
+    <bpmn:startEvent id="p_start_eve" name="Wieczorem, kiedy chcesz">
+      <bpmn:outgoing>Flow_p_start_eve_p_status</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="Timer_p_start_eve">
+        <bpmn:timeCycle xsi:type="bpmn:tFormalExpression">R/P1D</bpmn:timeCycle>
+      </bpmn:timerEventDefinition>
+    </bpmn:startEvent>
+    <bpmn:userTask id="p_status" name="Zajrzyj na :8787 i do „Czeka na Piotra”">
+      <bpmn:incoming>Flow_p_start_eve_p_status</bpmn:incoming>
+      <bpmn:outgoing>Flow_p_status_p_pr</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:userTask id="p_pr" name="PR-y na „Dziś”: przejrzyj, scal albo odrzuć">
+      <bpmn:incoming>Flow_p_status_p_pr</bpmn:incoming>
+      <bpmn:outgoing>Flow_p_pr_p_gpu</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:userTask id="p_gpu" name="Propozycja GPU: sesja szykuje listę, Ty: sudo install-gpu.sh">
+      <bpmn:incoming>Flow_p_pr_p_gpu</bpmn:incoming>
+      <bpmn:outgoing>Flow_p_gpu_p_end_eve</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:endEvent id="p_end_eve" name="Gotowe">
+      <bpmn:incoming>Flow_p_gpu_p_end_eve</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:startEvent id="p_start_idea" name="Wpada pomysł">
+      <bpmn:outgoing>Flow_p_start_idea_p_idea</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:userTask id="p_idea" name="Dopisz pomysł: notatka albo WhatsApp „mac: …”">
+      <bpmn:incoming>Flow_p_start_idea_p_idea</bpmn:incoming>
+      <bpmn:outgoing>Flow_p_idea_p_end_idea</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:endEvent id="p_end_idea" name="Pomysł zapisany">
+      <bpmn:incoming>Flow_p_idea_p_end_idea</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_p_start_eve_p_status" sourceRef="p_start_eve" targetRef="p_status" />
+    <bpmn:sequenceFlow id="Flow_p_status_p_pr" sourceRef="p_status" targetRef="p_pr" />
+    <bpmn:sequenceFlow id="Flow_p_pr_p_gpu" sourceRef="p_pr" targetRef="p_gpu" />
+    <bpmn:sequenceFlow id="Flow_p_gpu_p_end_eve" sourceRef="p_gpu" targetRef="p_end_eve" />
+    <bpmn:sequenceFlow id="Flow_p_start_idea_p_idea" sourceRef="p_start_idea" targetRef="p_idea" />
+    <bpmn:sequenceFlow id="Flow_p_idea_p_end_idea" sourceRef="p_idea" targetRef="p_end_idea" />
+  </bpmn:process>
+  <bpmn:process id="Process_OpenClaw" isExecutable="false">
+    <bpmn:startEvent id="o_start" name="Wiadomość „mac: …”">
+      <bpmn:outgoing>Flow_o_start_o_idea</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="MsgDef_o_start" />
+    </bpmn:startEvent>
+    <bpmn:scriptTask id="o_idea" name="idea.py: jedna linia na końcu sekcji Pomysły">
+      <bpmn:incoming>Flow_o_start_o_idea</bpmn:incoming>
+      <bpmn:outgoing>Flow_o_idea_o_end</bpmn:outgoing>
+    </bpmn:scriptTask>
+    <bpmn:endEvent id="o_end" name="Odpowiedź „Dopisane: …”">
+      <bpmn:incoming>Flow_o_idea_o_end</bpmn:incoming>
+      <bpmn:messageEventDefinition id="MsgDef_o_end" />
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_o_start_o_idea" sourceRef="o_start" targetRef="o_idea" />
+    <bpmn:sequenceFlow id="Flow_o_idea_o_end" sourceRef="o_idea" targetRef="o_end" />
+  </bpmn:process>
+  <bpmn:process id="Process_Runner" isExecutable="false">
+    <bpmn:laneSet id="LaneSet_Process_Runner">
+      <bpmn:lane id="Lane_hk" name="Housekeeping (co 60 s)">
+        <bpmn:flowNodeRef>h_start</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>h_split</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>h_g1</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>h_t1</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>h_e1</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>h_g2</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>h_t2</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>h_e2</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>h_g3</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>h_t3</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>h_e3</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_plan" name="Planista (zadanie Opus z kolejki)">
+        <bpmn:flowNodeRef>pl_start</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>pl_read</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>pl_ideas</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>pl_gw</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>pl_task</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>pl_q</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>pl_gpu</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>pl_join</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>pl_plan</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>pl_end</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_work" name="Workery (3 naraz)">
+        <bpmn:flowNodeRef>w_start</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>w_take</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>w_model</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>w_win</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>w_budget</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>w_claude</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>w_wait</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>w_away</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>w_borrow</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>w_local</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>w_wait2</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>w_merge</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>w_result</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>w_save</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>w_done</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>w_limitq</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>w_usage</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>w_exh</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>w_pause</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>w_pend</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>w_retry</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>w_rend</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="h_start" name="Co 60 s">
+      <bpmn:outgoing>Flow_h_start_h_split</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="Timer_h_start">
+        <bpmn:timeCycle xsi:type="bpmn:tFormalExpression">R/PT60S</bpmn:timeCycle>
+      </bpmn:timerEventDefinition>
+    </bpmn:startEvent>
+    <bpmn:parallelGateway id="h_split">
+      <bpmn:incoming>Flow_h_start_h_split</bpmn:incoming>
+      <bpmn:outgoing>Flow_h_split_h_g1</bpmn:outgoing>
+      <bpmn:outgoing>Flow_h_split_h_g2</bpmn:outgoing>
+      <bpmn:outgoing>Flow_h_split_h_g3</bpmn:outgoing>
+    </bpmn:parallelGateway>
+    <bpmn:exclusiveGateway id="h_g1" name="W oknie i ≥ 5 min od odczytu?">
+      <bpmn:incoming>Flow_h_split_h_g1</bpmn:incoming>
+      <bpmn:outgoing>Flow_h_g1_h_t1</bpmn:outgoing>
+      <bpmn:outgoing>Flow_h_g1_h_e1</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="h_t1" name="Odczyt /usage → usage.json (0 tokenów)">
+      <bpmn:incoming>Flow_h_g1_h_t1</bpmn:incoming>
+      <bpmn:outgoing>Flow_h_t1_h_e1</bpmn:outgoing>
+      <bpmn:dataOutputAssociation id="DOA_h_t1_ds_usage">
+        <bpmn:targetRef>ds_usage</bpmn:targetRef>
+      </bpmn:dataOutputAssociation>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="h_e1">
+      <bpmn:incoming>Flow_h_t1_h_e1</bpmn:incoming>
+      <bpmn:incoming>Flow_h_g1_h_e1</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:exclusiveGateway id="h_g2" name="Kolejka Claude &lt; 6, planista ≥ 3 h temu, budżet OK?">
+      <bpmn:incoming>Flow_h_split_h_g2</bpmn:incoming>
+      <bpmn:outgoing>Flow_h_g2_h_t2</bpmn:outgoing>
+      <bpmn:outgoing>Flow_h_g2_h_e2</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:task id="h_t2" name="Dodaj zadanie planisty (Opus) do queue/">
+      <bpmn:incoming>Flow_h_g2_h_t2</bpmn:incoming>
+      <bpmn:outgoing>Flow_h_t2_h_e2</bpmn:outgoing>
+      <bpmn:dataOutputAssociation id="DOA_h_t2_ds_queue">
+        <bpmn:targetRef>ds_queue</bpmn:targetRef>
+      </bpmn:dataOutputAssociation>
+    </bpmn:task>
+    <bpmn:endEvent id="h_e2">
+      <bpmn:incoming>Flow_h_t2_h_e2</bpmn:incoming>
+      <bpmn:incoming>Flow_h_g2_h_e2</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:exclusiveGateway id="h_g3" name="Po 06:30 i brak podsumowania z dziś?">
+      <bpmn:incoming>Flow_h_split_h_g3</bpmn:incoming>
+      <bpmn:outgoing>Flow_h_g3_h_t3</bpmn:outgoing>
+      <bpmn:outgoing>Flow_h_g3_h_e3</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:task id="h_t3" name="Dodaj zadanie podsumowania dnia (Sonnet)">
+      <bpmn:incoming>Flow_h_g3_h_t3</bpmn:incoming>
+      <bpmn:outgoing>Flow_h_t3_h_e3</bpmn:outgoing>
+      <bpmn:dataOutputAssociation id="DOA_h_t3_ds_queue">
+        <bpmn:targetRef>ds_queue</bpmn:targetRef>
+      </bpmn:dataOutputAssociation>
+    </bpmn:task>
+    <bpmn:endEvent id="h_e3">
+      <bpmn:incoming>Flow_h_t3_h_e3</bpmn:incoming>
+      <bpmn:incoming>Flow_h_g3_h_e3</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:dataStoreReference id="ds_usage" name="usage.json (odczyt limitów)" dataStoreRef="DataStore_ds_usage" />
+    <bpmn:dataStoreReference id="ds_queue" name="Kolejka queue/" dataStoreRef="DataStore_ds_queue" />
+    <bpmn:startEvent id="pl_start" name="Zadanie planisty z kolejki">
+      <bpmn:outgoing>Flow_pl_start_pl_read</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:task id="pl_read" name="Czytaj wyniki, runs.jsonl, otwarte PR-y, Now projektów">
+      <bpmn:incoming>Flow_pl_start_pl_read</bpmn:incoming>
+      <bpmn:outgoing>Flow_pl_read_pl_ideas</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="pl_ideas" name="Przejrzyj sekcję Pomysły w notatce">
+      <bpmn:incoming>Flow_pl_read_pl_ideas</bpmn:incoming>
+      <bpmn:outgoing>Flow_pl_ideas_pl_gw</bpmn:outgoing>
+      <bpmn:property id="Property_pl_ideas_ds_note" name="__targetRef_placeholder" />
+      <bpmn:dataInputAssociation id="DIA_ds_note_pl_ideas">
+        <bpmn:sourceRef>ds_note</bpmn:sourceRef>
+        <bpmn:targetRef>Property_pl_ideas_ds_note</bpmn:targetRef>
+      </bpmn:dataInputAssociation>
+    </bpmn:task>
+    <bpmn:exclusiveGateway id="pl_gw" name="Co z pomysłem?">
+      <bpmn:incoming>Flow_pl_ideas_pl_gw</bpmn:incoming>
+      <bpmn:outgoing>Flow_pl_gw_pl_task</bpmn:outgoing>
+      <bpmn:outgoing>Flow_pl_gw_pl_q</bpmn:outgoing>
+      <bpmn:outgoing>Flow_pl_gw_pl_gpu</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:task id="pl_task" name="Zadanie do queue/">
+      <bpmn:incoming>Flow_pl_gw_pl_task</bpmn:incoming>
+      <bpmn:outgoing>Flow_pl_task_pl_join</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="pl_q" name="Pytanie do „Czeka na Piotra”">
+      <bpmn:incoming>Flow_pl_gw_pl_q</bpmn:incoming>
+      <bpmn:outgoing>Flow_pl_q_pl_join</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="pl_gpu" name="Propozycja GPU w notatce (polecenie, czas)">
+      <bpmn:incoming>Flow_pl_gw_pl_gpu</bpmn:incoming>
+      <bpmn:outgoing>Flow_pl_gpu_pl_join</bpmn:outgoing>
+      <bpmn:dataOutputAssociation id="DOA_pl_gpu_ds_note">
+        <bpmn:targetRef>ds_note</bpmn:targetRef>
+      </bpmn:dataOutputAssociation>
+    </bpmn:task>
+    <bpmn:exclusiveGateway id="pl_join">
+      <bpmn:incoming>Flow_pl_task_pl_join</bpmn:incoming>
+      <bpmn:incoming>Flow_pl_q_pl_join</bpmn:incoming>
+      <bpmn:incoming>Flow_pl_gpu_pl_join</bpmn:incoming>
+      <bpmn:outgoing>Flow_pl_join_pl_plan</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:task id="pl_plan" name="Dopisz 6–10 zadań, wybierz model: local / haiku / sonnet / opus">
+      <bpmn:incoming>Flow_pl_join_pl_plan</bpmn:incoming>
+      <bpmn:outgoing>Flow_pl_plan_pl_end</bpmn:outgoing>
+      <bpmn:dataOutputAssociation id="DOA_pl_plan_ds_queue">
+        <bpmn:targetRef>ds_queue</bpmn:targetRef>
+      </bpmn:dataOutputAssociation>
+    </bpmn:task>
+    <bpmn:endEvent id="pl_end" name="Kolejka uzupełniona">
+      <bpmn:incoming>Flow_pl_plan_pl_end</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:dataStoreReference id="ds_note" name="Notatka mac-praca-w-tle" dataStoreRef="DataStore_ds_note" />
+    <bpmn:startEvent id="w_start" name="Co 20 s, każdy worker">
+      <bpmn:outgoing>Flow_w_start_w_take</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="Timer_w_start">
+        <bpmn:timeCycle xsi:type="bpmn:tFormalExpression">R/PT20S</bpmn:timeCycle>
+      </bpmn:timerEventDefinition>
+    </bpmn:startEvent>
+    <bpmn:task id="w_take" name="Weź najlepsze zadanie z queue/ (priorytet, after, lock)">
+      <bpmn:incoming>Flow_w_start_w_take</bpmn:incoming>
+      <bpmn:outgoing>Flow_w_take_w_model</bpmn:outgoing>
+      <bpmn:property id="Property_w_take_ds_queue_w" name="__targetRef_placeholder" />
+      <bpmn:dataInputAssociation id="DIA_ds_queue_w_w_take">
+        <bpmn:sourceRef>ds_queue_w</bpmn:sourceRef>
+        <bpmn:targetRef>Property_w_take_ds_queue_w</bpmn:targetRef>
+      </bpmn:dataInputAssociation>
+    </bpmn:task>
+    <bpmn:exclusiveGateway id="w_model" name="Model lokalny (local:*)?">
+      <bpmn:incoming>Flow_w_take_w_model</bpmn:incoming>
+      <bpmn:outgoing>Flow_w_model_w_win</bpmn:outgoing>
+      <bpmn:outgoing>Flow_w_model_w_away</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:exclusiveGateway id="w_win" name="W oknie i zdąży przed jego końcem?">
+      <bpmn:incoming>Flow_w_model_w_win</bpmn:incoming>
+      <bpmn:outgoing>Flow_w_win_w_budget</bpmn:outgoing>
+      <bpmn:outgoing>Flow_w_win_w_wait</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:exclusiveGateway id="w_budget" name="Tydzień &lt; 80% i &lt; linia tempa, sesja &lt; 90%?">
+      <bpmn:incoming>Flow_w_win_w_budget</bpmn:incoming>
+      <bpmn:outgoing>Flow_w_budget_w_claude</bpmn:outgoing>
+      <bpmn:outgoing>Flow_w_budget_w_wait</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="w_claude" name="Claude Code na Claude: nowa sesja, rules.md, tryb auto">
+      <bpmn:incoming>Flow_w_budget_w_claude</bpmn:incoming>
+      <bpmn:outgoing>Flow_w_claude_w_merge</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="w_wait" name="Zostaje w kolejce">
+      <bpmn:incoming>Flow_w_win_w_wait</bpmn:incoming>
+      <bpmn:incoming>Flow_w_budget_w_wait</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:exclusiveGateway id="w_away" name="Piotr nieobecny 10 min, zasilacz, chłodno, pamięć OK, &lt; 8 dziś?">
+      <bpmn:incoming>Flow_w_model_w_away</bpmn:incoming>
+      <bpmn:outgoing>Flow_w_away_w_borrow</bpmn:outgoing>
+      <bpmn:outgoing>Flow_w_away_w_wait2</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:task id="w_borrow" name="Utwórz gpu/borrow (GPU dla LLM)">
+      <bpmn:incoming>Flow_w_away_w_borrow</bpmn:incoming>
+      <bpmn:outgoing>Flow_w_borrow_w_local</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:serviceTask id="w_local" name="Claude Code na Ollamie (qwen / gemma), bez limitu">
+      <bpmn:incoming>Flow_w_borrow_w_local</bpmn:incoming>
+      <bpmn:outgoing>Flow_w_local_w_merge</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="w_wait2" name="Czeka, aż Piotr odejdzie">
+      <bpmn:incoming>Flow_w_away_w_wait2</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:exclusiveGateway id="w_merge">
+      <bpmn:incoming>Flow_w_claude_w_merge</bpmn:incoming>
+      <bpmn:incoming>Flow_w_local_w_merge</bpmn:incoming>
+      <bpmn:outgoing>Flow_w_merge_w_result</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:exclusiveGateway id="w_result" name="Wynik?">
+      <bpmn:incoming>Flow_w_merge_w_result</bpmn:incoming>
+      <bpmn:outgoing>Flow_w_result_w_save</bpmn:outgoing>
+      <bpmn:outgoing>Flow_w_result_w_limitq</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:task id="w_save" name="Zapisz wynik, runs.jsonl, wiersz w raporcie; PR do dev">
+      <bpmn:incoming>Flow_w_result_w_save</bpmn:incoming>
+      <bpmn:outgoing>Flow_w_save_w_done</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:endEvent id="w_done" name="done/">
+      <bpmn:incoming>Flow_w_save_w_done</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:exclusiveGateway id="w_limitq" name="Komunikat o limicie (Claude)?">
+      <bpmn:incoming>Flow_w_result_w_limitq</bpmn:incoming>
+      <bpmn:outgoing>Flow_w_limitq_w_usage</bpmn:outgoing>
+      <bpmn:outgoing>Flow_w_limitq_w_retry</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="w_usage" name="Odczyt /usage">
+      <bpmn:incoming>Flow_w_limitq_w_usage</bpmn:incoming>
+      <bpmn:outgoing>Flow_w_usage_w_exh</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="w_exh" name="Któryś limit ≥ 99%?">
+      <bpmn:incoming>Flow_w_usage_w_exh</bpmn:incoming>
+      <bpmn:outgoing>Flow_w_exh_w_pause</bpmn:outgoing>
+      <bpmn:outgoing>Flow_w_exh_w_retry</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:task id="w_pause" name="Pauza agentów do resetu; zadanie wraca do queue/">
+      <bpmn:incoming>Flow_w_exh_w_pause</bpmn:incoming>
+      <bpmn:outgoing>Flow_w_pause_w_pend</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:endEvent id="w_pend" name="Czeka na reset">
+      <bpmn:incoming>Flow_w_pause_w_pend</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:task id="w_retry" name="Silniejszy model (local→sonnet→opus); po 2 próbach failed/">
+      <bpmn:incoming>Flow_w_limitq_w_retry</bpmn:incoming>
+      <bpmn:incoming>Flow_w_exh_w_retry</bpmn:incoming>
+      <bpmn:outgoing>Flow_w_retry_w_rend</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:endEvent id="w_rend" name="Kolejna próba albo failed/">
+      <bpmn:incoming>Flow_w_retry_w_rend</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:dataStoreReference id="ds_queue_w" name="Kolejka queue/" dataStoreRef="DataStore_ds_queue" />
+    <bpmn:sequenceFlow id="Flow_h_start_h_split" sourceRef="h_start" targetRef="h_split" />
+    <bpmn:sequenceFlow id="Flow_h_split_h_g1" sourceRef="h_split" targetRef="h_g1" />
+    <bpmn:sequenceFlow id="Flow_h_g1_h_t1" name="tak" sourceRef="h_g1" targetRef="h_t1" />
+    <bpmn:sequenceFlow id="Flow_h_t1_h_e1" sourceRef="h_t1" targetRef="h_e1" />
+    <bpmn:sequenceFlow id="Flow_h_g1_h_e1" name="nie" sourceRef="h_g1" targetRef="h_e1" />
+    <bpmn:sequenceFlow id="Flow_h_split_h_g2" sourceRef="h_split" targetRef="h_g2" />
+    <bpmn:sequenceFlow id="Flow_h_g2_h_t2" name="tak" sourceRef="h_g2" targetRef="h_t2" />
+    <bpmn:sequenceFlow id="Flow_h_t2_h_e2" sourceRef="h_t2" targetRef="h_e2" />
+    <bpmn:sequenceFlow id="Flow_h_g2_h_e2" name="nie" sourceRef="h_g2" targetRef="h_e2" />
+    <bpmn:sequenceFlow id="Flow_h_split_h_g3" sourceRef="h_split" targetRef="h_g3" />
+    <bpmn:sequenceFlow id="Flow_h_g3_h_t3" name="tak" sourceRef="h_g3" targetRef="h_t3" />
+    <bpmn:sequenceFlow id="Flow_h_t3_h_e3" sourceRef="h_t3" targetRef="h_e3" />
+    <bpmn:sequenceFlow id="Flow_h_g3_h_e3" name="nie" sourceRef="h_g3" targetRef="h_e3" />
+    <bpmn:sequenceFlow id="Flow_pl_start_pl_read" sourceRef="pl_start" targetRef="pl_read" />
+    <bpmn:sequenceFlow id="Flow_pl_read_pl_ideas" sourceRef="pl_read" targetRef="pl_ideas" />
+    <bpmn:sequenceFlow id="Flow_pl_ideas_pl_gw" sourceRef="pl_ideas" targetRef="pl_gw" />
+    <bpmn:sequenceFlow id="Flow_pl_gw_pl_task" name="zadanie" sourceRef="pl_gw" targetRef="pl_task" />
+    <bpmn:sequenceFlow id="Flow_pl_gw_pl_q" name="brak decyzji" sourceRef="pl_gw" targetRef="pl_q" />
+    <bpmn:sequenceFlow id="Flow_pl_gw_pl_gpu" name="długie obliczenia" sourceRef="pl_gw" targetRef="pl_gpu" />
+    <bpmn:sequenceFlow id="Flow_pl_task_pl_join" sourceRef="pl_task" targetRef="pl_join" />
+    <bpmn:sequenceFlow id="Flow_pl_q_pl_join" sourceRef="pl_q" targetRef="pl_join" />
+    <bpmn:sequenceFlow id="Flow_pl_gpu_pl_join" sourceRef="pl_gpu" targetRef="pl_join" />
+    <bpmn:sequenceFlow id="Flow_pl_join_pl_plan" sourceRef="pl_join" targetRef="pl_plan" />
+    <bpmn:sequenceFlow id="Flow_pl_plan_pl_end" sourceRef="pl_plan" targetRef="pl_end" />
+    <bpmn:sequenceFlow id="Flow_w_start_w_take" sourceRef="w_start" targetRef="w_take" />
+    <bpmn:sequenceFlow id="Flow_w_take_w_model" sourceRef="w_take" targetRef="w_model" />
+    <bpmn:sequenceFlow id="Flow_w_model_w_win" name="nie" sourceRef="w_model" targetRef="w_win" />
+    <bpmn:sequenceFlow id="Flow_w_model_w_away" name="tak" sourceRef="w_model" targetRef="w_away" />
+    <bpmn:sequenceFlow id="Flow_w_win_w_budget" name="tak" sourceRef="w_win" targetRef="w_budget" />
+    <bpmn:sequenceFlow id="Flow_w_win_w_wait" name="nie" sourceRef="w_win" targetRef="w_wait" />
+    <bpmn:sequenceFlow id="Flow_w_budget_w_claude" name="tak" sourceRef="w_budget" targetRef="w_claude" />
+    <bpmn:sequenceFlow id="Flow_w_budget_w_wait" name="nie" sourceRef="w_budget" targetRef="w_wait" />
+    <bpmn:sequenceFlow id="Flow_w_claude_w_merge" sourceRef="w_claude" targetRef="w_merge" />
+    <bpmn:sequenceFlow id="Flow_w_away_w_borrow" name="tak" sourceRef="w_away" targetRef="w_borrow" />
+    <bpmn:sequenceFlow id="Flow_w_away_w_wait2" name="nie" sourceRef="w_away" targetRef="w_wait2" />
+    <bpmn:sequenceFlow id="Flow_w_borrow_w_local" sourceRef="w_borrow" targetRef="w_local" />
+    <bpmn:sequenceFlow id="Flow_w_local_w_merge" sourceRef="w_local" targetRef="w_merge" />
+    <bpmn:sequenceFlow id="Flow_w_merge_w_result" sourceRef="w_merge" targetRef="w_result" />
+    <bpmn:sequenceFlow id="Flow_w_result_w_save" name="OK" sourceRef="w_result" targetRef="w_save" />
+    <bpmn:sequenceFlow id="Flow_w_save_w_done" sourceRef="w_save" targetRef="w_done" />
+    <bpmn:sequenceFlow id="Flow_w_result_w_limitq" name="błąd" sourceRef="w_result" targetRef="w_limitq" />
+    <bpmn:sequenceFlow id="Flow_w_limitq_w_usage" name="tak" sourceRef="w_limitq" targetRef="w_usage" />
+    <bpmn:sequenceFlow id="Flow_w_usage_w_exh" sourceRef="w_usage" targetRef="w_exh" />
+    <bpmn:sequenceFlow id="Flow_w_exh_w_pause" name="tak" sourceRef="w_exh" targetRef="w_pause" />
+    <bpmn:sequenceFlow id="Flow_w_pause_w_pend" sourceRef="w_pause" targetRef="w_pend" />
+    <bpmn:sequenceFlow id="Flow_w_limitq_w_retry" name="nie" sourceRef="w_limitq" targetRef="w_retry" />
+    <bpmn:sequenceFlow id="Flow_w_exh_w_retry" name="nie" sourceRef="w_exh" targetRef="w_retry" />
+    <bpmn:sequenceFlow id="Flow_w_retry_w_rend" sourceRef="w_retry" targetRef="w_rend" />
+    <bpmn:textAnnotation id="Note_budget">
+      <bpmn:text>Linia tempa = 80% × część tygodnia od resetu (pon. 17:00) + 10 pp. Czyta usage.json (odczyt nie starszy niż 15 min).</bpmn:text>
+    </bpmn:textAnnotation>
+    <bpmn:association id="Assoc_Note_budget" sourceRef="Note_budget" targetRef="w_budget" />
+    <bpmn:textAnnotation id="Note_local">
+      <bpmn:text>Lokalny model: ANTHROPIC_BASE_URL → Ollama, jedno naraz, najwyżej 8 dziennie. Porażka → sonnet (już w oknach i budżecie).</bpmn:text>
+    </bpmn:textAnnotation>
+    <bpmn:association id="Assoc_Note_local" sourceRef="Note_local" targetRef="w_local" />
+  </bpmn:process>
+  <bpmn:process id="Process_GPU" isExecutable="false">
+    <bpmn:startEvent id="g_start" name="Co 30 s">
+      <bpmn:outgoing>Flow_g_start_g_collect</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="Timer_g_start">
+        <bpmn:timeCycle xsi:type="bpmn:tFormalExpression">R/PT30S</bpmn:timeCycle>
+      </bpmn:timerEventDefinition>
+    </bpmn:startEvent>
+    <bpmn:task id="g_collect" name="Zbierz zakończone shardy; gotowe zadanie → następne z listy">
+      <bpmn:incoming>Flow_g_start_g_collect</bpmn:incoming>
+      <bpmn:outgoing>Flow_g_collect_g_read</bpmn:outgoing>
+      <bpmn:property id="Property_g_collect_ds_jobs" name="__targetRef_placeholder" />
+      <bpmn:dataInputAssociation id="DIA_ds_jobs_g_collect">
+        <bpmn:sourceRef>ds_jobs</bpmn:sourceRef>
+        <bpmn:targetRef>Property_g_collect_ds_jobs</bpmn:targetRef>
+      </bpmn:dataInputAssociation>
+    </bpmn:task>
+    <bpmn:serviceTask id="g_read" name="Odczyt Maca: bezczynność, zasilacz, thermalState, pamięć, ekran, Logic, borrow">
+      <bpmn:incoming>Flow_g_collect_g_read</bpmn:incoming>
+      <bpmn:outgoing>Flow_g_read_g_must</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="g_must" name="Bateria, thermalState ≥ 2 albo pamięć ≥ 2?">
+      <bpmn:incoming>Flow_g_read_g_must</bpmn:incoming>
+      <bpmn:outgoing>Flow_g_must_g_stop</bpmn:outgoing>
+      <bpmn:outgoing>Flow_g_must_g_hold</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:task id="g_stop" name="Zatrzymaj shardy: CONT + TERM, po 30 s KILL">
+      <bpmn:incoming>Flow_g_must_g_stop</bpmn:incoming>
+      <bpmn:outgoing>Flow_g_stop_g_stop_end</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:endEvent id="g_stop_end" name="Wznowią się później od miejsca przerwania">
+      <bpmn:incoming>Flow_g_stop_g_stop_end</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:exclusiveGateway id="g_hold" name="Piotr przy Macu, borrow, obce song2logic albo dark wake?">
+      <bpmn:incoming>Flow_g_must_g_hold</bpmn:incoming>
+      <bpmn:outgoing>Flow_g_hold_g_pause</bpmn:outgoing>
+      <bpmn:outgoing>Flow_g_hold_g_resume</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:task id="g_pause" name="Wstrzymaj shardy (SIGSTOP)">
+      <bpmn:incoming>Flow_g_hold_g_pause</bpmn:incoming>
+      <bpmn:outgoing>Flow_g_pause_g_pause_end</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:endEvent id="g_pause_end" name="Pauza bez strat">
+      <bpmn:incoming>Flow_g_pause_g_pause_end</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:task id="g_resume" name="Wznów wstrzymane (SIGCONT)">
+      <bpmn:incoming>Flow_g_hold_g_resume</bpmn:incoming>
+      <bpmn:outgoing>Flow_g_resume_g_can</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:exclusiveGateway id="g_can" name="Zasilacz, thermalState 0, pamięć w normie?">
+      <bpmn:incoming>Flow_g_resume_g_can</bpmn:incoming>
+      <bpmn:outgoing>Flow_g_can_g_run</bpmn:outgoing>
+      <bpmn:outgoing>Flow_g_can_g_wait_end</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:task id="g_run" name="Uruchom brakujące shardy bieżącego zadania (grupy procesów)">
+      <bpmn:incoming>Flow_g_can_g_run</bpmn:incoming>
+      <bpmn:outgoing>Flow_g_run_g_run_end</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:endEvent id="g_run_end" name="Pracuje">
+      <bpmn:incoming>Flow_g_run_g_run_end</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:endEvent id="g_wait_end" name="Czeka na warunki">
+      <bpmn:incoming>Flow_g_can_g_wait_end</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:dataStoreReference id="ds_jobs" name="gpu-jobs.json (root)" dataStoreRef="DataStore_ds_jobs" />
+    <bpmn:sequenceFlow id="Flow_g_start_g_collect" sourceRef="g_start" targetRef="g_collect" />
+    <bpmn:sequenceFlow id="Flow_g_collect_g_read" sourceRef="g_collect" targetRef="g_read" />
+    <bpmn:sequenceFlow id="Flow_g_read_g_must" sourceRef="g_read" targetRef="g_must" />
+    <bpmn:sequenceFlow id="Flow_g_must_g_stop" name="tak" sourceRef="g_must" targetRef="g_stop" />
+    <bpmn:sequenceFlow id="Flow_g_stop_g_stop_end" sourceRef="g_stop" targetRef="g_stop_end" />
+    <bpmn:sequenceFlow id="Flow_g_must_g_hold" name="nie" sourceRef="g_must" targetRef="g_hold" />
+    <bpmn:sequenceFlow id="Flow_g_hold_g_pause" name="tak" sourceRef="g_hold" targetRef="g_pause" />
+    <bpmn:sequenceFlow id="Flow_g_pause_g_pause_end" sourceRef="g_pause" targetRef="g_pause_end" />
+    <bpmn:sequenceFlow id="Flow_g_hold_g_resume" name="nie" sourceRef="g_hold" targetRef="g_resume" />
+    <bpmn:sequenceFlow id="Flow_g_resume_g_can" sourceRef="g_resume" targetRef="g_can" />
+    <bpmn:sequenceFlow id="Flow_g_can_g_run" name="tak" sourceRef="g_can" targetRef="g_run" />
+    <bpmn:sequenceFlow id="Flow_g_run_g_run_end" sourceRef="g_run" targetRef="g_run_end" />
+    <bpmn:sequenceFlow id="Flow_g_can_g_wait_end" name="nie" sourceRef="g_can" targetRef="g_wait_end" />
+    <bpmn:textAnnotation id="Note_gpu">
+      <bpmn:text>Kolejka GPU: song2logic Strummy → llm-bench gemma4:26b → llm-bench qwen3.8:27b → song2logic polubione. Pauza zamraża procesy, stop = przebieg wznowi się od miejsca przerwania (JSONL).</bpmn:text>
+    </bpmn:textAnnotation>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram_mac_worker">
+    <bpmndi:BPMNPlane id="Plane_mac_worker" bpmnElement="Collaboration_mac_worker">
+      <bpmndi:BPMNShape id="Pool_Piotr_di" bpmnElement="Pool_Piotr" isHorizontal="true"><dc:Bounds x="0" y="0" width="2560" height="310" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Pool_OpenClaw_di" bpmnElement="Pool_OpenClaw" isHorizontal="true"><dc:Bounds x="0" y="330" width="2560" height="170" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Pool_Runner_di" bpmnElement="Pool_Runner" isHorizontal="true"><dc:Bounds x="0" y="520" width="2560" height="1490" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Pool_GPU_di" bpmnElement="Pool_GPU" isHorizontal="true"><dc:Bounds x="0" y="2050" width="2560" height="590" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_hk_di" bpmnElement="Lane_hk" isHorizontal="true"><dc:Bounds x="30" y="520" width="2530" height="450" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_plan_di" bpmnElement="Lane_plan" isHorizontal="true"><dc:Bounds x="30" y="970" width="2530" height="450" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_work_di" bpmnElement="Lane_work" isHorizontal="true"><dc:Bounds x="30" y="1420" width="2530" height="590" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="p_start_eve_di" bpmnElement="p_start_eve"><dc:Bounds x="167" y="67" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="120" y="109" width="130" height="28" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="p_status_di" bpmnElement="p_status"><dc:Bounds x="295" y="45" width="150" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="p_pr_di" bpmnElement="p_pr"><dc:Bounds x="480" y="45" width="150" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="p_gpu_di" bpmnElement="p_gpu"><dc:Bounds x="665" y="45" width="150" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="p_end_eve_di" bpmnElement="p_end_eve"><dc:Bounds x="907" y="67" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="860" y="109" width="130" height="28" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="p_start_idea_di" bpmnElement="p_start_idea"><dc:Bounds x="167" y="207" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="120" y="249" width="130" height="28" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="p_idea_di" bpmnElement="p_idea"><dc:Bounds x="295" y="185" width="150" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="p_end_idea_di" bpmnElement="p_end_idea"><dc:Bounds x="537" y="207" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="490" y="249" width="130" height="28" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="o_start_di" bpmnElement="o_start"><dc:Bounds x="1092" y="397" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="1045" y="439" width="130" height="28" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="o_idea_di" bpmnElement="o_idea"><dc:Bounds x="1220" y="375" width="150" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="o_end_di" bpmnElement="o_end"><dc:Bounds x="1462" y="397" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="1415" y="439" width="130" height="28" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="h_start_di" bpmnElement="h_start"><dc:Bounds x="167" y="727" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="120" y="769" width="130" height="28" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="h_split_di" bpmnElement="h_split"><dc:Bounds x="345" y="720" width="50" height="50" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="h_g1_di" bpmnElement="h_g1"><dc:Bounds x="530" y="580" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="455" y="534" width="200" height="40" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="h_t1_di" bpmnElement="h_t1"><dc:Bounds x="665" y="565" width="150" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="h_e1_di" bpmnElement="h_e1"><dc:Bounds x="907" y="587" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="h_g2_di" bpmnElement="h_g2"><dc:Bounds x="530" y="720" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="455" y="674" width="200" height="40" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="h_t2_di" bpmnElement="h_t2"><dc:Bounds x="665" y="705" width="150" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="h_e2_di" bpmnElement="h_e2"><dc:Bounds x="907" y="727" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="h_g3_di" bpmnElement="h_g3"><dc:Bounds x="530" y="860" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="455" y="814" width="200" height="40" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="h_t3_di" bpmnElement="h_t3"><dc:Bounds x="665" y="845" width="150" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="h_e3_di" bpmnElement="h_e3"><dc:Bounds x="907" y="867" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ds_usage_di" bpmnElement="ds_usage"><dc:Bounds x="1085" y="580" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="1143" y="588" width="120" height="34" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ds_queue_di" bpmnElement="ds_queue"><dc:Bounds x="1085" y="790" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="1143" y="798" width="120" height="34" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="pl_start_di" bpmnElement="pl_start"><dc:Bounds x="907" y="1037" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="860" y="1079" width="130" height="28" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="pl_read_di" bpmnElement="pl_read"><dc:Bounds x="1035" y="1015" width="150" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="pl_ideas_di" bpmnElement="pl_ideas"><dc:Bounds x="1220" y="1015" width="150" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="pl_gw_di" bpmnElement="pl_gw"><dc:Bounds x="1455" y="1030" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="1380" y="984" width="200" height="40" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="pl_task_di" bpmnElement="pl_task"><dc:Bounds x="1590" y="1015" width="150" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="pl_q_di" bpmnElement="pl_q"><dc:Bounds x="1590" y="1155" width="150" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="pl_gpu_di" bpmnElement="pl_gpu"><dc:Bounds x="1590" y="1295" width="150" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="pl_join_di" bpmnElement="pl_join"><dc:Bounds x="1825" y="1030" width="50" height="50" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="pl_plan_di" bpmnElement="pl_plan"><dc:Bounds x="1960" y="1015" width="150" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="pl_end_di" bpmnElement="pl_end"><dc:Bounds x="2202" y="1037" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="2155" y="1079" width="130" height="28" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ds_note_di" bpmnElement="ds_note"><dc:Bounds x="1270" y="1310" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="1328" y="1318" width="120" height="34" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="w_start_di" bpmnElement="w_start"><dc:Bounds x="167" y="1487" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="120" y="1529" width="130" height="28" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="w_take_di" bpmnElement="w_take"><dc:Bounds x="295" y="1465" width="150" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="w_model_di" bpmnElement="w_model"><dc:Bounds x="530" y="1480" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="455" y="1434" width="200" height="40" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="w_win_di" bpmnElement="w_win"><dc:Bounds x="715" y="1480" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="640" y="1434" width="200" height="40" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="w_budget_di" bpmnElement="w_budget"><dc:Bounds x="900" y="1480" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="825" y="1434" width="200" height="40" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="w_claude_di" bpmnElement="w_claude"><dc:Bounds x="1035" y="1465" width="150" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="w_wait_di" bpmnElement="w_wait"><dc:Bounds x="907" y="1627" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="860" y="1669" width="130" height="28" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="w_away_di" bpmnElement="w_away"><dc:Bounds x="715" y="1760" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="640" y="1714" width="200" height="40" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="w_borrow_di" bpmnElement="w_borrow"><dc:Bounds x="850" y="1745" width="150" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="w_local_di" bpmnElement="w_local"><dc:Bounds x="1035" y="1745" width="150" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="w_wait2_di" bpmnElement="w_wait2"><dc:Bounds x="722" y="1907" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="675" y="1949" width="130" height="28" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="w_merge_di" bpmnElement="w_merge"><dc:Bounds x="1270" y="1480" width="50" height="50" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="w_result_di" bpmnElement="w_result"><dc:Bounds x="1455" y="1480" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="1380" y="1434" width="200" height="40" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="w_save_di" bpmnElement="w_save"><dc:Bounds x="1590" y="1465" width="150" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="w_done_di" bpmnElement="w_done"><dc:Bounds x="1832" y="1487" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="1785" y="1529" width="130" height="28" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="w_limitq_di" bpmnElement="w_limitq"><dc:Bounds x="1640" y="1620" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="1565" y="1574" width="200" height="40" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="w_usage_di" bpmnElement="w_usage"><dc:Bounds x="1775" y="1605" width="150" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="w_exh_di" bpmnElement="w_exh"><dc:Bounds x="2010" y="1620" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="1935" y="1574" width="200" height="40" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="w_pause_di" bpmnElement="w_pause"><dc:Bounds x="2145" y="1605" width="150" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="w_pend_di" bpmnElement="w_pend"><dc:Bounds x="2387" y="1627" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="2340" y="1669" width="130" height="28" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="w_retry_di" bpmnElement="w_retry"><dc:Bounds x="2145" y="1745" width="150" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="w_rend_di" bpmnElement="w_rend"><dc:Bounds x="2387" y="1767" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="2340" y="1809" width="130" height="28" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ds_queue_w_di" bpmnElement="ds_queue_w"><dc:Bounds x="345" y="1620" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="403" y="1628" width="120" height="34" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="g_start_di" bpmnElement="g_start"><dc:Bounds x="167" y="2117" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="120" y="2159" width="130" height="28" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="g_collect_di" bpmnElement="g_collect"><dc:Bounds x="295" y="2095" width="150" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="g_read_di" bpmnElement="g_read"><dc:Bounds x="480" y="2095" width="150" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="g_must_di" bpmnElement="g_must"><dc:Bounds x="715" y="2110" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="640" y="2064" width="200" height="40" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="g_stop_di" bpmnElement="g_stop"><dc:Bounds x="850" y="2095" width="150" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="g_stop_end_di" bpmnElement="g_stop_end"><dc:Bounds x="1092" y="2117" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="1045" y="2159" width="130" height="28" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="g_hold_di" bpmnElement="g_hold"><dc:Bounds x="900" y="2250" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="825" y="2204" width="200" height="40" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="g_pause_di" bpmnElement="g_pause"><dc:Bounds x="1035" y="2235" width="150" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="g_pause_end_di" bpmnElement="g_pause_end"><dc:Bounds x="1277" y="2257" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="1230" y="2299" width="130" height="28" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="g_resume_di" bpmnElement="g_resume"><dc:Bounds x="1035" y="2375" width="150" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="g_can_di" bpmnElement="g_can"><dc:Bounds x="1270" y="2390" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="1195" y="2344" width="200" height="40" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="g_run_di" bpmnElement="g_run"><dc:Bounds x="1405" y="2375" width="150" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="g_run_end_di" bpmnElement="g_run_end"><dc:Bounds x="1647" y="2397" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="1600" y="2439" width="130" height="28" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="g_wait_end_di" bpmnElement="g_wait_end"><dc:Bounds x="1277" y="2537" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="1230" y="2579" width="130" height="28" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ds_jobs_di" bpmnElement="ds_jobs"><dc:Bounds x="345" y="2250" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="403" y="2258" width="120" height="34" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Note_budget_di" bpmnElement="Note_budget"><dc:Bounds x="1035" y="1610" width="330" height="70" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Note_local_di" bpmnElement="Note_local"><dc:Bounds x="1325" y="1750" width="330" height="70" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Note_gpu_di" bpmnElement="Note_gpu"><dc:Bounds x="1405" y="2100" width="420" height="70" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_p_start_eve_p_status_di" bpmnElement="Flow_p_start_eve_p_status"><di:waypoint x="203" y="85" /><di:waypoint x="295" y="85" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_p_status_p_pr_di" bpmnElement="Flow_p_status_p_pr"><di:waypoint x="445" y="85" /><di:waypoint x="480" y="85" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_p_pr_p_gpu_di" bpmnElement="Flow_p_pr_p_gpu"><di:waypoint x="630" y="85" /><di:waypoint x="665" y="85" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_p_gpu_p_end_eve_di" bpmnElement="Flow_p_gpu_p_end_eve"><di:waypoint x="815" y="85" /><di:waypoint x="907" y="85" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_p_start_idea_p_idea_di" bpmnElement="Flow_p_start_idea_p_idea"><di:waypoint x="203" y="225" /><di:waypoint x="295" y="225" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_p_idea_p_end_idea_di" bpmnElement="Flow_p_idea_p_end_idea"><di:waypoint x="445" y="225" /><di:waypoint x="537" y="225" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_o_start_o_idea_di" bpmnElement="Flow_o_start_o_idea"><di:waypoint x="1128" y="415" /><di:waypoint x="1220" y="415" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_o_idea_o_end_di" bpmnElement="Flow_o_idea_o_end"><di:waypoint x="1370" y="415" /><di:waypoint x="1462" y="415" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_h_start_h_split_di" bpmnElement="Flow_h_start_h_split"><di:waypoint x="203" y="745" /><di:waypoint x="345" y="745" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_h_split_h_g1_di" bpmnElement="Flow_h_split_h_g1"><di:waypoint x="370" y="720" /><di:waypoint x="370" y="605" /><di:waypoint x="530" y="605" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_h_g1_h_t1_di" bpmnElement="Flow_h_g1_h_t1"><di:waypoint x="580" y="605" /><di:waypoint x="665" y="605" /><bpmndi:BPMNLabel><dc:Bounds x="602" y="583" width="70" height="18" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_h_t1_h_e1_di" bpmnElement="Flow_h_t1_h_e1"><di:waypoint x="815" y="605" /><di:waypoint x="907" y="605" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_h_g1_h_e1_di" bpmnElement="Flow_h_g1_h_e1"><di:waypoint x="555" y="630" /><di:waypoint x="555" y="657" /><di:waypoint x="925" y="657" /><di:waypoint x="925" y="623" /><bpmndi:BPMNLabel><dc:Bounds x="563" y="637" width="70" height="18" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_h_split_h_g2_di" bpmnElement="Flow_h_split_h_g2"><di:waypoint x="395" y="745" /><di:waypoint x="530" y="745" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_h_g2_h_t2_di" bpmnElement="Flow_h_g2_h_t2"><di:waypoint x="580" y="745" /><di:waypoint x="665" y="745" /><bpmndi:BPMNLabel><dc:Bounds x="602" y="723" width="70" height="18" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_h_t2_h_e2_di" bpmnElement="Flow_h_t2_h_e2"><di:waypoint x="815" y="745" /><di:waypoint x="907" y="745" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_h_g2_h_e2_di" bpmnElement="Flow_h_g2_h_e2"><di:waypoint x="555" y="770" /><di:waypoint x="555" y="797" /><di:waypoint x="925" y="797" /><di:waypoint x="925" y="763" /><bpmndi:BPMNLabel><dc:Bounds x="563" y="777" width="70" height="18" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_h_split_h_g3_di" bpmnElement="Flow_h_split_h_g3"><di:waypoint x="370" y="770" /><di:waypoint x="370" y="885" /><di:waypoint x="530" y="885" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_h_g3_h_t3_di" bpmnElement="Flow_h_g3_h_t3"><di:waypoint x="580" y="885" /><di:waypoint x="665" y="885" /><bpmndi:BPMNLabel><dc:Bounds x="602" y="863" width="70" height="18" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_h_t3_h_e3_di" bpmnElement="Flow_h_t3_h_e3"><di:waypoint x="815" y="885" /><di:waypoint x="907" y="885" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_h_g3_h_e3_di" bpmnElement="Flow_h_g3_h_e3"><di:waypoint x="555" y="910" /><di:waypoint x="555" y="937" /><di:waypoint x="925" y="937" /><di:waypoint x="925" y="903" /><bpmndi:BPMNLabel><dc:Bounds x="563" y="917" width="70" height="18" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_pl_start_pl_read_di" bpmnElement="Flow_pl_start_pl_read"><di:waypoint x="943" y="1055" /><di:waypoint x="1035" y="1055" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_pl_read_pl_ideas_di" bpmnElement="Flow_pl_read_pl_ideas"><di:waypoint x="1185" y="1055" /><di:waypoint x="1220" y="1055" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_pl_ideas_pl_gw_di" bpmnElement="Flow_pl_ideas_pl_gw"><di:waypoint x="1370" y="1055" /><di:waypoint x="1455" y="1055" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_pl_gw_pl_task_di" bpmnElement="Flow_pl_gw_pl_task"><di:waypoint x="1505" y="1055" /><di:waypoint x="1590" y="1055" /><bpmndi:BPMNLabel><dc:Bounds x="1528" y="1033" width="70" height="18" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_pl_gw_pl_q_di" bpmnElement="Flow_pl_gw_pl_q"><di:waypoint x="1480" y="1080" /><di:waypoint x="1480" y="1195" /><di:waypoint x="1590" y="1195" /><bpmndi:BPMNLabel><dc:Bounds x="1488" y="1175" width="70" height="18" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_pl_gw_pl_gpu_di" bpmnElement="Flow_pl_gw_pl_gpu"><di:waypoint x="1480" y="1080" /><di:waypoint x="1480" y="1335" /><di:waypoint x="1590" y="1335" /><bpmndi:BPMNLabel><dc:Bounds x="1488" y="1315" width="70" height="18" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_pl_task_pl_join_di" bpmnElement="Flow_pl_task_pl_join"><di:waypoint x="1740" y="1055" /><di:waypoint x="1825" y="1055" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_pl_q_pl_join_di" bpmnElement="Flow_pl_q_pl_join"><di:waypoint x="1740" y="1195" /><di:waypoint x="1850" y="1195" /><di:waypoint x="1850" y="1080" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_pl_gpu_pl_join_di" bpmnElement="Flow_pl_gpu_pl_join"><di:waypoint x="1740" y="1335" /><di:waypoint x="1850" y="1335" /><di:waypoint x="1850" y="1080" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_pl_join_pl_plan_di" bpmnElement="Flow_pl_join_pl_plan"><di:waypoint x="1875" y="1055" /><di:waypoint x="1960" y="1055" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_pl_plan_pl_end_di" bpmnElement="Flow_pl_plan_pl_end"><di:waypoint x="2110" y="1055" /><di:waypoint x="2202" y="1055" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_w_start_w_take_di" bpmnElement="Flow_w_start_w_take"><di:waypoint x="203" y="1505" /><di:waypoint x="295" y="1505" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_w_take_w_model_di" bpmnElement="Flow_w_take_w_model"><di:waypoint x="445" y="1505" /><di:waypoint x="530" y="1505" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_w_model_w_win_di" bpmnElement="Flow_w_model_w_win"><di:waypoint x="580" y="1505" /><di:waypoint x="715" y="1505" /><bpmndi:BPMNLabel><dc:Bounds x="628" y="1483" width="70" height="18" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_w_model_w_away_di" bpmnElement="Flow_w_model_w_away"><di:waypoint x="555" y="1530" /><di:waypoint x="555" y="1785" /><di:waypoint x="715" y="1785" /><bpmndi:BPMNLabel><dc:Bounds x="563" y="1765" width="70" height="18" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_w_win_w_budget_di" bpmnElement="Flow_w_win_w_budget"><di:waypoint x="765" y="1505" /><di:waypoint x="900" y="1505" /><bpmndi:BPMNLabel><dc:Bounds x="812" y="1483" width="70" height="18" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_w_win_w_wait_di" bpmnElement="Flow_w_win_w_wait"><di:waypoint x="740" y="1530" /><di:waypoint x="740" y="1645" /><di:waypoint x="907" y="1645" /><bpmndi:BPMNLabel><dc:Bounds x="748" y="1625" width="70" height="18" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_w_budget_w_claude_di" bpmnElement="Flow_w_budget_w_claude"><di:waypoint x="950" y="1505" /><di:waypoint x="1035" y="1505" /><bpmndi:BPMNLabel><dc:Bounds x="972" y="1483" width="70" height="18" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_w_budget_w_wait_di" bpmnElement="Flow_w_budget_w_wait"><di:waypoint x="925" y="1530" /><di:waypoint x="925" y="1645" /><di:waypoint x="907" y="1645" /><bpmndi:BPMNLabel><dc:Bounds x="933" y="1625" width="70" height="18" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_w_claude_w_merge_di" bpmnElement="Flow_w_claude_w_merge"><di:waypoint x="1185" y="1505" /><di:waypoint x="1270" y="1505" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_w_away_w_borrow_di" bpmnElement="Flow_w_away_w_borrow"><di:waypoint x="765" y="1785" /><di:waypoint x="850" y="1785" /><bpmndi:BPMNLabel><dc:Bounds x="788" y="1763" width="70" height="18" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_w_away_w_wait2_di" bpmnElement="Flow_w_away_w_wait2"><di:waypoint x="740" y="1810" /><di:waypoint x="740" y="1925" /><di:waypoint x="722" y="1925" /><bpmndi:BPMNLabel><dc:Bounds x="748" y="1905" width="70" height="18" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_w_borrow_w_local_di" bpmnElement="Flow_w_borrow_w_local"><di:waypoint x="1000" y="1785" /><di:waypoint x="1035" y="1785" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_w_local_w_merge_di" bpmnElement="Flow_w_local_w_merge"><di:waypoint x="1185" y="1785" /><di:waypoint x="1295" y="1785" /><di:waypoint x="1295" y="1530" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_w_merge_w_result_di" bpmnElement="Flow_w_merge_w_result"><di:waypoint x="1320" y="1505" /><di:waypoint x="1455" y="1505" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_w_result_w_save_di" bpmnElement="Flow_w_result_w_save"><di:waypoint x="1505" y="1505" /><di:waypoint x="1590" y="1505" /><bpmndi:BPMNLabel><dc:Bounds x="1528" y="1483" width="70" height="18" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_w_save_w_done_di" bpmnElement="Flow_w_save_w_done"><di:waypoint x="1740" y="1505" /><di:waypoint x="1832" y="1505" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_w_result_w_limitq_di" bpmnElement="Flow_w_result_w_limitq"><di:waypoint x="1480" y="1530" /><di:waypoint x="1480" y="1645" /><di:waypoint x="1640" y="1645" /><bpmndi:BPMNLabel><dc:Bounds x="1488" y="1625" width="70" height="18" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_w_limitq_w_usage_di" bpmnElement="Flow_w_limitq_w_usage"><di:waypoint x="1690" y="1645" /><di:waypoint x="1775" y="1645" /><bpmndi:BPMNLabel><dc:Bounds x="1712" y="1623" width="70" height="18" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_w_usage_w_exh_di" bpmnElement="Flow_w_usage_w_exh"><di:waypoint x="1925" y="1645" /><di:waypoint x="2010" y="1645" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_w_exh_w_pause_di" bpmnElement="Flow_w_exh_w_pause"><di:waypoint x="2060" y="1645" /><di:waypoint x="2145" y="1645" /><bpmndi:BPMNLabel><dc:Bounds x="2082" y="1623" width="70" height="18" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_w_pause_w_pend_di" bpmnElement="Flow_w_pause_w_pend"><di:waypoint x="2295" y="1645" /><di:waypoint x="2387" y="1645" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_w_limitq_w_retry_di" bpmnElement="Flow_w_limitq_w_retry"><di:waypoint x="1665" y="1670" /><di:waypoint x="1665" y="1785" /><di:waypoint x="2145" y="1785" /><bpmndi:BPMNLabel><dc:Bounds x="1673" y="1765" width="70" height="18" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_w_exh_w_retry_di" bpmnElement="Flow_w_exh_w_retry"><di:waypoint x="2035" y="1670" /><di:waypoint x="2035" y="1785" /><di:waypoint x="2145" y="1785" /><bpmndi:BPMNLabel><dc:Bounds x="2043" y="1765" width="70" height="18" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_w_retry_w_rend_di" bpmnElement="Flow_w_retry_w_rend"><di:waypoint x="2295" y="1785" /><di:waypoint x="2387" y="1785" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_g_start_g_collect_di" bpmnElement="Flow_g_start_g_collect"><di:waypoint x="203" y="2135" /><di:waypoint x="295" y="2135" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_g_collect_g_read_di" bpmnElement="Flow_g_collect_g_read"><di:waypoint x="445" y="2135" /><di:waypoint x="480" y="2135" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_g_read_g_must_di" bpmnElement="Flow_g_read_g_must"><di:waypoint x="630" y="2135" /><di:waypoint x="715" y="2135" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_g_must_g_stop_di" bpmnElement="Flow_g_must_g_stop"><di:waypoint x="765" y="2135" /><di:waypoint x="850" y="2135" /><bpmndi:BPMNLabel><dc:Bounds x="788" y="2113" width="70" height="18" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_g_stop_g_stop_end_di" bpmnElement="Flow_g_stop_g_stop_end"><di:waypoint x="1000" y="2135" /><di:waypoint x="1092" y="2135" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_g_must_g_hold_di" bpmnElement="Flow_g_must_g_hold"><di:waypoint x="740" y="2160" /><di:waypoint x="740" y="2275" /><di:waypoint x="900" y="2275" /><bpmndi:BPMNLabel><dc:Bounds x="748" y="2255" width="70" height="18" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_g_hold_g_pause_di" bpmnElement="Flow_g_hold_g_pause"><di:waypoint x="950" y="2275" /><di:waypoint x="1035" y="2275" /><bpmndi:BPMNLabel><dc:Bounds x="972" y="2253" width="70" height="18" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_g_pause_g_pause_end_di" bpmnElement="Flow_g_pause_g_pause_end"><di:waypoint x="1185" y="2275" /><di:waypoint x="1277" y="2275" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_g_hold_g_resume_di" bpmnElement="Flow_g_hold_g_resume"><di:waypoint x="925" y="2300" /><di:waypoint x="925" y="2415" /><di:waypoint x="1035" y="2415" /><bpmndi:BPMNLabel><dc:Bounds x="933" y="2395" width="70" height="18" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_g_resume_g_can_di" bpmnElement="Flow_g_resume_g_can"><di:waypoint x="1185" y="2415" /><di:waypoint x="1270" y="2415" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_g_can_g_run_di" bpmnElement="Flow_g_can_g_run"><di:waypoint x="1320" y="2415" /><di:waypoint x="1405" y="2415" /><bpmndi:BPMNLabel><dc:Bounds x="1342" y="2393" width="70" height="18" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_g_run_g_run_end_di" bpmnElement="Flow_g_run_g_run_end"><di:waypoint x="1555" y="2415" /><di:waypoint x="1647" y="2415" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_g_can_g_wait_end_di" bpmnElement="Flow_g_can_g_wait_end"><di:waypoint x="1295" y="2440" /><di:waypoint x="1295" y="2555" /><di:waypoint x="1277" y="2555" /><bpmndi:BPMNLabel><dc:Bounds x="1303" y="2535" width="70" height="18" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Msg_p_idea_o_start_di" bpmnElement="Msg_p_idea_o_start"><di:waypoint x="370" y="265" /><di:waypoint x="370" y="320" /><di:waypoint x="1110" y="320" /><di:waypoint x="1110" y="397" /><bpmndi:BPMNLabel><dc:Bounds x="1118" y="348" width="150" height="18" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Msg_o_idea_pl_ideas_di" bpmnElement="Msg_o_idea_pl_ideas"><di:waypoint x="1295" y="455" /><di:waypoint x="1295" y="1015" /><bpmndi:BPMNLabel><dc:Bounds x="1303" y="725" width="150" height="18" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Msg_w_save_p_pr_di" bpmnElement="Msg_w_save_p_pr"><di:waypoint x="1740" y="1485" /><di:waypoint x="1775" y="1485" /><di:waypoint x="1775" y="155" /><di:waypoint x="555" y="155" /><di:waypoint x="555" y="125" /><bpmndi:BPMNLabel><dc:Bounds x="563" y="130" width="150" height="18" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Msg_p_gpu_g_collect_di" bpmnElement="Msg_p_gpu_g_collect"><di:waypoint x="740" y="125" /><di:waypoint x="740" y="165" /><di:waypoint x="840" y="165" /><di:waypoint x="840" y="2034" /><di:waypoint x="370" y="2034" /><di:waypoint x="370" y="2095" /><bpmndi:BPMNLabel><dc:Bounds x="378" y="2054" width="150" height="18" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Msg_w_borrow_g_read_di" bpmnElement="Msg_w_borrow_g_read"><di:waypoint x="925" y="1825" /><di:waypoint x="925" y="2042" /><di:waypoint x="555" y="2042" /><di:waypoint x="555" y="2095" /><bpmndi:BPMNLabel><dc:Bounds x="563" y="2058" width="150" height="18" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DOA_h_t1_ds_usage_di" bpmnElement="DOA_h_t1_ds_usage"><di:waypoint x="815" y="585" /><di:waypoint x="1085" y="585" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DOA_h_t2_ds_queue_di" bpmnElement="DOA_h_t2_ds_queue"><di:waypoint x="815" y="757" /><di:waypoint x="1085" y="809" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DOA_h_t3_ds_queue_di" bpmnElement="DOA_h_t3_ds_queue"><di:waypoint x="815" y="873" /><di:waypoint x="1085" y="821" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DIA_ds_note_pl_ideas_di" bpmnElement="DIA_ds_note_pl_ideas"><di:waypoint x="1295" y="1310" /><di:waypoint x="1295" y="1095" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DOA_pl_gpu_ds_note_di" bpmnElement="DOA_pl_gpu_ds_note"><di:waypoint x="1590" y="1355" /><di:waypoint x="1320" y="1355" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DOA_pl_plan_ds_queue_di" bpmnElement="DOA_pl_plan_ds_queue"><di:waypoint x="2035" y="1015" /><di:waypoint x="2035" y="962" /><di:waypoint x="1110" y="962" /><di:waypoint x="1110" y="840" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DIA_ds_queue_w_w_take_di" bpmnElement="DIA_ds_queue_w_w_take"><di:waypoint x="370" y="1620" /><di:waypoint x="370" y="1545" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DIA_ds_jobs_g_collect_di" bpmnElement="DIA_ds_jobs_g_collect"><di:waypoint x="370" y="2250" /><di:waypoint x="370" y="2175" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Assoc_Note_budget_di" bpmnElement="Assoc_Note_budget"><di:waypoint x="1035" y="1625" /><di:waypoint x="943" y="1523" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Assoc_Note_local_di" bpmnElement="Assoc_Note_local"><di:waypoint x="1325" y="1785" /><di:waypoint x="1185" y="1785" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>
