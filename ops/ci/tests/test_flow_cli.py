@@ -12,7 +12,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from flow_cli import release, tester  # noqa: E402
+from flow_cli import RED, red, release, tester  # noqa: E402
 from flow_fake import NO_PR, OK, FakeRun, Res, flow, issues, moved_head  # noqa: E402
 
 
@@ -44,7 +44,8 @@ class TesterTest(unittest.TestCase):
 
 class ReleaseTest(unittest.TestCase):
     def answers(self, **over: Res | list[Res]) -> dict:
-        base = {('git', 'rev-list', '--count', 'origin/main..HEAD'): Res(0, '3\n', ''),
+        base = {('git', 'rev-parse'): moved_head('green'),
+                ('git', 'rev-list', '--count', 'origin/main..HEAD'): Res(0, '3\n', ''),
                 ('git', 'rev-list', '--count', '--no-merges'): Res(0, '2\n', ''),
                 ('git', 'diff', '--quiet'): Res(1, '', ''),
                 ('git', 'log'): Res(0, '- feat: a\n- fix: b\n', ''),
@@ -53,34 +54,54 @@ class ReleaseTest(unittest.TestCase):
 
     def test_opens_pr_with_stable_title(self):
         run = FakeRun(self.answers())
-        self.assertEqual(release(flow(run)), 0)
+        self.assertEqual(release(flow(run), 'green'), 0)
         create = run.ran('gh', 'pr', 'create')[0]
         self.assertEqual(create[create.index('--title') + 1], 'release: test → main')
         self.assertIn('2 commitów', create[create.index('--body') + 1])
 
+    def test_test_moved_past_the_green_sha_aborts(self):
+        run = FakeRun(self.answers(**{'git rev-parse': moved_head('newer')}))
+        self.assertEqual(release(flow(run), 'green'), 0)
+        self.assertEqual([c for c in run.calls if c[0] == 'gh'], [])
+
     def test_open_pr_is_refreshed_not_duplicated(self):
         run = FakeRun(self.answers(**{'gh pr list': Res(0, '[{"number": 9}]', '')}))
-        self.assertEqual(release(flow(run)), 0)
+        self.assertEqual(release(flow(run), 'green'), 0)
         self.assertEqual(run.ran('gh', 'pr', 'create'), [])
         self.assertEqual(run.ran('gh', 'pr', 'edit')[0][:4], ['gh', 'pr', 'edit', '9'])
 
     def test_same_tree_as_main_opens_nothing(self):
         run = FakeRun(self.answers(**{'git diff --quiet': OK}))
-        self.assertEqual(release(flow(run)), 0)
+        self.assertEqual(release(flow(run), 'green'), 0)
         self.assertEqual([c for c in run.calls if c[0] == 'gh'], [])
 
     def test_second_green_test_without_pr_rights_keeps_one_issue(self):
         title = 'release: test → main: otwórz PR ręcznie'
         run = FakeRun(self.answers(**{'gh pr create': NO_PR, 'gh issue list': [issues(), issues(title)]}))
-        self.assertEqual(release(flow(run)), 0)
-        self.assertEqual(release(flow(run)), 0)
+        self.assertEqual(release(flow(run), 'green'), 0)
+        self.assertEqual(release(flow(run), 'green'), 0)
         self.assertEqual(len(run.ran('gh', 'issue', 'create')), 1)
         self.assertEqual(run.ran('gh', 'issue', 'edit')[0][:4], ['gh', 'issue', 'edit', '1'])
 
     def test_other_create_error_fails_without_issue(self):
         run = FakeRun(self.answers(**{'gh pr create': Res(1, '', 'HTTP 502')}))
-        self.assertEqual(release(flow(run)), 1)
+        self.assertEqual(release(flow(run), 'green'), 1)
         self.assertEqual(run.ran('gh', 'issue'), [])
+
+
+class RedTest(unittest.TestCase):
+    def test_every_red_run_shares_one_issue_with_fresh_sha_in_body(self):
+        run = FakeRun({('gh', 'issue', 'list'): [issues(), issues(RED)]})
+        self.assertEqual(red(flow(run), 'aaaaaaa1', 'https://run/1'), 0)
+        self.assertEqual(red(flow(run), 'bbbbbbb2', 'https://run/2'), 0)
+        created = run.ran('gh', 'issue', 'create')
+        self.assertEqual(len(created), 1)
+        self.assertEqual(created[0][created[0].index('--title') + 1], RED)
+        self.assertIn('back-to-dev', created[0])
+        edit = run.ran('gh', 'issue', 'edit')
+        self.assertEqual(edit[0][:4], ['gh', 'issue', 'edit', '1'])
+        self.assertIn('bbbbbbb2', edit[0][-1])
+        self.assertIn('https://run/2', edit[0][-1])
 
 
 if __name__ == '__main__':

@@ -64,6 +64,23 @@ class AdvanceTest(unittest.TestCase):
         self.assertEqual(len(run.ran('git', 'push')), 2)  # no retry on a refusal
         self.assertEqual(run.ran('gh', 'workflow'), [])
 
+    def test_promote_merges_the_green_sha_not_the_dev_tip(self):
+        run = FakeRun({('git', 'rev-parse'): moved_head('a', 'b')})
+        self.assertEqual(flow(run).advance('dev', 'test', sha='green1'), 0)
+        self.assertEqual(run.ran('git', 'merge')[0], ['git', 'merge', '--no-edit', 'green1'])
+        self.assertNotIn(['git', 'merge', '--no-edit', 'origin/dev'], run.calls)
+
+    def test_green_sha_missing_from_the_clone_promotes_nothing(self):
+        run = FakeRun({('git', 'cat-file'): Res(1, '', 'bad object'), ('git', 'rev-parse'): moved_head('a', 'b')})
+        self.assertEqual(flow(run).advance('dev', 'test', sha='gone'), 0)
+        self.assertEqual(run.ran('git', 'merge'), [])
+        self.assertEqual(run.ran('git', 'push'), [])
+
+    def test_refused_push_names_the_sha_in_the_manual_command(self):
+        run = FakeRun({('git', 'rev-parse'): moved_head('a', 'b'), ('git', 'push'): REFUSED})
+        self.assertEqual(flow(run).advance('dev', 'test', sha='green1'), 1)
+        self.assertIn('git push origin green1:test', run.ran('gh', 'issue', 'create')[0][6])
+
 
 if __name__ == '__main__':
     unittest.main()

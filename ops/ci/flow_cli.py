@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """flow_cli.py — what the jobs of .github/workflows/flow.yml run (git/gh helpers: flow_ops.py).
 
-    flow_cli.py advance --source dev --target test   # merge origin/dev into the checked-out test, push
+    flow_cli.py advance --source dev --target test [--sha S]  # merge S (default origin/dev) into the checked-out test, push
     flow_cli.py tester --sha <head sha>              # merge a green tests-only PR into test, tests to dev
-    flow_cli.py release                              # open or refresh the PR test → main
+    flow_cli.py release --sha <green test sha>       # open or refresh the PR test → main (aborts if test moved on)
+    flow_cli.py red --sha <sha> --run-url <url>      # test is red: one back-to-dev issue, refreshed each time
 """
 from __future__ import annotations
 
@@ -17,6 +18,7 @@ from flow_ops import Flow, sh  # noqa: E402
 from flow_paths import tests_only  # noqa: E402
 
 RELEASE = 'release: test → main'
+RED = 'flow: test czerwony — poprawka na dev'
 
 
 def tester(flow: Flow, sha: str) -> int:
@@ -38,8 +40,19 @@ def tester(flow: Flow, sha: str) -> int:
     return flow.advance('test', 'dev')
 
 
-def release(flow: Flow) -> int:
+def red(flow: Flow, sha: str, run_url: str) -> int:
+    """One open issue for a red test; SHA and run link go in the body, refreshed on every red run."""
+    flow.issue(RED, f'Testy na gałęzi test nie przeszły: {run_url}\nCommit: {sha}\n'
+               'Promocja do main stoi. Poprawka idzie przez PR do dev (testy z test są już na dev).',
+               'back-to-dev', refresh=True)
+    return 0
+
+
+def release(flow: Flow, sha: str) -> int:
     """test green, ahead of main and with a different tree → one PR test → main, refreshed each run."""
+    if flow.head() != sha:
+        print(f'test moved past the green {sha[:7]} — the run of the newer commit decides')
+        return 0
     ahead = int(flow.ok(['git', 'rev-list', '--count', 'origin/main..HEAD']))
     if not ahead or flow.run(['git', 'diff', '--quiet', 'origin/main', 'HEAD']).rc == 0:
         print('test brings nothing new to main')  # e.g. only the merge commits of a main → dev sync
@@ -70,16 +83,22 @@ def main(argv: list[str]) -> int:
     adv = sub.add_parser('advance')
     adv.add_argument('--source', required=True)
     adv.add_argument('--target', required=True)
+    adv.add_argument('--sha', default='')
     sub.add_parser('tester').add_argument('--sha', required=True)
-    sub.add_parser('release')
+    sub.add_parser('release').add_argument('--sha', required=True)
+    rd = sub.add_parser('red')
+    rd.add_argument('--sha', required=True)
+    rd.add_argument('--run-url', required=True)
     a = ap.parse_args(argv)
     env = os.environ
     repo = env.get('GITHUB_REPOSITORY', '')
     run_url = f'{env.get("GITHUB_SERVER_URL", "https://github.com")}/{repo}/actions/runs/{env.get("GITHUB_RUN_ID", "")}'
     flow = Flow(sh, env.get('HAS_FLOW_TOKEN') == 'true', run_url, repo)
     if a.cmd == 'advance':
-        return flow.advance(a.source, a.target)
-    return tester(flow, a.sha) if a.cmd == 'tester' else release(flow)
+        return flow.advance(a.source, a.target, a.sha)
+    if a.cmd == 'red':
+        return red(flow, a.sha, a.run_url)
+    return tester(flow, a.sha) if a.cmd == 'tester' else release(flow, a.sha)
 
 
 if __name__ == '__main__':

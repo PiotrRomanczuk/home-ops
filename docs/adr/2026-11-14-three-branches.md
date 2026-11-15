@@ -24,7 +24,7 @@ automatic; `test` exists only to add and run integration and end-to-end tests; a
 | 3 | On `test`, a tester that did not write the change adds integration and end-to-end tests as a PR into `test`. | independent agent |
 | 4 | A green PR into `test` that touches only test files (`ops/ci/flow_paths.py`) merges by itself, and `test` is merged back into `dev` so the author has the tests. | automation |
 | 5a | `check` green on `test` and `test` ahead of `main` with a different tree → a PR `test` → `main` is opened (one per batch). | automation; Piotr merges |
-| 5b | `check` red on `test` → an issue labelled `back-to-dev`. Nothing is reverted: the fix is a PR into `dev` and flows again. | automation |
+| 5b | `check` red on `test` → one issue labelled `back-to-dev` (fixed title; SHA and run link in the body). Nothing is reverted: the fix is a PR into `dev` and flows again. | automation |
 | 6 | `main` moved → `main` is merged into `dev`. | automation |
 
 - Piotr clicks twice per change: into `dev` and, per batch, into `main`.
@@ -47,6 +47,8 @@ automatic; `test` exists only to add and run integration and end-to-end tests; a
   one issue with the compare link instead, refreshed on every green `test`. Turning that setting on, or
   `FLOW_TOKEN`, is Piotr's call.
 - Every issue the flow files is deduplicated by its fixed title; counts and run links live in the body.
+- Steps 2 and 5a act on the SHA `check` went green for (`workflow_run.head_sha`), not on the branch tip: `promote`
+  merges that SHA into `test`; `release` stops if `test` has moved past it (the newer commit has its own run).
 - Step 5a needs `test` ahead of `main` **and** a different tree: after a release, step 6 and the next
   promotion add only merge commits, which must not open a new release PR.
 - Writers (`promote`, `tester-pr`, `sync`) share one concurrency group and retry a push once after merging the
