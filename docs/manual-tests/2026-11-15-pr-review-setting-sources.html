@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>pr-review — bez ustawień projektu, bez forków (raport 2026-11-15)</title>
+<style>
+  :root { --ink:#1d2433; --muted:#5b6475; --line:#e3e6ec; --bg:#fafbfc; --ok:#1f7a4d; --warn:#9a5b00; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.55 -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 900px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 1.6rem; margin: 0 0 4px; } h2 { margin-top: 2rem; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+  .meta { color: var(--muted); font-size: .9rem; }
+  code, pre { font-family: ui-monospace, Menlo, monospace; font-size: .86rem; }
+  pre { background:#fff; border:1px solid var(--line); border-radius:8px; padding:12px 14px; overflow-x:auto; }
+  table { border-collapse: collapse; width: 100%; font-size: .92rem; }
+  th, td { text-align:left; border-bottom:1px solid var(--line); padding:7px 6px; vertical-align: top; }
+  .ok { color: var(--ok); font-weight: 600; } .warn { color: var(--warn); font-weight: 600; }
+</style>
+</head>
+<body>
+<main>
+<h1>pr-review — <code>claude</code> bez ustawień projektu, recenzja tylko PR-ów właściciela i botów</h1>
+<p class="meta">Data: 2026-11-15 · Gałąź: <code>sprint/pr-review-hooks</code> → <code>dev</code> · Źródło: audyt bezpieczeństwa home-ops 2026-11-15, znalezisko <b>S1</b></p>
+
+<h2>1. Co zostało zrobione</h2>
+<p>Recenzent <code>pr-review</code> na uwh uruchamia <code>claude -p</code> w checkoutcie gałęzi PR-a. Bez dodatkowej flagi CLI wczytuje
+<code>.claude/settings.json</code> z tej gałęzi, a w trybie <code>-p</code> nie pyta o zaufanie. Hook z obcego PR-a wykonałby się więc na uwh,
+z dostępem do tokenu <code>gh</code>, klucza SSH i dockera. Zmiany:</p>
+<ul>
+  <li><code>pr_review_llm.call</code>: do polecenia doszło <code>--setting-sources user</code> (zaraz po <code>--strict-mcp-config</code>).
+      Wczytywane są tylko ustawienia użytkownika z uwh. <code>settings.json</code> i <code>settings.local.json</code> z repo są pomijane.</li>
+  <li>Nowy moduł <code>ops/elitedesk/pr_review_filter.py</code>: stała <code>ALLOWED_AUTHORS</code> (domyślnie <code>PR_OWNER</code>,
+      <code>dependabot[bot]</code>, <code>app/dependabot</code>, nadpisywana zmienną <code>PR_REVIEW_AUTHORS</code>). PR przechodzi tylko wtedy, gdy autor jest na liście,
+      <code>isCrossRepository == false</code> i <code>headRepositoryOwner</code> to właściciel. Brak informacji o forku liczy się jako fork.</li>
+  <li><code>pr_decide.candidates()</code> odrzuca takie PR-y przed pytaniem. Autora bierze z <code>gh search prs</code>, a pola forka z <code>gh pr view --json isCrossRepository,author,headRepositoryOwner</code>.
+      Taki PR nie dostaje pytania, więc nie da się go „Scal”.</li>
+  <li><code>pr_review.pick()</code> sprawdza to samo jeszcze raz na danych z <code>view()</code> przed <code>checkout</code>. Log: <code>pominięty (fork): repo#n login</code> albo <code>pominięty (autor): repo#n login</code>.</li>
+  <li>README (<code>ops/elitedesk/README.md</code>, sekcja PR review): akapit o filtrze i fladze. <code>check.yml</code>: nowy moduł na liście <code>py_compile</code>.</li>
+</ul>
+
+<h2>2. Testy automatyczne</h2>
+<pre>python3 -m unittest discover -s ops/elitedesk/tests -p 'test_*.py'   # Ran 98 tests … OK (w tym 6 nowych w test_pr_review_filter.py)
+python3 -m py_compile ops/elitedesk/pr_*.py ops/elitedesk/review_db.py</pre>
+<table>
+  <tr><th>Test</th><th>Co sprawdza</th></tr>
+  <tr><td><code>FlagTest</code></td><td>Atrapa runnera przechwytuje <code>cmd</code>: zaraz po <code>--strict-mcp-config</code> są <code>--setting-sources user</code></td></tr>
+  <tr><td><code>AllowedTest</code></td><td>Właściciel i dependabot (obie formy loginu) przechodzą. Fork, obcy autor, brak <code>isCrossRepository</code> i obcy <code>headRepositoryOwner</code> są pomijane z logiem.</td></tr>
+  <tr><td><code>PickTest</code></td><td>PR z forka nie wywołuje <code>pr_review_gh.checkout</code>, także przy <code>--pr r#1</code>. Do recenzji trafiają PR właściciela i bota.</td></tr>
+  <tr><td><code>CandidatesTest</code></td><td>Fork i obcy autor nie zostają kandydatami. Dla obcego autora nie ma nawet wywołania <code>gh pr view</code>.</td></tr>
+</table>
+
+<h2>3. Scenariusz ręczny A: hook z repo PR-a się nie wykonuje</h2>
+<p>Wykonane na Macu 2026-11-15 (claude CLI z tą samą flagą co na uwh, model haiku, budżet 0,05 USD):</p>
+<pre>D=$(mktemp -d /tmp/sprint-hook-test.XXXX); mkdir -p $D/.claude
+cat &gt; $D/.claude/settings.json &lt;&lt;'EOF'
+{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"touch /tmp/sprint-hook-fired"}]}],
+"UserPromptSubmit":[{"hooks":[{"type":"command","command":"touch /tmp/sprint-hook-fired"}]}]}}
+EOF
+rm -f /tmp/sprint-hook-fired; cd $D
+claude -p --model haiku --setting-sources user --max-budget-usd 0.05 --no-session-persistence 'odpowiedz: ok' &lt; /dev/null
+test -e /tmp/sprint-hook-fired &amp;&amp; echo TAK || echo NIE      # → NIE
+claude -p --model haiku --max-budget-usd 0.05 --no-session-persistence 'odpowiedz: ok' &lt; /dev/null
+test -e /tmp/sprint-hook-fired &amp;&amp; echo TAK || echo NIE      # → TAK (kontrola: bez flagi hook działa)
+cd /tmp &amp;&amp; rm -rf "$D" /tmp/sprint-hook-fired</pre>
+<table>
+  <tr><th>Wariant</th><th>Odpowiedź</th><th>Plik <code>/tmp/sprint-hook-fired</code></th></tr>
+  <tr><td>z <code>--setting-sources user</code></td><td>„Ok.”</td><td class="ok">nie powstał</td></tr>
+  <tr><td>bez flagi (kontrola)</td><td>„ok”</td><td class="warn">powstał: tak działał recenzent przed poprawką</td></tr>
+</table>
+
+<h2>4. Scenariusz ręczny B: filtr na prawdziwych PR-ach (tylko odczyt <code>gh</code>)</h2>
+<pre>cd ops/elitedesk
+python3 -c "import pr_decide; l=[]; c=pr_decide.candidates(pr_decide.gh, l.append); print(len(c), len(l), l[:5])"
+PR_REVIEW_AUTHORS=PiotrRomanczuk python3 -c "…to samo…"
+gh pr list -R PiotrRomanczuk/home-ops --state open --json number,author,isCrossRepository</pre>
+<table>
+  <tr><th>Przebieg</th><th>Wynik 2026-11-15</th></tr>
+  <tr><td>domyślna lista</td><td class="ok">76 kandydatów (autorzy: <code>PiotrRomanczuk</code>, <code>dependabot[bot]</code>), 0 pominiętych. Forków dziś brak.</td></tr>
+  <tr><td><code>PR_REVIEW_AUTHORS=PiotrRomanczuk</code></td><td class="ok">73 kandydatów, 3 pominięte: <code>pominięty (autor): strummy#1026 dependabot[bot]</code> (i #1019, #1017). Nadpisanie listy działa.</td></tr>
+  <tr><td><code>gh pr list</code> home-ops</td><td>17 otwartych PR-ów, wszystkie z <code>isCrossRepository: false</code>, autor <code>PiotrRomanczuk</code></td></tr>
+</table>
+<p>Gałąź „fork” jest sprawdzona testami jednostkowymi, bo żadne repo Piotra nie ma dziś otwartego PR-a z forka.
+Sprawdzenie na żywo: z innego konta otwórz PR z forka do dowolnego publicznego repo. Po wdrożeniu w logu <code>journalctl --user -u pr-review</code> pojawi się
+<code>pominięty (fork): …</code>, a <code>~/.cache/pr-review/&lt;repo&gt;</code> nie dostanie gałęzi <code>pr-review/&lt;n&gt;</code>.</p>
+
+<h2>5. Po scaleniu</h2>
+<ul>
+  <li>Na uwh: <code>scripts/deploy-agent.sh elitedesk pr-review</code> (oraz <code>pr-decide</code>).</li>
+  <li>Rotacja tokenu <code>gh</code> na uwh i <code>INGEST_TOKEN</code> zgodnie z audytem. Okno ekspozycji trwało od 2026-11-11 i według audytu w tym czasie nie było obcych PR-ów.</li>
+</ul>
+</main>
+</body>
+</html>

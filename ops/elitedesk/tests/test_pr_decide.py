@@ -45,7 +45,7 @@ class FakeReporter:
 
 def pr(repo, n, days_old=3, draft=False, labels=()):
     return {'repository': {'name': repo}, 'number': n, 'title': f'PR {n}', 'url': f'https://gh/{repo}/{n}',
-            'isDraft': draft, 'author': {'login': 'me'}, 'labels': [{'name': x} for x in labels],
+            'isDraft': draft, 'author': {'login': 'PiotrRomanczuk'}, 'labels': [{'name': x} for x in labels],
             'createdAt': (NOW - timedelta(days=days_old)).isoformat().replace('+00:00', 'Z')}
 
 
@@ -63,7 +63,8 @@ class FakeGh:
         if args[:2] == ['search', 'prs']:
             return json.dumps(self.prs)
         if args[:2] == ['pr', 'view']:
-            base = {'headRefOid': 'sha1', 'mergeable': 'MERGEABLE', 'statusCheckRollup': []}
+            base = {'headRefOid': 'sha1', 'mergeable': 'MERGEABLE', 'statusCheckRollup': [], 'isCrossRepository': False,
+                    'author': {'login': 'PiotrRomanczuk'}}
             return json.dumps({**base, **self.view.get(args[2], {})})
         return ''
 

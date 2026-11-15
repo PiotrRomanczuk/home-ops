@@ -1,5 +1,7 @@
 """pr_review_llm.py — the reviewer itself: two headless `claude -p` passes on
-the subscription, cwd = the PR checkout, tools limited to Read/Grep/Glob.
+the subscription, cwd = the PR checkout, tools limited to Read/Grep/Glob, user
+settings only (`--setting-sources user`: hooks/permissions from the PR's own
+`.claude/settings*.json` are never loaded — audit 2026-11-15, S1).
 
 Pass 1 (pr_review/review.md) finds problems; pass 2 (pr_review/verify.md)
 re-checks every finding against the code and drops the ones it cannot
@@ -42,7 +44,7 @@ def message(pr: dict[str, Any], body: str, skipped: str, checkout: Path) -> str:
 def call(prompt: str, schema: str, stdin: str, cwd: Path, runner: Runner = subprocess.run) -> dict[str, Any]:
     cmd = ['claude', '-p', '--model', MODEL, '--system-prompt', (HERE / prompt).read_text(encoding='utf-8'),
            '--json-schema', (HERE / schema).read_text(encoding='utf-8'), '--tools', 'Read,Grep,Glob',
-           '--strict-mcp-config', '--no-session-persistence', '--output-format', 'json', '--max-budget-usd', '6']
+           '--strict-mcp-config', '--setting-sources', 'user', '--no-session-persistence', '--output-format', 'json', '--max-budget-usd', '6']
     proc = runner(cmd, input=stdin, cwd=cwd, capture_output=True, text=True, timeout=TIMEOUT_S)
     try:
         res = json.loads(proc.stdout or '{}')

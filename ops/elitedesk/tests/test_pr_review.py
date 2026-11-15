@@ -19,6 +19,7 @@ import review_db  # noqa: E402
 
 F1 = {'severity': 'bloker', 'file': 'a.py', 'line': 3, 'problem': 'dzielenie przez zero', 'evidence': 'x / n', 'suggestion': 'guard'}
 F2 = {'severity': 'ważne', 'file': 'b.py', 'line': 9, 'problem': 'brak testu', 'evidence': 'nowa gałąź', 'suggestion': 'test'}
+OWN = {'author': {'login': 'PiotrRomanczuk'}, 'isCrossRepository': False}
 PR = {'repo': 'r', 'number': 4, 'title': 'T', 'body': 'B', 'base': 'main', 'ci': 'ok', 'previous': ''}
 
 
@@ -77,7 +78,7 @@ class PickAndRunTest(unittest.TestCase):
 
     def test_pick_skips_reviewed_heads_and_respects_limit(self):
         with mock.patch.object(review_db, 'reviewed_shas', return_value={('r', 1, 's1')}), \
-                mock.patch.object(pr_review, 'view', side_effect=lambda repo, n: {'headRefOid': f's{n}'}):
+                mock.patch.object(pr_review, 'view', side_effect=lambda repo, n: {'headRefOid': f's{n}', **OWN}):
             picked = pr_review.pick(self.prs(), None, 1)
             self.assertEqual([p['number'] for p, _ in picked], [2])
             self.assertEqual([p['number'] for p, _ in pr_review.pick(self.prs(), 'r#1', 1)], [1])

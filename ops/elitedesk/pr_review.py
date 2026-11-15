@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """pr_review.py — "second pair of eyes": an independent review of every open PR.
 
-Hourly 07–23 (pr-review.timer). For each open, non-draft PR (pr_decide.candidates)
+Hourly 07–23 (pr-review.timer). For each open, non-draft PR (pr_decide.candidates; only
+same-repo PRs by the owner or listed bots — pr_review_filter, re-checked here before checkout)
 whose current head commit has no row in pr_reviews (migration 028), at most MAX_PER_RUN
 per run, oldest first: check the head out (pr_review_gh), run the two-pass reviewer
 (pr_review_llm), post one comment + a review:* label, store the row. pr-decide asks
@@ -27,13 +28,14 @@ from agents.routine_report import Reporter  # noqa: E402
 
 import pr_decide  # noqa: E402
 import pr_gate  # noqa: E402
+import pr_review_filter  # noqa: E402
 import pr_review_gh  # noqa: E402
 import pr_review_llm  # noqa: E402
 import review_db  # noqa: E402
 
 ROUTINE = 'pr-review'
 MAX_PER_RUN = 3
-VIEW = 'headRefOid,baseRefName,title,body,statusCheckRollup'
+VIEW = f'headRefOid,baseRefName,title,body,statusCheckRollup,{pr_review_filter.FIELDS}'
 
 
 def log(msg: str) -> None:
@@ -93,6 +95,8 @@ def pick(prs: list[dict[str, Any]], only: str | None, limit: int,
         if only and only != f'{repo}#{num}':
             continue
         v = view(repo, num)
+        if not pr_review_filter.allowed(v, repo, num, log):
+            continue  # never checked out: a fork's .claude/settings.json would run on uwh
         if (repo, num, v['headRefOid']) not in done:
             out.append((p, v))
         if len(out) >= limit:
@@ -117,7 +121,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument('--max', type=int, default=MAX_PER_RUN)
     ns = ap.parse_args(argv)
     rows, errors = [], []
-    for p, v in pick(pr_decide.candidates(pr_decide.gh), ns.pr, 1 if ns.pr else ns.max, ns.dry_run):
+    for p, v in pick(pr_decide.candidates(pr_decide.gh, log), ns.pr, 1 if ns.pr else ns.max, ns.dry_run):
         key = f'{p["repository"]["name"]}#{p["number"]}'
         try:
             rows.append(review_one(p, v, ns.dry_run))

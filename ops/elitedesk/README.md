@@ -159,6 +159,11 @@ The author of a change never accepts it. `pr-review.timer` (hourly 07–23) runs
 `pr_review/verify.md` re-checks every finding and drops the unconfirmed), max 3
 PRs per run. Result: one comment on the PR, label `review:ok` / `review:zmiany`,
 a row in `pr_reviews`, a `pr-review` card on "Dziś".
+Only same-repo PRs by the owner or a listed bot (`pr_review_filter.ALLOWED_AUTHORS`,
+override with `PR_REVIEW_AUTHORS`) are checked out, reviewed or asked about — a fork
+or stranger gets the log line `pominięty (fork|autor): repo#n login` — and `claude`
+runs with `--setting-sources user`, so a PR's own `.claude/settings.json` hooks never
+execute on uwh (security audit 2026-11-15, S1).
 
 `pr_decide.py` asks about a PR only once its current head is reviewed;
 options come from `pr_gate.py` (ok → Scal; findings → Popraw / Scal mimo to;
