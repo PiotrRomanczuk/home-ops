@@ -95,6 +95,25 @@ describe.skipIf(skip)('claude routes', () => {
     expect(rows.map((x) => x.project_slug)).toEqual(['home-ops', 'song2logic', 'job-radar', null, 'job-radar']);
   });
 
+  it('an exact repo match beats a parent note without `repo:` (NULL must not sort first)', async () => {
+    await pool.query(`INSERT INTO public.projects (slug, title, status, path, raw_frontmatter) VALUES
+      ('marszal', 'marszal', 'warm', '~/code/klienci/marszal', '{"repo":""}'),
+      ('instagram-stories-webhook', 'instagram-stories-webhook', 'warm',
+       '~/code/klienci/marszal/instagram-stories-webhook', '{"repo":"instagram-stories-webhook"}')`);
+    await req('POST', '/api/claude/sessions', {
+      host: 'mac',
+      sessions: [
+        sess('n', {
+          git_remote: 'PiotrRomanczuk/instagram-stories-webhook',
+          cwd: '/Users/p/code/klienci/marszal/instagram-stories-webhook',
+        }),
+        sess('m', { cwd: '/Users/p/code/klienci/marszal/notes' }),
+      ],
+    });
+    const rows = (await pool.query(`SELECT session_id, project_slug FROM public.claude_sessions ORDER BY 1`)).rows;
+    expect(rows.map((x) => x.project_slug)).toEqual(['marszal', 'instagram-stories-webhook']);
+  });
+
   it('events recompute signals per day; re-sending does not double count', async () => {
     await req('POST', '/api/claude/sessions', { host: 'mac', sessions: [sess('a', { git_remote: 'x/home-ops' })] });
     const events = [ev('a', 'p1', 'prompt'), ev('a', 'p2', 'prompt'), ev('a', 'b1', 'bash')];

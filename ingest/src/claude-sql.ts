@@ -51,9 +51,10 @@ export const RESOLVE_PROJECT_SQL = `
         OR lower(p.slug) = lower(regexp_replace(s.cwd, '^.*/', ''))
         OR (coalesce(p.path, '') LIKE '~/%' AND
             regexp_replace(s.cwd, '^/(Users|home)/[^/]+', '~') || '/' LIKE p.path || '/%')
-     ORDER BY (s.git_remote IS NOT NULL AND lower(split_part(s.git_remote, '/', 2)) =
-              lower(substring(p.raw_frontmatter->>'repo' from '([^/[:space:]]+)(?:[[:space:]].*)?$'))) DESC,
-              (lower(p.slug) = lower(regexp_replace(s.cwd, '^.*/', ''))) DESC, length(p.path) DESC NULLS LAST
+     ORDER BY COALESCE(s.git_remote IS NOT NULL AND lower(split_part(s.git_remote, '/', 2)) =
+              lower(substring(p.raw_frontmatter->>'repo' from '([^/[:space:]]+)(?:[[:space:]].*)?$')), false) DESC,
+              COALESCE(lower(p.slug) = lower(regexp_replace(s.cwd, '^.*/', '')), false) DESC,
+              length(p.path) DESC NULLS LAST
      LIMIT 1
   ), (
     SELECT p.slug
@@ -90,13 +91,18 @@ export const SIGNALS_DELETE_SQL = `
   DELETE FROM public.project_signals
    WHERE signal IN ('claude_sessions', 'claude_prompts') AND day = ANY($1::date[])`;
 
+// Day filter is a timestamp range per day (not a ::date cast on the column) so
+// claude_events_ts_idx is used; ON CONFLICT because the Mac and elitedesk
+// collectors can recompute the same day at the same moment.
 export const SIGNALS_INSERT_SQL = `
   INSERT INTO public.project_signals (project_slug, day, signal, n)
-  SELECT s.project_slug, (e.ts AT TIME ZONE ${TZ})::date, x.signal,
+  SELECT s.project_slug, d, x.signal,
          CASE x.signal WHEN 'claude_prompts' THEN count(*) ELSE count(DISTINCT (e.host, e.session_id)) END
-    FROM public.claude_events e
+    FROM unnest($1::date[]) AS d
+    JOIN public.claude_events e
+      ON e.ts >= (d::timestamp AT TIME ZONE ${TZ}) AND e.ts < ((d + 1)::timestamp AT TIME ZONE ${TZ})
     JOIN public.claude_sessions s USING (host, session_id)
    CROSS JOIN (VALUES ('claude_prompts'), ('claude_sessions')) AS x(signal)
    WHERE e.kind = 'prompt' AND s.project_slug IS NOT NULL
-     AND (e.ts AT TIME ZONE ${TZ})::date = ANY($1::date[])
-   GROUP BY 1, 2, 3`;
+   GROUP BY 1, 2, 3
+  ON CONFLICT (project_slug, day, signal) DO UPDATE SET n = EXCLUDED.n, updated_at = now()`;
