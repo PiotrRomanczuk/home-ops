@@ -36,7 +36,7 @@ import urllib.error
 import urllib.request
 from datetime import date
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, Collection
 
 _here = Path(__file__).resolve().parent
 sys.path.insert(0, str(_here))
@@ -540,11 +540,23 @@ def _board_import(slug: str, parsed: dict[str, Any], focus_text: str | None) -> 
     return None
 
 
-def _write_commit_push(md_path: Path, new_text: str, msg: str) -> bool:
+def _write_commit_push(md_path: Path, new_text: str, msg: str,
+                       rebuild: Callable[[str], str] | None = None) -> bool:
+    """`rebuild`, when given, recomputes the text from the file as it is after
+    the pull, so an Obsidian edit pulled in just now is not overwritten by
+    `new_text` (computed from the pre-pull read). Unchanged → nothing to push."""
     pr = _run_git('pull', '--ff-only')
     if pr.returncode != 0:
         post_log('warn', 'board-sync pre-push pull failed', {'stderr': pr.stderr.strip()[-300:]})
         return False
+    if rebuild is not None:
+        try:
+            fresh = md_path.read_text(encoding='utf-8')
+        except (OSError, UnicodeDecodeError):
+            return False
+        new_text = rebuild(fresh)
+        if new_text == fresh:
+            return True
     md_path.write_text(new_text, encoding='utf-8')
     if _run_git('add', str(md_path.relative_to(PLANNER_DIR))).returncode != 0:
         return False
@@ -647,10 +659,12 @@ def queue_sync_once() -> None:
 _issues_due = 0.0
 
 
-def issues_sync_once() -> None:
+def issues_sync_once(board_slugs: Collection[str] = ()) -> None:
     """Notes with `zadania: github` + `repo:` get their generated blocks
     re-rendered from open issues, at most every ISSUES_INTERVAL seconds.
-    Runs right after the tick's pull, like board sync."""
+    Runs right after the tick's pull, like board sync. A note whose slug is on
+    the Board is skipped: board render rewrites Now/Next/Later without the
+    markers, so the two sources would duplicate every line."""
     global _issues_due
     if time.monotonic() < _issues_due:
         return
@@ -660,14 +674,24 @@ def issues_sync_once() -> None:
         fm = rec.get('raw_frontmatter') or {}
         if fm.get('zadania') != 'github' or not fm.get('repo'):
             continue
+        if rec['slug'] in board_slugs:
+            post_log('warn', f'issues sync skipped: {rec["slug"]} is on the Board — pick one source')
+            continue
         repo = str(fm['repo']) if '/' in str(fm['repo']) else f"{GITHUB_OWNER}/{fm['repo']}"
+        if not re.fullmatch(r'[\w.-]+/[\w.-]+', repo):
+            post_log('warn', f'issues sync: bad repo "{repo}" in {md_path.name}')
+            continue
         issues = fetch_open_issues(repo)
         if issues is None:
             post_log('warn', f'issues fetch failed: {repo}')
             continue
+        rendered = render_issue_blocks(issues)
         current = md_path.read_text(encoding='utf-8')
-        new_md = replace_issue_blocks(current, render_issue_blocks(issues))
-        if new_md != current and _write_commit_push(md_path, new_md, f'issues sync: {rec["slug"]}'):
+        new_md = replace_issue_blocks(current, rendered)
+        if new_md == current:
+            continue
+        if _write_commit_push(md_path, new_md, f'issues sync: {rec["slug"]}',
+                              rebuild=lambda text: replace_issue_blocks(text, rendered)):
             post_log('info', f'issues sync: {rec["slug"]}', {'repo': repo, 'open': len(issues)})
 
 
@@ -694,14 +718,15 @@ def sync_once() -> None:
     # Board tab: reconcile board_tasks ↔ vault, per slug, isolated so one
     # project's failure doesn't block the rest. Runs before the parse below
     # so the projects table reflects any DB→vault render from this same tick.
-    for slug in _board_slugs():
+    board_slugs = _board_slugs()
+    for slug in board_slugs:
         try:
             board_sync_once(slug)
         except (OSError, ValueError, subprocess.SubprocessError) as e:
             post_log('error', f'board-sync raised for {slug}: {type(e).__name__}', {'err': str(e)[:500]})
 
     try:
-        issues_sync_once()
+        issues_sync_once(board_slugs)
     except (OSError, ValueError, subprocess.SubprocessError) as e:
         post_log('error', f'issues-sync raised: {type(e).__name__}', {'err': str(e)[:500]})
 

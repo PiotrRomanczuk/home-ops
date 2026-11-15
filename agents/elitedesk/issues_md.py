@@ -19,7 +19,7 @@ CLASSES = {'klasa/ryzyko': '🔴', 'klasa/przychod': '💰', 'klasa/fokus': '�
 SIZES = {'size-s': 'S', 'size-m': 'M', 'size-l': 'L', 'size-xl': 'XL'}
 
 _DATE_RE = re.compile(r'<!--\s*planner-date:\s*(\d{4}-\d{2}-\d{2})\s*-->')
-_LINK_RE = re.compile(r'\[#(\d+)\]\(https://github\.com/([\w.-]+/[\w.-]+)/issues/\d+\)')
+_LINK_RE = re.compile(r'—\s\[#(\d+)\]\(https://github\.com/([\w.-]+/[\w.-]+)/issues/(\d+)\)\s*$')
 _TASK_RE = re.compile(r'^\s*[-*]\s+\[[ xX]\]\s+(.+?)\s*$')
 
 
@@ -106,5 +106,7 @@ def in_issue_block(md: str, task_text: str) -> bool:
 
 
 def issue_ref(task_text: str) -> tuple[str, int] | None:
+    """Repo and number from the trailing ` — [#n](url)` link only, so a link
+    inside the title cannot redirect a toggle to another issue."""
     m = _LINK_RE.search(task_text)
-    return (m.group(2), int(m.group(1))) if m else None
+    return (m.group(2), int(m.group(1))) if m and m.group(1) == m.group(3) else None

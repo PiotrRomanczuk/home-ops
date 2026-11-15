@@ -15,21 +15,24 @@ from typing import Any
 GITHUB_API = 'https://api.github.com'
 
 
-_token_cache: str | None = None
+_token_cache = ''
 
 
 def _token() -> str:
-    """GITHUB_TOKEN, else `gh auth token` (gh is logged in on elitedesk)."""
+    """GITHUB_TOKEN, else `gh auth token` (gh is logged in on elitedesk).
+    Only a non-empty token is cached: a failed first lookup is retried."""
     global _token_cache
-    if _token_cache is None:
-        _token_cache = os.environ.get('GITHUB_TOKEN', '')
-        if not _token_cache:
-            try:
-                p = subprocess.run(['gh', 'auth', 'token'], capture_output=True, text=True, timeout=10)
-                _token_cache = p.stdout.strip() if p.returncode == 0 else ''
-            except (OSError, subprocess.TimeoutExpired):
-                _token_cache = ''
-    return _token_cache
+    if _token_cache:
+        return _token_cache
+    token = os.environ.get('GITHUB_TOKEN', '')
+    if not token:
+        try:
+            p = subprocess.run(['gh', 'auth', 'token'], capture_output=True, text=True, timeout=10)
+            token = p.stdout.strip() if p.returncode == 0 else ''
+        except (OSError, subprocess.TimeoutExpired):
+            token = ''
+    _token_cache = token
+    return token
 
 
 def _gh(method: str, url: str, payload: dict[str, Any] | None = None) -> tuple[Any, str]:
@@ -57,6 +60,8 @@ def fetch_open_issues(repo: str) -> list[dict[str, Any]] | None:
 
 
 def set_issue_state(repo: str, number: int, done: bool) -> bool:
+    if not _token():
+        return False  # anonymous PATCH can only fail
     payload = {'state': 'closed', 'state_reason': 'completed'} if done else {'state': 'open'}
     try:
         _gh('PATCH', f'{GITHUB_API}/repos/{repo}/issues/{number}', payload)

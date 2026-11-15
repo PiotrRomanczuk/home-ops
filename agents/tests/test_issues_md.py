@@ -111,6 +111,13 @@ class ToggleTest(unittest.TestCase):
         self.assertEqual(im.issue_ref(generated), ('o/r', 1))
         self.assertIsNone(im.issue_ref('no link here'))
 
+    def test_issue_ref_uses_trailing_link_not_a_link_in_the_title(self) -> None:
+        line = im.issue_line(issue(10, 'Fix [#3](https://github.com/o/r/issues/3) regress', ['plan/now']))
+        self.assertEqual(im.issue_ref(line[len('- [ ] '):]), ('o/r', 10))
+
+    def test_issue_ref_rejects_mismatched_numbers(self) -> None:
+        self.assertIsNone(im.issue_ref('**T** — [#3](https://github.com/o/r/issues/4)'))
+
 
 if __name__ == '__main__':
     unittest.main()

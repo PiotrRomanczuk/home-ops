@@ -88,6 +88,54 @@ class IssuesWiringTest(unittest.TestCase):
         self.assertEqual(self.closed, [])
         self.assertIn('- [x] manual line', self.p.read_text())
 
+    def test_fetch_failure_leaves_file_and_git_untouched(self) -> None:
+        git_calls: list[tuple] = []
+        ps.fetch_open_issues = lambda repo: None
+        ps._run_git = lambda *a: git_calls.append(a) or subprocess.CompletedProcess(a, 0, '', '')
+        before = self.p.read_text()
+        ps.issues_sync_once()
+        self.assertEqual(self.p.read_text(), before)
+        self.assertEqual(git_calls, [])
+
+    def test_edit_pulled_in_before_write_is_kept(self) -> None:
+        """Obsidian edit lands between the tick's read and the pre-push pull."""
+        def git(*a):
+            if a[0] == 'pull':
+                with self.p.open('a', encoding='utf-8') as f:
+                    f.write('- [ ] added in Obsidian\n')
+            return subprocess.CompletedProcess(a, 0, '', '')
+        ps._run_git = git
+        ps.issues_sync_once()
+        text = self.p.read_text()
+        self.assertIn('- [ ] added in Obsidian', text)
+        self.assertIn('**Generated** — [#1]', text)
+
+    def test_rebuild_noop_after_pull_skips_commit(self) -> None:
+        commits: list[tuple] = []
+        def git(*a):
+            if a[0] == 'commit':
+                commits.append(a)
+            if a[0] == 'pull':  # the pull brings in exactly the rendered block
+                self.p.write_text(ps.replace_issue_blocks(self.p.read_text(), ps.render_issue_blocks(ISSUES)))
+            return subprocess.CompletedProcess(a, 0, '', '')
+        ps._run_git = git
+        ps.issues_sync_once()
+        self.assertEqual(commits, [])
+
+    def test_note_on_board_is_skipped_with_warning(self) -> None:
+        logs: list[tuple] = []
+        ps.post_log = lambda *a, **k: logs.append(a)
+        before = self.p.read_text()
+        ps.issues_sync_once(board_slugs=['p'])
+        self.assertEqual(self.fetched, [])
+        self.assertEqual(self.p.read_text(), before)
+        self.assertTrue(any(a[0] == 'warn' and 'is on the Board' in a[1] for a in logs))
+
+    def test_bad_repo_is_skipped(self) -> None:
+        self.p.write_text(OPTED_IN.replace('o/r', 'https://github.com/o/r'), encoding='utf-8')
+        ps.issues_sync_once()
+        self.assertEqual(self.fetched, [])
+
 
 if __name__ == '__main__':
     unittest.main()

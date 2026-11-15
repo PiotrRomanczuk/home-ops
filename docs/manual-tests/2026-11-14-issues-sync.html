@@ -39,6 +39,20 @@ print('bez zmian' if n==t else 'zmienione bloki')"</pre>Oczekiwane: <code>bez zm
 <li><b>Brzegi</b>: ręczna edycja wewnątrz bloku w Obsidianie → nadpisana przy następnym renderze (zamierzone); usunięcie znaczników → blok wraca pod nagłówkiem; brak sieci do GitHuba → <code>issues fetch failed</code> w logach, notatka nietknięta.</li>
 </ol>
 
+<h2>Poprawki po recenzji (2026-11-15)</h2>
+<p>Recenzja PR #85 (werdykt „popraw”) — 6 poprawek na tym samym branchu, bez zrzutów ekranu (sesja bez przeglądarki; zmiany dotyczą tylko agenta planner-sync).</p>
+<table><tr><th>Co</th><th>Jak sprawdzić</th></tr>
+<tr><td><b>Wyścig odczyt–pull</b>: <code>_write_commit_push(..., rebuild=)</code> ponownie czyta notatkę po <code>git pull --ff-only</code> i nakłada na nią wyrenderowane bloki; bez zmian po pullu → brak commita. Edycja z Obsidiana wciągnięta pullem nie jest już cofana.</td>
+<td>Test <code>test_edit_pulled_in_before_write_is_kept</code> (stub <code>pull</code> dopisuje linię poza blokiem; po sync linia zostaje) i <code>test_rebuild_noop_after_pull_skips_commit</code>. Ręcznie na uwh po wdrożeniu: edytuj <code>Strummy.md</code> w Obsidianie w momencie zmiany issues — edycja ma przetrwać commit <code>issues sync: strummy</code>.</td></tr>
+<tr><td><b>Osłona Board vs issues</b>: <code>issues_sync_once(board_slugs)</code> pomija notatkę z <code>zadania: github</code>, której slug jest na Board; log <code>warn</code> „issues sync skipped: … is on the Board — pick one source”.</td>
+<td>Test <code>test_note_on_board_is_skipped_with_warning</code> (brak pobrania issues, plik bez zmian). Ręcznie: nie otwierać Strummy w przełączniku slugów Board; jeśli otwarte, w logach planner-sync co 5 min ostrzeżenie i brak commitów <code>issues sync</code>.</td></tr>
+<tr><td><b><code>issue_ref</code></b> tylko z ostatniego linku „ — [#n](url)”, numer w tekście = numer w URL.</td><td>Testy w <code>test_issues_md.py</code> (tytuł z linkiem <code>[#3]</code> → ref #10; niezgodne numery → <code>None</code>).</td></tr>
+<tr><td><b>Token</b>: pusty wynik <code>gh auth token</code> nie jest cache'owany; zamknięcie issue bez tokena kończy się od razu <code>failed</code>.</td><td><code>test_issues_gh.py</code>.</td></tr>
+<tr><td><b><code>repo:</code></b> walidowane <code>[\w.-]+/[\w.-]+</code>; zły → <code>warn</code> i pominięcie.</td><td>Test <code>test_bad_repo_is_skipped</code>.</td></tr>
+<tr><td><b>Testy</b>: błąd API → plik i git nietknięte; paginacja <code>Link: rel="next"</code>; <code>HTTPError</code> 403 → <code>None</code>.</td><td><code>test_fetch_failure_leaves_file_and_git_untouched</code>, <code>test_follows_link_rel_next</code>, <code>test_http_error_returns_none</code>.</td></tr>
+<tr><td><b>Bramki</b></td><td class="ok"><code>python3 -m unittest discover -s agents/tests -p 'test_*.py'</code> → 109 OK (było 98); <code>python3 -m py_compile agents/elitedesk/*.py</code> OK.</td></tr>
+</table>
+
 <h2>Poza zakresem (świadomie)</h2>
 <p>Releases w notatce (Strummy nie ma jeszcze <code>dev</code>/<code>test</code>, Vercel buduje z <code>main</code>, auto-bump wyłączony — decyzja właściciela); reguła globalna dla wszystkich projektów — po przeglądzie pilota 2026-11-21; <code>check.yml</code> nietknięty — nowe moduły kompiluje i testuje <code>unittest discover</code>, a każdy z 9 otwartych PR-ów zmienia ten plik.</p>
 </body></html>
