@@ -29,7 +29,17 @@ _NAMED = re.compile(
     r'(?P<pre>(?:--?[\w-]*(?:key|token|secret|password|passwd|pwd)[\w-]*[ =]'
     r'|\bBearer\s+'
     r'|\b[\w-]*(?:api[_-]?key|token|secret|password|passwd|pwd)[\w-]*["\']?\s*[:=]\s*["\']?))'
-    r'(?P<secret>[^\s"\'&,;)]{8,})', re.I)
+    r'(?P<secret>(?!\$\()[^\s"\'&,;)]{8,})', re.I)  # `"$(secret x)"` is a lookup, not a value
+
+# Polish "hasło: X" / "hasło=X" (any separator-ed value) and "moje hasło to X"
+# (only when X looks like a password — has a digit or symbol — so prose survives).
+_PL_SEP = re.compile(r'(?P<pre>\bhas(?:ł|l)[oa]\s*[:=]\s*["\']?)(?P<secret>(?!\$\()[^\s"\'&,;)]{8,})', re.I)
+_PL_TO = re.compile(r'(?P<pre>\bhas(?:ł|l)[oa]\s+(?:to|is)\s+["\']?)'
+                    r'(?P<secret>(?=[^\s"\'&,;)]*[\d!@#$%^*+=?~/])[^\s"\'&,;)]{8,})', re.I)
+
+# sshpass -p X (the pattern from secrets.md) and `Authorization: Basic <base64>`.
+_SSHPASS = re.compile(r'(?P<pre>\bsshpass\s+-p\s*["\']?)(?P<secret>(?!\$)[^\s"\']+)')
+_BASIC = re.compile(r'(?P<pre>\bBasic\s+)(?P<secret>(?=[A-Za-z0-9+/]*[\d+/=])[A-Za-z0-9+/=]{12,})')
 
 
 def mask(secret: str) -> str:
@@ -41,7 +51,8 @@ def redact(text: str) -> str:
     if not text:
         return text
     out = _URL_CRED.sub(lambda m: m.group('pre') + mask(m.group('secret')), text)
-    out = _NAMED.sub(lambda m: m.group('pre') + _keep_masked(m.group('secret')), out)
+    for rx in (_NAMED, _PL_SEP, _PL_TO, _SSHPASS, _BASIC):
+        out = rx.sub(lambda m: m.group('pre') + _keep_masked(m.group('secret')), out)
     return _PREFIXED.sub(lambda m: _keep_masked(m.group(0)), out)
 
 
