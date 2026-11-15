@@ -55,6 +55,7 @@ class IssuesWiringTest(unittest.TestCase):
         ps._run_git = lambda *a: subprocess.CompletedProcess(a, 0, '', '')
         ps.post_log = lambda *a, **k: None
         ps._issues_due = 0.0
+        ps._board_conflict_warned.clear()
 
     def tearDown(self) -> None:
         for k, v in self.saved.items():
@@ -130,6 +131,42 @@ class IssuesWiringTest(unittest.TestCase):
         self.assertEqual(self.fetched, [])
         self.assertEqual(self.p.read_text(), before)
         self.assertTrue(any(a[0] == 'warn' and 'is on the Board' in a[1] for a in logs))
+
+    def test_note_on_board_warns_once_per_process(self) -> None:
+        logs: list[tuple] = []
+        ps.post_log = lambda *a, **k: logs.append(a)
+        for _ in range(3):
+            ps._issues_due = 0.0
+            ps.issues_sync_once(board_slugs=['p'])
+        self.assertEqual(sum('is on the Board' in a[1] for a in logs), 1)
+
+    def test_stale_toggle_of_generated_line_leaves_manual_lines_alone(self) -> None:
+        """Issue closed → block re-rendered without the line → toggle with a stale idx."""
+        ps.issues_sync_once()
+        text = next(line for line in self.p.read_text().split('\n') if '[#1]' in line)[len('- [ ] '):]
+        ps.fetch_open_issues = lambda repo: []
+        ps._issues_due = 0.0
+        ps.issues_sync_once()
+        self.assertNotIn('[#1]', self.p.read_text())
+        git_calls: list[tuple] = []
+        ps._run_git = lambda *a: git_calls.append(a) or subprocess.CompletedProcess(a, 0, '', '')
+        before = self.p.read_text()
+        for done in (False, True):
+            status, err = ps._apply_one_toggle({'slug': 'p', 'section': 'now', 'idx': 0, 'done': done, 'text': text})
+            self.assertEqual((status, err), ('applied', None))
+        self.assertEqual(self.p.read_text(), before)
+        self.assertIn('- [ ] manual line', before)
+        self.assertEqual(self.closed, [('o/r', 1, False), ('o/r', 1, True)])
+        self.assertEqual([c for c in git_calls if 'commit' in c], [])
+
+    def test_write_failures_are_logged_without_board_sync_prefix(self) -> None:
+        logs: list[tuple] = []
+        ps.post_log = lambda *a, **k: logs.append(a)
+        ps._run_git = lambda *a: subprocess.CompletedProcess(a, 1, '', 'boom')
+        ps.issues_sync_once()
+        warns = [a[1] for a in logs if a[0] == 'warn']
+        self.assertTrue(warns)
+        self.assertFalse(any('board-sync' in w for w in warns))
 
     def test_bad_repo_is_skipped(self) -> None:
         self.p.write_text(OPTED_IN.replace('o/r', 'https://github.com/o/r'), encoding='utf-8')

@@ -45,6 +45,7 @@ from _common import IngestClient, Shutdown  # noqa: E402
 from issues_gh import fetch_open_issues, set_issue_state  # noqa: E402
 from issues_md import in_issue_block, issue_ref, render_issue_blocks, replace_issue_blocks  # noqa: E402
 from queue_md import parse_queue_md  # noqa: E402
+from task_flip import TOGGLE_LINE_RE as _TOGGLE_LINE_RE, flip_task_in_section as _flip_task_in_section  # noqa: E402
 from task_ticks import TickTracker  # noqa: E402
 
 HOST_NAME = os.environ.get('HOST_NAME', 'elitedesk')
@@ -245,47 +246,6 @@ def _find_project_file(vault_root: Path, slug: str) -> Path | None:
 
 # ── task writeback (UI checkbox toggle → markdown file → git push) ────
 
-_TOGGLE_LINE_RE = re.compile(r'^(\s*[-*]\s+\[)([ xX])(\]\s+)(.+?)(\s*)$')
-
-
-def _flip_task_in_section(text: str, section: str, idx: int, done: bool,
-                          task_text: str | None = None) -> str | None:
-    """Walk the markdown file. Find the `## <section>` header (case-insensitive
-    match on the canonical name OR a "<Name> — ..." variant). Inside that
-    section, flip the checkbox line whose text equals `task_text`; when there
-    is no text anchor (or no match — e.g. the task was reworded since the UI
-    rendered), fall back to the Nth `- [ ]` / `- [x]` line. Return the
-    modified text, or None if the task wasn't resolvable."""
-    target = section.lower()
-    lines = text.split('\n')
-    in_section = False
-    candidates: list[tuple[int, re.Match[str]]] = []
-    for i, raw in enumerate(lines):
-        header = re.match(r'^##\s+(.+?)\s*$', raw)
-        if header:
-            name = header.group(1).strip().lower()
-            # Match 'now' / 'next' / 'later' or 'now — ...' variants
-            canonical = name.split(' ')[0] if name else ''
-            in_section = canonical == target or (target == 'pain' and name.startswith('pain'))
-            continue
-        if not in_section:
-            continue
-        m = _TOGGLE_LINE_RE.match(raw)
-        if m:
-            candidates.append((i, m))
-
-    chosen: tuple[int, re.Match[str]] | None = None
-    if task_text:
-        chosen = next(((i, m) for i, m in candidates if m.group(4).strip() == task_text), None)
-    if chosen is None and 0 <= idx < len(candidates):
-        chosen = candidates[idx]
-    if chosen is None:
-        return None
-    i, m = chosen
-    new_marker = 'x' if done else ' '
-    lines[i] = f'{m.group(1)}{new_marker}{m.group(3)}{m.group(4)}{m.group(5)}'
-    return '\n'.join(lines)
-
 
 def _apply_one_toggle(toggle: dict[str, Any]) -> tuple[str, str | None]:
     """Returns (status, error). status ∈ {'applied', 'conflict', 'failed'}."""
@@ -310,11 +270,16 @@ def _apply_one_toggle(toggle: dict[str, Any]) -> tuple[str, str | None]:
         return 'failed', f'read failed: {e}'
 
     # A line generated from GitHub Issues: the issue is the source of truth.
-    ref = issue_ref(toggle.get('text') or '') if in_issue_block(text, toggle.get('text') or '') else None
-    if ref:
+    ref = issue_ref(toggle.get('text') or '')
+    if ref and in_issue_block(text, toggle.get('text') or ''):
         return _toggle_issue(ref, done)
 
-    new_text = _flip_task_in_section(text, section, idx, done, toggle.get('text'))
+    # A trailing issue link means the line was generated: if it is gone from
+    # the block (issue closed, block re-rendered) a stale idx would flip an
+    # unrelated manual line, so go to the issue instead.
+    new_text = _flip_task_in_section(text, section, idx, done, toggle.get('text'), idx_fallback=ref is None)
+    if new_text is None and ref:
+        return _toggle_issue(ref, done)
     if new_text is None:
         return 'failed', f'task not found: section={section} idx={idx}'
     if new_text == text:
@@ -547,7 +512,7 @@ def _write_commit_push(md_path: Path, new_text: str, msg: str,
     `new_text` (computed from the pre-pull read). Unchanged → nothing to push."""
     pr = _run_git('pull', '--ff-only')
     if pr.returncode != 0:
-        post_log('warn', 'board-sync pre-push pull failed', {'stderr': pr.stderr.strip()[-300:]})
+        post_log('warn', 'vault write: pre-push pull failed', {'stderr': pr.stderr.strip()[-300:]})
         return False
     if rebuild is not None:
         try:
@@ -563,11 +528,11 @@ def _write_commit_push(md_path: Path, new_text: str, msg: str,
     commit = _run_git('-c', 'user.name=planner-sync', '-c', 'user.email=planner-sync@home-ops',
                       'commit', '-m', msg)
     if commit.returncode != 0:
-        post_log('warn', 'board-sync commit failed', {'stderr': commit.stderr.strip()[-300:]})
+        post_log('warn', 'vault write: commit failed', {'stderr': commit.stderr.strip()[-300:]})
         return False
     push = _run_git('push')
     if push.returncode != 0:
-        post_log('warn', 'board-sync push conflict', {'stderr': push.stderr.strip()[-300:]})
+        post_log('warn', 'vault write: push conflict', {'stderr': push.stderr.strip()[-300:]})
         return False
     return True
 
@@ -657,6 +622,7 @@ def queue_sync_once() -> None:
 # ── issues sync (GitHub Issues → Now/Next/Later blocks, pilot 2026-11-14) ─
 
 _issues_due = 0.0
+_board_conflict_warned: set[str] = set()  # slugs already warned about, once per process
 
 
 def issues_sync_once(board_slugs: Collection[str] = ()) -> None:
@@ -675,7 +641,9 @@ def issues_sync_once(board_slugs: Collection[str] = ()) -> None:
         if fm.get('zadania') != 'github' or not fm.get('repo'):
             continue
         if rec['slug'] in board_slugs:
-            post_log('warn', f'issues sync skipped: {rec["slug"]} is on the Board — pick one source')
+            if rec['slug'] not in _board_conflict_warned:
+                _board_conflict_warned.add(rec['slug'])
+                post_log('warn', f'issues sync skipped: {rec["slug"]} is on the Board — pick one source')
             continue
         repo = str(fm['repo']) if '/' in str(fm['repo']) else f"{GITHUB_OWNER}/{fm['repo']}"
         if not re.fullmatch(r'[\w.-]+/[\w.-]+', repo):
