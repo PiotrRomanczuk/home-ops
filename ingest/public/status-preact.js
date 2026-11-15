@@ -35,7 +35,7 @@ function lagSec(snap, ts) {
 function hostHealth(snap, row) {
   const m = lagSec(snap, row.last_metric_ts);
   if (m == null) return 'noagent';
-  return m <= 90 ? 'good' : m <= 300 ? 'warn' : 'stale';
+  return m <= 90 ? 'good' : m <= 300 ? 'warn' : row.sleeps ? 'noagent' : 'stale';
 }
 function alarmCount(snap) {
   const lv = snap?.levels_1h || {};

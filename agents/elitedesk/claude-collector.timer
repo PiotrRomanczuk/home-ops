@@ -1,0 +1,14 @@
+[Unit]
+Description=Fire home-ops claude-collector every 5 minutes
+
+[Timer]
+# Nightly agents (pr-review, lesson-ingest, …) run Claude Code headless here;
+# 5 minutes keeps their sessions on the Mac's journal the same evening.
+OnBootSec=3min
+OnUnitActiveSec=5min
+RandomizedDelaySec=20
+Persistent=true
+Unit=claude-collector.service
+
+[Install]
+WantedBy=timers.target

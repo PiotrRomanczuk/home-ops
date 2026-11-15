@@ -47,6 +47,19 @@ jobs:
             agents/elitedesk/planner-sync.py \
             agents/rpi/rpi-watcher.py \
             agents/rpi/rpi-sentinel.py \
+            agents/redact.py \
+            agents/spool.py \
+            agents/claude_parts.py \
+            agents/claude_tools.py \
+            agents/claude_transcript.py \
+            agents/claude_state.py \
+            agents/claude-collector.py \
+            agents/mac/mac-watcher.py \
+            agents/mac/mac_sample.py \
+            agents/mac/mac_procs.py \
+            agents/mac/mac_ship.py \
+            agents/mac/day-summary.py \
+            agents/mac/day_prompt.py \
             agents/win10/win10-watcher.py \
             scheduler/gpu-scheduler.py \
             scheduler/jobs/embed.py \
@@ -94,7 +107,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: bash syntax
         run: |
-          for f in scripts/*.sh ops/elitedesk/*.sh; do
+          for f in scripts/*.sh ops/elitedesk/*.sh agents/mac/*.sh; do
             bash -n "$f" || exit 1
           done
           echo "✓ all shell scripts parse"
@@ -203,11 +216,14 @@ jobs:
             sed '/^SELECT cron.schedule(/,$d' postgres/migrations/026_activity.sql \
               | psql -h 127.0.0.1 -U postgres -d home_ops -v ON_ERROR_STOP=1
           done
-          # project_signals (027) + repo_meta (016) for GET /api/progress.
+          # project_signals (027) + repo_meta (016) for GET /api/progress;
+          # claude_* / day_journal / host_profiles (032) on top, which also
+          # widens 027's signal CHECK and patches 010's sentinel when present.
           for i in 1 2; do
             psql -h 127.0.0.1 -U postgres -d home_ops -v ON_ERROR_STOP=1 \
               -f postgres/migrations/016_project_repo_meta.sql \
-              -f postgres/migrations/027_project_signals.sql
+              -f postgres/migrations/027_project_signals.sql \
+              -f postgres/migrations/032_mac_journal.sql
           done
 
       - name: integration tests
@@ -218,7 +234,7 @@ jobs:
           LOGS_PASSWORD: ci-password
         # One file at a time: they share this database (activity + progress both
         # write unit_runs), so parallel files would race each other's cleanup.
-        run: npm test -- --run --no-file-parallelism src/routes/__tests__/jobs-state-machine.test.ts src/routes/__tests__/decisions.test.ts src/routes/__tests__/briefs-today.test.ts src/routes/__tests__/queue.test.ts src/routes/__tests__/activity.test.ts src/routes/__tests__/progress.test.ts
+        run: npm test -- --run --no-file-parallelism src/routes/__tests__/jobs-state-machine.test.ts src/routes/__tests__/decisions.test.ts src/routes/__tests__/briefs-today.test.ts src/routes/__tests__/queue.test.ts src/routes/__tests__/activity.test.ts src/routes/__tests__/progress.test.ts src/routes/__tests__/claude.test.ts src/routes/__tests__/journal.test.ts
 
   tests-seo-ingest:
     name: tests (seo ingest upsert contract vs real postgres)

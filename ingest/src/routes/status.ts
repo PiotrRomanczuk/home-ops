@@ -15,7 +15,8 @@ export function registerStatusRoutes(app: Hono): void {
           COALESCE(m.host, e.host) AS host,
           e.last_event_ts, m.last_metric_ts,
           m.cpu_pct, m.mem_pct, m.disk_pct, m.gpu_pct, m.gpu_temp_c,
-          m.data
+          m.data,
+          COALESCE((SELECT p.sleeps FROM public.host_profiles p WHERE p.host = COALESCE(m.host, e.host)), false) AS sleeps
         FROM (
           SELECT DISTINCT ON (host)
             host, ts AS last_metric_ts,

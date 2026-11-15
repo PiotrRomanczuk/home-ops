@@ -8,7 +8,8 @@
 export const HOSTS_SQL = `
   SELECT COALESCE(m.host, e.host) AS host,
          m.ts AS last_metric_ts, e.last_event_ts,
-         round(m.cpu_pct) AS cpu_pct, round(m.mem_pct) AS mem_pct, round(m.disk_pct) AS disk_pct
+         round(m.cpu_pct) AS cpu_pct, round(m.mem_pct) AS mem_pct, round(m.disk_pct) AS disk_pct,
+         COALESCE((SELECT p.sleeps FROM public.host_profiles p WHERE p.host = COALESCE(m.host, e.host)), false) AS sleeps
     FROM (SELECT DISTINCT ON (host) host, ts, cpu_pct, mem_pct, disk_pct
             FROM public.host_metrics WHERE ts > now() - interval '7 days'
            ORDER BY host, ts DESC) m

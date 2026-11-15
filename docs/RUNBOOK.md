@@ -1,6 +1,6 @@
 ---
 created: 2026-07-14
-updated: 2026-07-14
+updated: 2026-11-14
 ---
 
 # home-ops — operations runbook
@@ -78,12 +78,34 @@ pg_cron runs nightly inside the postgres container (no host-level cron):
 
 - `prune_host_logs(30)` — drops `host_logs` rows older than 30 days. Daily at 04:00 UTC.
 - `prune_done_gpu_jobs(30)` — drops `gpu_jobs` rows with `status='done'` older than 30 days. Daily at 04:15 UTC. Failed/cancelled jobs are kept forever for postmortem.
+- `claude_sessions`, `claude_events`, `day_journal` (032) — **not pruned** (small, text-only; the day outlives `host_metrics`).
 
 ```bash
 # Inspect the schedule
 docker exec home-ops-postgres-1 psql -U postgres -d home_ops -c \
   'SELECT jobid, schedule, jobname, command FROM cron.job;'
 ```
+
+## The Mac (launchd agents, 032)
+
+Run on the Mac, from the repo root (the laptop is not an ssh target):
+
+```bash
+# once: the shared token into the Keychain (value never printed)
+security add-generic-password -U -s home-ops-ingest -a mac -w "$(secret home-ops-ingest)"
+scripts/deploy-agent.sh mac mac-watcher        # KeepAlive, every 30 s
+scripts/deploy-agent.sh mac claude-collector   # every 5 min, first run = backfill
+scripts/deploy-agent.sh mac day-summary        # 21:30 → card "mac-dziennik"
+scripts/deploy-agent.sh elitedesk claude-collector   # uwh's headless sessions (unit + timer)
+```
+
+- Logs: `~/Library/Logs/home-ops/<agent>.log`. State: `~/.local/state/home-ops/` (`claude-collector.json` =
+  offsets; `mac/metrics-*.jsonl[.gz]` = full local archive; `mac/spool.jsonl` = waiting for the server).
+- `~/.config/home-ops/mac.env` (local, not in git): `INGEST_FALLBACK_URL=http://<elitedesk Tailscale IP>:64421/api/ingest`
+  for off-LAN delivery (unset → samples wait in the spool until home), `SHIP=0` = archive + spool only,
+  `DAY_MODEL=gemma4:26b`.
+- Stop one: `launchctl bootout gui/$(id -u)/pl.pionat.home-ops.<agent>`.
+- Check: `curl -s 'http://192.168.1.75:64421/api/journal/day?host=mac' | jq '.claude.totals'`.
 
 ## Backups
 

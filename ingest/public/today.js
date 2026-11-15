@@ -56,6 +56,15 @@ function tdHostRow(x) {
   return h('li', { class: 'td-prob ' + x.status }, h('b', {}, x.host), ` — ${why}`);
 }
 
+/* A host with host_profiles.sleeps (the Mac) that went quiet is `sleep`: shown as
+   a neutral line, not a problem — silence is the lid being closed. */
+function tdSleeping(hosts) {
+  const rows = hosts.filter((x) => x.status === 'sleep');
+  if (!rows.length) return null;
+  return h('div', { class: 'td-meta' }, rows.map((x) =>
+    `${x.host} śpi${x.last_metric_ts ? ` od ${TD_TIME.format(new Date(x.last_metric_ts))}` : ''}`).join(' · '));
+}
+
 function tdProblems(problems, hosts, muted) {
   const bad = hosts.filter((x) => x.status === 'warn' || x.status === 'bad' || x.status === 'off');
   const rows = [
@@ -66,6 +75,7 @@ function tdProblems(problems, hosts, muted) {
   ];
   return tdSection('Problemy', rows.length,
     rows.length ? h('ul', { class: 'td-list' }, ...rows) : h('div', { class: 'td-empty ok' }, 'Wszystko spokojnie.'),
+    tdSleeping(hosts),
     muted ? h('div', { class: 'td-meta' }, `wyciszone wzorce: ${muted} (lista w MUTED, digest.ts)`) : null);
 }
 

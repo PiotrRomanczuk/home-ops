@@ -1,6 +1,6 @@
 ---
 created: 2026-06-07
-updated: 2026-06-07
+updated: 2026-11-14
 ---
 
 # home-ops — project context
@@ -49,7 +49,7 @@ to exist.
 | **elitedesk** | The server. Ingest API + Postgres + log-shipping agent + (eventually) pg-backup timer | HP EliteDesk, i7-6700K, 31 GB RAM, no dGPU | Yes |
 | **win10** (`windows-pc`) | The GPU box. Ollama backend + Ollama-log watcher + GPU job scheduler | i7-6700K, 67 GB RAM, AMD Radeon RX 7700 XT (12 GB VRAM) | Yes |
 | **rpi** (`pi`) | Monitoring + low-power services. Kuma + Beszel today; (planned) log-shipping agent, Telegram notification bot | Pi 5, 8 GB RAM, 29 GB SD | Yes, lowest power |
-| **mac** | Workstation, dev environment, launchd-scheduled producers (planned: scheduled queries / digest generators against home-ops Postgres) | M-series, varies | No (sleeps overnight) |
+| **mac** | Workstation — all development since 2026-11-07. launchd agents: `mac-watcher` (CPU/GPU/network + which Claude session started what), `claude-collector` (Claude Code sessions), `day-summary` (21:30 card). `host_profiles.sleeps` = silence is normal | M5 Pro, 48 GB | No (sleeps, roams) |
 
 Network: `192.168.1.0/24`, Tailscale tailnet
 (`*.<tailnet>.ts.net`, MagicDNS). Pi advertises NAS
@@ -146,6 +146,18 @@ Status semantics:
 - `failed` — terminal: worker called `/fail` explicitly. Kept forever for postmortem (the 30-day prune only touches `done` rows)
 
 Retention: `done` jobs pruned at 30 days; `failed/cancelled` kept indefinitely.
+
+## Data model — Claude Code journal (032)
+
+- **`claude_sessions`** — one row per Claude Code session per host (`mac`, `elitedesk`): surface (cli / desktop /
+  remote / phone / headless), cwd, git remote, **project_slug** (resolved server-side), title, prompts, tool and
+  token counters, cost, PRs, pushes, edited files, live status. Raw transcripts never leave the host.
+- **`claude_events`** — what happened inside: `prompt`, `bash`, `edit`, `agent`, `skill`, `mcp`, `git`, `pr`,
+  `compact`, `summary`, `error`; text masked by `agents/redact.py`.
+- **`day_journal`** — one row per host per day: the `/api/journal/day` rollup + the local model's note.
+- **Active time** — distinct 5-minute buckets with any Claude event (the human's own time = host `mac`).
+
+ADR: `docs/adr/2026-11-14-mac-journal.md`.
 
 ## Data model — `host_metrics`
 
