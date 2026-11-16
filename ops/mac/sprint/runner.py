@@ -10,16 +10,15 @@ May start now (accept()):
 - `local:<ollama model>`: Piotr away from the Mac and the Mac fit for GPU work (machine.py), one at a time,
   at most `local.max_tasks_per_day`; the same harness against Ollama, so no subscription use. It borrows
   the GPU from the GPU supervisor (STATE/gpu/borrow) and escalates to sonnet when it fails.
-A usage-limit message is checked against /usage: really used up → pause until that reset, else a retry.
+What a run means for its task — limit, interrupted, done, retry — is outcomes.py: a session or weekly limit
+pauses every Claude worker until its reset, a model's own limit holds only that task (`not_before`).
 Housekeeping polls /usage in windows, adds a planner when the Claude queue runs low (every planner_every_h
 at most) and a daily summary.  Env: SPRINT_STATE, SPRINT_PLANNER=0 (none of those tasks), CLAUDE_BIN.
 Stop: `touch $SPRINT_STATE/STOP`.
 """
 from __future__ import annotations
 
-import json
 import os
-import re
 import subprocess
 import sys
 import threading
@@ -35,11 +34,11 @@ import claude_run  # noqa: E402
 import config  # noqa: E402
 import journal  # noqa: E402
 import machine  # noqa: E402
+import outcomes  # noqa: E402
 import sprint_tasks as q  # noqa: E402
 
 STATE = Path(os.environ.get('SPRINT_STATE', '~/.local/state/home-ops/sprint')).expanduser()
 CLAUDE = os.environ.get('CLAUDE_BIN', '/opt/homebrew/bin/claude')
-LIMIT_RE = re.compile(r'usage.?limit|session.?limit|weekly.?limit|limit.?reached|rate.?limit|hit your .{0,20}limit|out of .*usage', re.I)
 LOW_QUEUE, POLL_S = 6, 300
 PLANNER = os.environ.get('SPRINT_PLANNER', '1') != '0'
 lock = threading.Lock()
@@ -92,18 +91,19 @@ def worker(n: int) -> None:
             continue
         model = str(task.get('model') or 'sonnet')
         run = claude_run.run(CLAUDE, task, model, STATE, journal.VAULT, cfg['local']['base_url'])
-        ok = run['rc'] == 0 and not run['res'].get('is_error')
-        outcome = 'done' if ok else 'retry'
-        if not ok and not model.startswith('local:') and LIMIT_RE.search(json.dumps(run['res'])[:4000] + run['stderr']):
+        if outcomes.wants_usage(run):  # a limit without a reset hour in the message
             budget.refresh(force=True)
-            until = b.exhausted_until(budget.limits, model, datetime.now(timezone.utc))
-            if until:  # really used up; otherwise "limit" was just a word in an ordinary failure
-                with lock:
-                    paused_until = max(paused_until, until.timestamp())
-                notify(f'Limit wyczerpany. Agenci Claude czekają do {until.astimezone():%H:%M}.')
-                outcome = 'limit'
+        outcome, meta = outcomes.classify(run, datetime.now(timezone.utc), kind=task.get('kind'), limits=budget.limits,
+                                          result_mtime=outcomes.mtime(STATE / 'results' / f'{task["id"]}.md'))
+        if meta.get('pause_until'):  # session or weekly limit: no Claude task can start before the reset
+            with lock:
+                paused_until = max(paused_until, meta['pause_until'].timestamp())
+            notify(f'Limit ({meta["scope"]}) wyczerpany. Agenci Claude czekają do {meta["pause_until"].astimezone():%H:%M}.')
+        task.update(meta['set'])
+        if meta.get('note'):
+            task['body'] += f'\n\nPoprzednia próba ({model}, rc {run["rc"]}): {meta["note"]}'
         journal.record(STATE, task, run, outcome, budget.week_start(), lock)
-        q.finish(STATE, task, 'requeue' if outcome == 'limit' else outcome)
+        q.finish(STATE, task, outcome, meta.get('escalate', True))
 
 
 def newest(prefix: str) -> float:

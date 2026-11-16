@@ -81,9 +81,9 @@ def verdict(limits: Limits, cfg: dict[str, Any], model: str, now: datetime) -> s
     return None
 
 
-def exhausted_until(limits: Limits, model: str, now: datetime) -> datetime | None:
-    """Reset of a limit that is really used up (≥ 99%) for `model`; None means the 'limit' text was something else."""
-    keys = ('session', 'weekly', model)
+def exhausted_until(limits: Limits, now: datetime, keys: tuple[str, ...] = ('session', 'weekly')) -> datetime | None:
+    """Latest reset among `keys` that are really used up (≥ 99%). The default — session and week — is what pauses
+    every Claude worker; a model's own week (('fable',)) only holds that model's task (outcomes.py)."""
     times = [v['resets_at'] for k, v in limits.items() if k in keys and v['percent'] >= 99 and v['resets_at'] and v['resets_at'] > now]
     return max(times) if times else None
 

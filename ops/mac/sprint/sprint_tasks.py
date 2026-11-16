@@ -12,6 +12,8 @@
     lock: vault              # at most one running task per lock (optional)
     after: vault-pilot-review  # eligible once that id is in done/ (optional)
     attempts: 0
+    not_before: 2026-11-16T04:50:00+01:00  # set by the runner after a limit or an interrupted run
+    resume: <session id>     # set by the runner after a limit: the next run continues that session
     ---
     <prompt for the worker>
 
@@ -21,11 +23,13 @@ runner leaves it visible in running/ (start() puts those back). A task whose
 """
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
 DIRS = ('queue', 'running', 'done', 'failed', 'results', 'logs')
 ESCALATE = {'haiku': 'sonnet', 'sonnet': 'opus', 'opus': 'fable'}  # local:* → sonnet
+MAX_INTERRUPTS = 3
 
 
 def stronger(model: str) -> str:
@@ -43,7 +47,7 @@ def parse(path: Path) -> dict[str, Any]:
             if sep:
                 meta[key.strip()] = value.split('  #')[0].strip()
     meta['id'] = meta.get('id') or path.stem
-    for key, default in (('priority', 50), ('max_minutes', 45), ('attempts', 0)):
+    for key, default in (('priority', 50), ('max_minutes', 45), ('attempts', 0), ('interrupts', 0)):
         try:
             meta[key] = int(meta.get(key, default))
         except ValueError:
@@ -67,12 +71,22 @@ def ids(state: Path, where: str) -> set[str]:
     return {p.stem for p in (state / where).glob('*.md')}
 
 
-def eligible(state: Path) -> list[dict[str, Any]]:
-    """Queued tasks whose `after` is done and whose `lock` is free, best first."""
+def waiting(task: dict[str, Any], now: datetime) -> bool:
+    """True while the task's `not_before` (ISO 8601; no offset = local time) is still ahead; a bad value is ignored."""
+    try:
+        at = datetime.fromisoformat(str(task.get('not_before') or ''))
+    except ValueError:
+        return False
+    return (at if at.tzinfo else at.astimezone()) > now
+
+
+def eligible(state: Path, now: datetime | None = None) -> list[dict[str, Any]]:
+    """Queued tasks past their `not_before`, whose `after` is done and whose `lock` is free, best first."""
+    now = now or datetime.now(timezone.utc)
     done = ids(state, 'done')
     locks = {t.get('lock') for t in map(parse, (state / 'running').glob('*.md')) if t.get('lock')}
     tasks = [parse(p) for p in (state / 'queue').glob('*.md')]
-    ok = [t for t in tasks if (not t.get('after') or t['after'] in done) and t.get('lock') not in locks]
+    ok = [t for t in tasks if (not t.get('after') or t['after'] in done) and t.get('lock') not in locks and not waiting(t, now)]
     return sorted(ok, key=lambda t: (t['priority'], t['id']))
 
 
@@ -100,14 +114,20 @@ def claim(state: Path, accept: Callable[[dict[str, Any]], bool] | None = None) -
     return None
 
 
-def finish(state: Path, task: dict[str, Any], outcome: str) -> None:
-    """outcome: done | failed | requeue (limit hit) | retry (failed once → stronger model)."""
+def finish(state: Path, task: dict[str, Any], outcome: str, escalate: bool = True) -> None:
+    """outcome (outcomes.py): done | failed | limit, requeue (back to queue/, nothing counted) |
+    interrupted (counted in `interrupts`, the third fails) | retry (the second fails; else a stronger model
+    unless `escalate` is False)."""
     if outcome == 'retry':
         task['attempts'] += 1
         if task['attempts'] >= 2:
             outcome = 'failed'
-        else:
+        elif escalate:
             task['model'] = stronger(str(task.get('model')))
+    elif outcome == 'interrupted':
+        task['interrupts'] = int(task.get('interrupts') or 0) + 1
+        if task['interrupts'] >= MAX_INTERRUPTS:
+            outcome = 'failed'
     where = {'done': 'done', 'failed': 'failed'}.get(outcome, 'queue')
     write(state / where / task['path'].name, task)
     task['path'].unlink(missing_ok=True)

@@ -1,6 +1,7 @@
 """claude_run.py — one task through headless Claude Code.
 
-Fresh session in the task's cwd, the task's model and effort, rules.md appended to the system prompt,
+Fresh session in the task's cwd (or `--resume <session>` when the task carries `resume:` after a limit,
+with a "continue where you stopped" prompt), the task's model and effort, rules.md appended to the system prompt,
 no MCP servers, permission mode auto with nobody to answer (what would ask is denied; the guard hook
 still blocks merges and prod). `local:<model>` runs the same harness against Ollama's Anthropic API
 (no subscription use) and, for its duration, names this process in STATE/gpu/borrow so the GPU
@@ -19,8 +20,12 @@ HERE = Path(__file__).resolve().parent
 
 
 def command(claude: str, task: dict[str, Any], model: str, state: Path, vault: Path) -> list[str]:
-    prompt = f'{task["body"]}\n\nID zadania: {task["id"]}. Wynik zapisz w {state}/results/{task["id"]}.md.'
-    return [claude, '-p', prompt, '--model', model.split('local:', 1)[-1], '--effort', str(task.get('effort') or 'medium'),
+    tid, session = task['id'], str(task.get('resume') or '')
+    head = (f'Kontynuuj zadanie {tid} od miejsca przerwania (limit albo przerwany przebieg). Najpierw sprawdź, '
+            'co już zrobiłeś (worktree, branch, commity, PR, plik wyniku), i nie powtarzaj tego.') if session else task['body']
+    prompt = f'{head}\n\nID zadania: {tid}. Wynik zapisz w {state}/results/{tid}.md.'
+    return [claude, '-p', prompt, *(['--resume', session] if session else []),
+            '--model', model.split('local:', 1)[-1], '--effort', str(task.get('effort') or 'medium'),
             '--permission-mode', 'auto', '--permission-prompts', 'none', '--output-format', 'json',
             '--strict-mcp-config', '--mcp-config', '{"mcpServers":{}}', '--no-chrome',
             '--append-system-prompt', (HERE / 'rules.md').read_text(),
@@ -51,4 +56,5 @@ def run(claude: str, task: dict[str, Any], model: str, state: Path, vault: Path,
         res = json.loads(out)
     except ValueError:
         res = {'result': out[-2000:], 'is_error': True}
-    return {'id': task['id'], 'model': model, 'rc': rc, 'stderr': err, 'seconds': round(time.time() - t0), 'res': res}
+    return {'id': task['id'], 'model': model, 'rc': rc, 'stderr': err, 'started': t0, 'seconds': round(time.time() - t0),
+            'resumed': bool(task.get('resume')), 'res': res}

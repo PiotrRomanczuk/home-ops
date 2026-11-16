@@ -65,10 +65,15 @@ class VerdictTest(unittest.TestCase):
 
     def test_exhausted_until_only_for_limits_really_used_up(self):
         now = RESET - timedelta(days=2)
-        self.assertIsNone(b.exhausted_until(limits(60, session=70), 'sonnet', now))  # "rate limit" was something else
-        self.assertEqual(b.exhausted_until(limits(60, session=100), 'sonnet', now), RESET)
-        self.assertIsNone(b.exhausted_until(limits(60, fable=100), 'opus', now))  # Fable's week doesn't stop Opus
-        self.assertEqual(b.exhausted_until(limits(60, fable=100), 'fable', now), RESET)
+        self.assertIsNone(b.exhausted_until(limits(60, session=70), now))  # "rate limit" was something else
+        self.assertEqual(b.exhausted_until(limits(60, session=100), now), RESET)
+        self.assertEqual(b.exhausted_until(limits(100), now), RESET)
+        self.assertEqual(b.exhausted_until(limits(60, fable=100), now, ('fable',)), RESET)
+
+    def test_fable_used_up_never_pauses_every_worker(self):
+        now = RESET - timedelta(days=2)
+        self.assertIsNone(b.exhausted_until(limits(60, fable=100), now))  # the global pause: session + week only
+        self.assertIsNone(b.verdict(limits(40, fable=100), CFG, 'sonnet', RESET - b.WEEK / 2))
 
 
 if __name__ == '__main__':

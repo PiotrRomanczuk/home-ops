@@ -8,6 +8,7 @@ from __future__ import annotations
 import sys
 import tempfile
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -86,6 +87,31 @@ class QueueTest(unittest.TestCase):
         q.setup(self.state)  # a crashed runner left it in running/
         self.assertEqual(q.ids(self.state, 'queue'), {'y'})
 
+
+    def test_not_before_holds_a_task_until_then(self):
+        now = datetime(2026, 11, 16, 0, 12, tzinfo=timezone.utc)
+        add(self.state, 'wait', not_before=(now + timedelta(minutes=38)).isoformat())
+        add(self.state, 'bad', not_before='after the reset')  # ignored, not a blocker
+        add(self.state, 'naive', not_before='2000-01-01T00:00:00')  # local time, long past
+        self.assertEqual([t['id'] for t in q.eligible(self.state, now)], ['bad', 'naive'])
+        self.assertEqual([t['id'] for t in q.eligible(self.state, now + timedelta(minutes=39))], ['bad', 'naive', 'wait'])
+
+    def test_interrupted_keeps_the_model_and_the_third_one_fails(self):
+        add(self.state, 'i')
+        for n in (1, 2):
+            q.finish(self.state, q.claim(self.state), 'interrupted')
+            t = q.parse(self.state / 'queue' / 'i.md')
+            self.assertEqual((t['model'], t['attempts'], t['interrupts']), ('sonnet', 0, n))
+        q.finish(self.state, q.claim(self.state), 'interrupted')
+        self.assertEqual(q.ids(self.state, 'failed'), {'i'})
+
+    def test_retry_without_escalation_and_failed(self):
+        add(self.state, 'p', kind='pr-fix')
+        q.finish(self.state, q.claim(self.state), 'retry', escalate=False)
+        self.assertEqual(q.parse(self.state / 'queue' / 'p.md')['model'], 'sonnet')
+        q.finish(self.state, q.claim(self.state), 'failed')
+        self.assertEqual((q.ids(self.state, 'failed'), q.ids(self.state, 'running')), ({'p'}, set()))
+        self.assertEqual(q.parse(self.state / 'failed' / 'p.md')['attempts'], 1)
 
 if __name__ == '__main__':
     unittest.main()

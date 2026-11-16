@@ -85,6 +85,7 @@ jobs:
             ops/mac/sprint/claude_run.py \
             ops/mac/sprint/journal.py \
             ops/mac/sprint/idea.py \
+            ops/mac/sprint/outcomes.py \
             ops/mac/gpu/gpu_worker.py \
             ops/mac/gpu/gpu_jobs.py \
             ops/mac/gpu/gpu_report.py \
