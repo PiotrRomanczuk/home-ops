@@ -79,6 +79,14 @@ jobs:
             ops/elitedesk/gmail_labels.py \
             ops/elitedesk/gmail_import.py \
             ops/elitedesk/gmail-daily.py \
+            ops/elitedesk/gmail_llm.py \
+            ops/elitedesk/gmail_llm_db.py \
+            ops/elitedesk/gmail_llm_daily.py \
+            ops/elitedesk/gmail_llm_guide.py \
+            ops/elitedesk/gmail_llm_eval.py \
+            ops/elitedesk/gmail_llm_report.py \
+            ops/elitedesk/gmail_review.py \
+            ops/elitedesk/gmail-llm.py \
             ops/elitedesk/pr_gate.py \
             ops/elitedesk/pr_review.py \
             ops/elitedesk/pr_review_gh.py \

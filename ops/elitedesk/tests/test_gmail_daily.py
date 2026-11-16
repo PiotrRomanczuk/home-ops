@@ -76,10 +76,11 @@ class FakeGmail:
 
 
 class DailyTest(unittest.TestCase):
-    def run_daily(self, db, gmail, present, sync_rows=(), upsert=None, rules=RAW_RULES, rule_labels=()):
+    def run_daily(self, db, gmail, present, sync_rows=(), upsert=None, rules=RAW_RULES, rule_labels=(), **kw):
         """One `daily` run; returns (stats, upserted ids, state rows)."""
         upserted: list[str] = []
         state: list[tuple] = []
+        self.applied: list = []
 
         def fake_sync(d, log):
             d.executemany('INSERT OR REPLACE INTO messages VALUES (?,?,?,?,?,?,?,?,?,?,?)', list(sync_rows))
@@ -95,9 +96,9 @@ class DailyTest(unittest.TestCase):
                 mock.patch.object(gmail_db, 'upsert_messages', fake_upsert), \
                 mock.patch.object(gmail_db, 'load_rules', lambda: rules), \
                 mock.patch.object(gmail_db, 'rule_labels', lambda: list(rule_labels)), \
-                mock.patch.object(gmail_db, 'insert_applied', lambda rows: len(rows)), \
+                mock.patch.object(gmail_db, 'insert_applied', lambda rows: self.applied.extend(rows) or len(rows)), \
                 mock.patch.object(gmail_db, 'replace_state', lambda rows: state.extend(rows) or len(rows)):
-            stats = daily_mod.daily(gmail, db, fake_sync, Path(d) / 'j.jsonl', log=lambda *_: None)
+            stats = daily_mod.daily(gmail, db, fake_sync, Path(d) / 'j.jsonl', log=lambda *_: None, **kw)
         return stats, upserted, state
 
     def test_restored_and_new_messages_both_reach_postgres(self):
@@ -208,7 +209,7 @@ class CardTest(unittest.TestCase):
             daily_mod.post_card('h', 'ok', log=lambda *_: None)
 
     def test_successful_run_exits_0_even_when_the_card_cannot_be_posted(self):
-        stats = {'new': 0, 'added': 0, 'removed': 0, 'inbox': 0, 'review': 0, 'gone': 0}
+        stats = {'new': 0, 'added': 0, 'removed': 0, 'inbox': 0, 'review': 0, 'gone': 0, 'proposed': 0, 'archived': 0}
         with mock.patch.dict('os.environ', {}, clear=True), mock.patch.object(daily_mod.gmail_inventory, 'STATE_DIR', Path('.')):
             with mock.patch.object(daily_mod, 'daily', lambda *a, **k: stats), \
                     mock.patch.object(daily_mod, 'Gmail', mock.MagicMock()), \
@@ -232,6 +233,44 @@ class CardTest(unittest.TestCase):
         self.assertEqual(card.call_args.args[1], 'error')
         self.assertIn('rules empty', card.call_args.args[0])
         close.assert_called_once()
+
+
+class BrokenReporter:
+    """"Dziś" is down: every call raises."""
+
+    def answers(self):
+        raise RuntimeError('ingest down')
+
+    def open_refs(self):
+        raise RuntimeError('ingest down')
+
+
+class LlmFenceTest(unittest.TestCase):
+    """The model / "Dziś" steps may fail; labels, journal, message_state and the card input must not."""
+
+    run_daily = DailyTest.run_daily
+
+    def test_dzis_and_psql_failures_do_not_stop_the_run(self):
+        db, gmail = new_db('a'), FakeGmail({'a': {'INBOX'}})
+        with mock.patch('gmail_llm_db.proposed', side_effect=RuntimeError('migration 031 missing')), \
+             mock.patch('gmail_llm_db.known_senders', side_effect=RuntimeError('psql down')):
+            stats, upserted, state = self.run_daily(db, gmail, present='a', reporter=BrokenReporter(), llm=True)
+        self.assertEqual((stats['proposed'], stats['archived']), (0, 0))
+        self.assertIn('id-Dev/GitHub', gmail.msgs['a'])        # reconcile_live still ran
+        self.assertEqual([r[0] for r in state], ['a'])         # replace_state still ran
+        self.assertTrue(self.applied)                          # insert_applied still ran (the label journal)
+
+    def test_archive_passes_the_protected_ids_and_keeps_the_journal(self):
+        db, gmail = new_db('a', 'b'), FakeGmail({'a': {'INBOX'}, 'b': {'INBOX'}})
+        with mock.patch('gmail_llm_db.known_senders', return_value=set()), \
+             mock.patch('gmail_llm_db.insert_proposals', return_value=0), \
+             mock.patch.object(daily_mod.gmail_llm_daily, 'archive_ids', return_value=['a']), \
+             mock.patch('gmail_labels.protected_ids', return_value={'b'}) as prot, \
+             mock.patch('gmail_apply.move', return_value=1) as move:
+            stats, *_ = self.run_daily(db, gmail, present='ab', llm=True)
+        self.assertEqual(stats['archived'], 1)
+        self.assertEqual(move.call_args.kwargs['protected'], {'b'})
+        prot.assert_called_once()
 
 
 if __name__ == '__main__':

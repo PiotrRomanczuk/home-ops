@@ -6,9 +6,10 @@ every header, not just new mail) and upsert every SQLite row into gmail.message,
 anything else was deleted and has no state), (3) classify those with the rules in Postgres
 (gmail.rules_json), (4) add/remove the category labels so Gmail matches (labels only — never
 trash, never delete; each chunk is journaled), (5) rewrite gmail.message_state, (6) post one
-digest card. A run refuses (error card, exit 1) when the rules or "me" are empty (rules not seeded yet)
-or when it would change more than MAX_CHANGES labels. Journals go to the same ~/.local/state/home-ops/gmail/ as on the Mac, and into
-gmail.applied.
+digest card. The model steps (Claude proposals, "Dziś" answers, archiving; GMAIL_LLM=0 switches them off)
+are fenced: their failure never stops the run. A run refuses (error card, exit 1) when the rules or "me" are empty
+(rules not seeded yet) or when it would change more than MAX_CHANGES labels. Journals go to the same
+~/.local/state/home-ops/gmail/ as on the Mac, and into gmail.applied.
 """
 from __future__ import annotations
 
@@ -29,9 +30,12 @@ import gmail_imap  # noqa: E402
 import gmail_import  # noqa: E402
 import gmail_inventory  # noqa: E402
 import gmail_labels  # noqa: E402
+import gmail_llm_daily  # noqa: E402
+import gmail_llm_steps  # noqa: E402
 from gmail_api import Gmail  # noqa: E402
 
 ROUTINE = 'gmail-daily'
+LLM = os.environ.get('GMAIL_LLM', '1') != '0'  # GMAIL_LLM=0 switches the model steps off
 MAX_CHANGES = 5000  # label additions + removals one run may make; more = something is wrong, refuse
 
 
@@ -80,8 +84,13 @@ def reconcile_live(gmail: Gmail, expected: dict[str, set[str]], known: set[str],
     return added, removed
 
 
-def daily(gmail: Gmail, db: sqlite3.Connection, sync, journal: Path, log=print) -> dict:
-    """One run without the card. `sync(db, log)` mirrors All Mail and returns (rows, present REST ids)."""
+def daily(gmail: Gmail, db: sqlite3.Connection, sync, journal: Path, log=print, reporter=None,
+          llm: bool = False) -> dict:
+    """One run without the card. `sync(db, log)` mirrors All Mail and returns (rows, present REST ids).
+
+    `llm`: answered "Dziś" questions become rules before classifying, and proposals / archiving follow the
+    reconcile. Both are fenced (`gmail_llm_steps.fenced`), so applied-journal, message_state and the card always happen.
+    """
     cfg = gmail_classify.load_rules(Path('db'))
     gmail_labels.refuse_unseeded(cfg)  # before anything is mirrored or changed
     ids_before = {r[0] for r in db.execute('SELECT id FROM messages')}
@@ -91,17 +100,33 @@ def daily(gmail: Gmail, db: sqlite3.Connection, sync, journal: Path, log=print) 
     if ids_before and not present:
         raise RuntimeError('IMAP returned an empty All Mail — refusing to treat the whole mailbox as deleted')
     gmail_import.import_messages(log, db)  # every row, so message_state's FK can never dangle
+    if llm and reporter:
+        gmail_llm_steps.fenced('consume answers', lambda: gmail_llm_daily.consume(reporter, log), 0, log)
+        cfg = gmail_classify.load_rules(Path('db'))  # answers may have added rules
     trash = set(gmail.iter_ids('in:trash'))
     alive = present | trash
     expected = expected_labels(db, cfg, alive, trash)
     known = all_ids & alive
     added, removed = reconcile_live(gmail, expected, known, journal, log, gmail_labels.managed_labels(cfg, expected, gmail_db.rule_labels()))
+    proposed, archived = gmail_llm_steps.fenced(
+        'llm steps', lambda: gmail_llm_steps.llm_steps(gmail, db, cfg, trash, reporter, journal, log), (0, 0), log
+    ) if llm else (0, 0)
     if journal.exists():
         gmail_db.insert_applied(gmail_db.journal_rows(journal))
     inbox, unread = set(gmail.iter_ids('in:inbox')), set(gmail.iter_ids('is:unread -in:trash'))
     gmail_db.replace_state(gmail_import.state_rows(db, cfg, trash, inbox, unread, alive))
     return {'new': len(new_ids), 'added': added, 'removed': removed, 'inbox': len(inbox),
-            'review': len(expected.get(gmail_classify.FALLBACK, ())), 'gone': len(all_ids - alive)}
+            'review': len(expected.get(gmail_classify.FALLBACK, ())), 'gone': len(all_ids - alive),
+            'proposed': proposed, 'archived': archived}
+
+
+def _reporter(log=print):
+    try:
+        from agents.routine_report import Reporter
+        return Reporter.from_env(ROUTINE)
+    except (Exception, SystemExit) as e:  # no ingest env → run without "Dziś" (card, questions, answers)
+        log(f'no reporter: {e}')
+        return None
 
 
 def post_card(headline: str, status: str, metric: dict | None = None, log=print) -> None:
@@ -119,15 +144,17 @@ def main() -> int:
     db = gmail_inventory.connect()
     imap = gmail_imap.connect(gmail.call('GET', '/profile')['emailAddress'], gmail_auth.access_token())
     journal = gmail_inventory.STATE_DIR / f'journal-daily-{time.strftime("%Y%m%d-%H%M%S")}.jsonl'
+    reporter = _reporter(log)
     try:
-        r = daily(gmail, db, lambda d, lg: gmail_imap.sync(imap, d, log=lg), journal, log)
+        r = daily(gmail, db, lambda d, lg: gmail_imap.sync(imap, d, log=lg), journal, log, reporter, LLM)
     except Exception as e:
         post_card(f'gmail-daily odmówił / nie powiódł się: {e}', 'error', log=log)
         raise
     finally:
         gmail_imap.close(imap)
     headline = (f'{r["new"]} nowych, {r["added"]} etykiet dodanych, {r["removed"]} zdjętych, '
-                f'INBOX {r["inbox"]}, do przejrzenia {r["review"]}')
+                f'INBOX {r["inbox"]}, do przejrzenia {r["review"]}, propozycji reguł {r["proposed"]}, '
+                f'zarchiwizowanych {r["archived"]}')
     log(headline + (f', zniknęło ze skrzynki {r["gone"]}' if r['gone'] else ''))
     post_card(headline, 'ok' if r['inbox'] == 0 else 'warn', {'label': 'INBOX', 'value': r['inbox']}, log)
     return 0
