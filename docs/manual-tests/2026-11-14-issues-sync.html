@@ -1,0 +1,72 @@
+<!doctype html><html lang="pl"><head><meta charset="utf-8"><title>Manual test — GitHub Issues → Now/Next/Later w notatce projektu (2026-11-14)</title>
+<style>body{font:14px/1.5 -apple-system,Segoe UI,sans-serif;max-width:960px;margin:32px auto;padding:0 16px;color:#222}h1{font-size:22px}h2{font-size:17px;margin-top:28px}code,pre{font-family:ui-monospace,Menlo,monospace;font-size:12.5px}pre{background:#f4f4f4;padding:10px;border-radius:6px;overflow:auto}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ddd;padding:6px 8px;text-align:left;vertical-align:top}th{background:#f4f4f4}img{max-width:100%;border:1px solid #ddd;border-radius:6px}.ok{color:#1a7f37}.todo{color:#9a6700}</style></head><body>
+<h1>planner-sync: zadania z GitHub Issues w notatce projektu (pilot Strummy)</h1>
+<p><b>Data:</b> 2026-11-14 · <b>Gałąź:</b> <code>feat/issues-sync</code> → <code>dev</code> · <b>Plan:</b> <code>~/.claude/plans/wiggly-conjuring-mitten.md</code> · <b>Migawka zadań:</b> vault <code>3-Zasoby/analysis/2026-11-14-strummy-zadania-przed-issues.md</code></p>
+
+<h2>Co zostało zrobione</h2>
+<p>Zadania o kodzie Strummy przeniesione do GitHub Issues (#1028–#1075). Vault ma je odbijać sam: planner-sync renderuje otwarte issues z etykietą <code>plan/now|next|later</code> do sekcji Now/Next/Later notatki projektu, a „Dziś” czyta je jak dotąd z notatki.</p>
+<ul>
+<li><b>Opt-in we frontmatterze</b>: notatka z <code>zadania: github</code> i <code>repo:</code> (właściciel z <code>GITHUB_OWNER</code>, domyślnie <code>PiotrRomanczuk</code>). Inne notatki bez zmian.</li>
+<li><b><code>agents/elitedesk/issues_md.py</code></b> (czyste funkcje): linia w formacie rubryki §8 — <code>- [ ] 💰 L ⛓ 🖥 2026-11-12 **Tytuł** — [#1028](url)</code>; klasa z <code>klasa/*</code>, rozmiar z <code>size-*</code>, data z ukrytego <code>&lt;!-- planner-date: … --&gt;</code> w treści issue (inaczej data utworzenia). Sortowanie: klasa → ⛓ → rozmiar → numer. Link na końcu po „ — ”, więc <code>taskTitle</code> na „Dziś” pokazuje sam tytuł.</li>
+<li><b>Blok generowany</b> między <code>&lt;!-- github-issues:start … --&gt;</code> a <code>&lt;!-- github-issues:end --&gt;</code> w każdej sekcji. Linie poza blokiem (zadania poufne — repo jest publiczne) nie są ruszane. Brak bloku → wstawiany pod nagłówkiem; brak sekcji → pomijana.</li>
+<li><b><code>agents/elitedesk/issues_gh.py</code></b>: lista otwartych issues (REST, paginacja; PR-y odfiltrowuje render) i zamknięcie/otwarcie issue. Token: <code>GITHUB_TOKEN</code>, inaczej <code>gh auth token</code> (gh na uwh zalogowany, zakres <code>repo</code>) — wzorem <code>ops/elitedesk/github-repo-sync.py</code>.</li>
+<li><b>planner-sync</b>: <code>issues_sync_once()</code> po board sync, przed parsowaniem notatek, nie częściej niż co <code>ISSUES_INTERVAL</code> (300 s); zapis przez istniejące <code>_write_commit_push()</code>, commit <code>issues sync: &lt;slug&gt;</code>.</li>
+<li><b>Odhaczenie na „Dziś”</b>: linia z bloku → zamknięcie issue w GitHubie (markdown nietknięty, następny tick renderuje bez czekania 5 min). Ręczna linia — nawet z linkiem do issue — dalej przełącza checkbox w markdownie.</li>
+</ul>
+
+<h2>Bramki (lokalnie, 2026-11-14)</h2>
+<table><tr><th>Bramka</th><th>Wynik</th></tr>
+<tr><td><code>python3 -m unittest discover -s agents/tests -p 'test_*.py'</code></td><td class="ok">98 OK (10 nowych: <code>test_issues_md.py</code> 7, <code>test_planner_sync_issues.py</code> 3)</td></tr>
+<tr><td><code>python3 -m py_compile</code> planner-sync.py, issues_md.py, issues_gh.py</td><td class="ok">OK</td></tr>
+<tr><td>Render na prawdziwej notatce Strummy + żywych issues (z Maca)</td><td class="ok">94 otwarte (w tym 19 PR-ów i 27 starych bez <code>plan/*</code>) → Now 1, Next 10, Later 37; drugi render identyczny (idempotencja); parser planner-sync: now 1, next 16 (10 + 6 ręcznych), later 47 (37 + 10)</td></tr>
+</table>
+
+<h2>Jak przetestować ręcznie</h2>
+<ol>
+<li><b>Render bez hosta</b> (Mac, na kopii notatki):<pre>cp ~/Obsidian/MainCV-Planner/1-Projekty/Strummy/Strummy.md /tmp/s.md
+python3 -c "
+import sys; sys.path.insert(0,'agents/elitedesk')
+from pathlib import Path
+from issues_gh import fetch_open_issues
+from issues_md import render_issue_blocks, replace_issue_blocks
+p=Path('/tmp/s.md'); t=p.read_text()
+n=replace_issue_blocks(t, render_issue_blocks(fetch_open_issues('PiotrRomanczuk/strummy')))
+print('bez zmian' if n==t else 'zmienione bloki')"</pre>Oczekiwane: <code>bez zmian</code>, dopóki nikt nie ruszył issues; po zmianie etykiety <code>plan/*</code> jednego issue — <code>zmienione bloki</code>.</li>
+<li><b>Deploy na uwh</b> (po merge, z czystego <code>dev</code>/<code>main</code>): <pre>scripts/deploy-agent.sh elitedesk planner-sync   # dochodzą issues_md.py i issues_gh.py</pre>W logach planner-sync (źródło <code>agent:planner-sync</code>) brak <code>issues fetch failed</code>; przy pierwszej zmianie issues linia <code>issues sync: strummy</code> i commit w repo vaulta.</li>
+<li><b>Etykieta</b>: w issue #1050 zmienić <code>plan/later</code> → <code>plan/next</code>. W ciągu ~5 min commit <code>issues sync: strummy</code>, linia przenosi się z Later do Next w notatce i na „Dziś”. Cofnąć etykietę.</li>
+<li><b>Zamknięcie przez PR</b>: PR z <code>Closes #n</code> po scaleniu → linia znika z bloku przy następnym ticku.</li>
+<li><b>Odhaczenie na „Dziś”</b>: kliknąć checkbox przy linii z bloku → issue zamknięte w GitHubie, linia znika po kilku sekundach–minucie. Kliknąć ręczną linię 🔴 (np. „Bramki przed pierwszym zaproszeniem ucznia”, ma link do #1034) → przełącza się tylko checkbox w notatce, #1034 zostaje otwarte.</li>
+<li><b>Brzegi</b>: ręczna edycja wewnątrz bloku w Obsidianie → nadpisana przy następnym renderze (zamierzone); usunięcie znaczników → blok wraca pod nagłówkiem; brak sieci do GitHuba → <code>issues fetch failed</code> w logach, notatka nietknięta.</li>
+</ol>
+
+<h2>Poprawki po recenzji (2026-11-15)</h2>
+<p>Recenzja PR #85 (werdykt „popraw”) — 6 poprawek na tym samym branchu, bez zrzutów ekranu (sesja bez przeglądarki; zmiany dotyczą tylko agenta planner-sync).</p>
+<table><tr><th>Co</th><th>Jak sprawdzić</th></tr>
+<tr><td><b>Wyścig odczyt–pull</b>: <code>_write_commit_push(..., rebuild=)</code> ponownie czyta notatkę po <code>git pull --ff-only</code> i nakłada na nią wyrenderowane bloki; bez zmian po pullu → brak commita. Edycja z Obsidiana wciągnięta pullem nie jest już cofana.</td>
+<td>Test <code>test_edit_pulled_in_before_write_is_kept</code> (stub <code>pull</code> dopisuje linię poza blokiem; po sync linia zostaje) i <code>test_rebuild_noop_after_pull_skips_commit</code>. Ręcznie na uwh po wdrożeniu: edytuj <code>Strummy.md</code> w Obsidianie w momencie zmiany issues — edycja ma przetrwać commit <code>issues sync: strummy</code>.</td></tr>
+<tr><td><b>Osłona Board vs issues</b>: <code>issues_sync_once(board_slugs)</code> pomija notatkę z <code>zadania: github</code>, której slug jest na Board; log <code>warn</code> „issues sync skipped: … is on the Board — pick one source”.</td>
+<td>Test <code>test_note_on_board_is_skipped_with_warning</code> (brak pobrania issues, plik bez zmian). Ręcznie: nie otwierać Strummy w przełączniku slugów Board; jeśli otwarte, w logach planner-sync co 5 min ostrzeżenie i brak commitów <code>issues sync</code>.</td></tr>
+<tr><td><b><code>issue_ref</code></b> tylko z ostatniego linku „ — [#n](url)”, numer w tekście = numer w URL.</td><td>Testy w <code>test_issues_md.py</code> (tytuł z linkiem <code>[#3]</code> → ref #10; niezgodne numery → <code>None</code>).</td></tr>
+<tr><td><b>Token</b>: pusty wynik <code>gh auth token</code> nie jest cache'owany; zamknięcie issue bez tokena kończy się od razu <code>failed</code>.</td><td><code>test_issues_gh.py</code>.</td></tr>
+<tr><td><b><code>repo:</code></b> walidowane <code>[\w.-]+/[\w.-]+</code>; zły → <code>warn</code> i pominięcie.</td><td>Test <code>test_bad_repo_is_skipped</code>.</td></tr>
+<tr><td><b>Testy</b>: błąd API → plik i git nietknięte; paginacja <code>Link: rel="next"</code>; <code>HTTPError</code> 403 → <code>None</code>.</td><td><code>test_fetch_failure_leaves_file_and_git_untouched</code>, <code>test_follows_link_rel_next</code>, <code>test_http_error_returns_none</code>.</td></tr>
+<tr><td><b>Bramki</b></td><td class="ok"><code>python3 -m unittest discover -s agents/tests -p 'test_*.py'</code> → 109 OK (było 98); <code>python3 -m py_compile agents/elitedesk/*.py</code> OK.</td></tr>
+</table>
+
+<h2>Poprawki r3 (2026-11-16)</h2>
+<p>Druga recenzja PR #85 (werdykt „popraw”) — poprawki w agencie planner-sync, bez zrzutów ekranu. Nowa logika w osobnym module <code>agents/elitedesk/issues_note.py</code>.</p>
+<table><tr><th>Co</th><th>Jak sprawdzić</th></tr>
+<tr><td><b>Brak fallbacku na <code>idx</code> w notatce z blokiem</b>: odhaczenie przeredagowanej ręcznej linii daje <code>conflict</code> („task changed since the view was rendered”), plik i git nietknięte. Notatka bez bloku zachowuje stary fallback.</td>
+<td><code>test_stale_text_in_note_with_block_never_falls_back_to_idx</code>, <code>test_note_without_block_keeps_idx_fallback</code>. Ręcznie: w Obsidianie przeredaguj ręczną linię w Strummy, nie odświeżaj Projektów, kliknij ją — nic się nie zmienia w vaulcie.</td></tr>
+<tr><td><b>Tylko repo notatki</b>: odsyłacz do innego repo w przeredagowanej ręcznej linii nie zamyka cudzego issue (<code>conflict</code>, „issue link outside the note repo”).</td>
+<td><code>test_reworded_manual_line_linking_to_foreign_repo_does_not_close_it</code>.</td></tr>
+<tr><td><b>START bez END</b>: <code>in_issue_block</code> liczy tylko pary START…END w obrębie sekcji; <code>replace_issue_blocks</code> nie wstawia drugiego bloku, a sync loguje raz na proces <code>warn</code> „has START without END — fix the note”.</td>
+<td><code>test_start_without_end_is_left_alone</code>, <code>test_manual_line_under_orphan_start_is_not_in_block</code>, <code>test_orphan_start_is_warned_once_and_not_duplicated</code>.</td></tr>
+<tr><td><b>Drobne</b>: <code>## Next steps</code> nie jest sekcją Next; strona API niebędąca listą → <code>None</code>; nowe moduły w liście <code>py_compile</code> w <code>check.yml</code>.</td>
+<td><code>test_next_steps_header_is_not_the_next_section</code>, <code>test_non_list_page_returns_none</code>.</td></tr>
+<tr><td><b>Bramki</b></td><td class="ok"><code>unittest discover -s agents/tests</code> → 120 OK (było 112); <code>ops/elitedesk/tests</code> → 93 OK; <code>py_compile agents/elitedesk/*.py</code> OK. Planner-sync nie uruchamiany na vaulcie ani na uwh.</td></tr>
+</table>
+
+<h2>Poza zakresem (świadomie)</h2>
+<p>Releases w notatce (Strummy nie ma jeszcze <code>dev</code>/<code>test</code>, Vercel buduje z <code>main</code>, auto-bump wyłączony — decyzja właściciela); reguła globalna dla wszystkich projektów — po przeglądzie pilota 2026-11-21; <code>check.yml</code> nietknięty — nowe moduły kompiluje i testuje <code>unittest discover</code>, a każdy z 9 otwartych PR-ów zmienia ten plik.</p>
+</body></html>

@@ -18,6 +18,9 @@ Env:
   SYNC_INTERVAL    seconds between syncs, default 60
   PROJECT_DIRS     comma-separated vault folders holding project notes
                    (default: projects,1-Projekty,2-Obszary,3-Zasoby/pomysly,4-Archiwum)
+  GITHUB_OWNER     owner of `repo:` in notes with `zadania: github` (default PiotrRomanczuk)
+  ISSUES_INTERVAL  seconds between GitHub Issues renders, default 300
+  GITHUB_TOKEN     optional; falls back to `gh auth token`
 """
 from __future__ import annotations
 
@@ -33,13 +36,17 @@ import urllib.error
 import urllib.request
 from datetime import date
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, Collection
 
 _here = Path(__file__).resolve().parent
 sys.path.insert(0, str(_here))
 sys.path.insert(0, str(_here.parent))
 from _common import IngestClient, Shutdown  # noqa: E402
+from issues_gh import fetch_open_issues, set_issue_state  # noqa: E402
+from issues_md import in_issue_block, issue_ref, orphan_sections, render_issue_blocks, replace_issue_blocks  # noqa: E402
+from issues_note import has_issue_block, note_repo, ref_in_note_repo  # noqa: E402
 from queue_md import parse_queue_md  # noqa: E402
+from task_flip import TOGGLE_LINE_RE as _TOGGLE_LINE_RE, flip_task_in_section as _flip_task_in_section  # noqa: E402
 from task_ticks import TickTracker  # noqa: E402
 
 HOST_NAME = os.environ.get('HOST_NAME', 'elitedesk')
@@ -60,6 +67,8 @@ BOARD_SLUG = os.environ.get('BOARD_SLUG', 'home-ops')
 QUEUE_URL = INGEST_BASE + '/api/queue/sync'
 QUEUE_FILE = os.environ.get('QUEUE_FILE', 'QUEUE.md')
 SIGNALS_URL = INGEST_BASE + '/api/progress/signals'
+GITHUB_OWNER = os.environ.get('GITHUB_OWNER', 'PiotrRomanczuk')
+ISSUES_INTERVAL = float(os.environ.get('ISSUES_INTERVAL', '300'))
 
 
 def post_log(level: str, message: str, data: dict[str, Any] | None = None) -> None:
@@ -238,46 +247,8 @@ def _find_project_file(vault_root: Path, slug: str) -> Path | None:
 
 # ── task writeback (UI checkbox toggle → markdown file → git push) ────
 
-_TOGGLE_LINE_RE = re.compile(r'^(\s*[-*]\s+\[)([ xX])(\]\s+)(.+?)(\s*)$')
 
-
-def _flip_task_in_section(text: str, section: str, idx: int, done: bool,
-                          task_text: str | None = None) -> str | None:
-    """Walk the markdown file. Find the `## <section>` header (case-insensitive
-    match on the canonical name OR a "<Name> — ..." variant). Inside that
-    section, flip the checkbox line whose text equals `task_text`; when there
-    is no text anchor (or no match — e.g. the task was reworded since the UI
-    rendered), fall back to the Nth `- [ ]` / `- [x]` line. Return the
-    modified text, or None if the task wasn't resolvable."""
-    target = section.lower()
-    lines = text.split('\n')
-    in_section = False
-    candidates: list[tuple[int, re.Match[str]]] = []
-    for i, raw in enumerate(lines):
-        header = re.match(r'^##\s+(.+?)\s*$', raw)
-        if header:
-            name = header.group(1).strip().lower()
-            # Match 'now' / 'next' / 'later' or 'now — ...' variants
-            canonical = name.split(' ')[0] if name else ''
-            in_section = canonical == target or (target == 'pain' and name.startswith('pain'))
-            continue
-        if not in_section:
-            continue
-        m = _TOGGLE_LINE_RE.match(raw)
-        if m:
-            candidates.append((i, m))
-
-    chosen: tuple[int, re.Match[str]] | None = None
-    if task_text:
-        chosen = next(((i, m) for i, m in candidates if m.group(4).strip() == task_text), None)
-    if chosen is None and 0 <= idx < len(candidates):
-        chosen = candidates[idx]
-    if chosen is None:
-        return None
-    i, m = chosen
-    new_marker = 'x' if done else ' '
-    lines[i] = f'{m.group(1)}{new_marker}{m.group(3)}{m.group(4)}{m.group(5)}'
-    return '\n'.join(lines)
+_OUTSIDE_REPO = ('conflict', 'issue link outside the note repo')
 
 
 def _apply_one_toggle(toggle: dict[str, Any]) -> tuple[str, str | None]:
@@ -302,7 +273,23 @@ def _apply_one_toggle(toggle: dict[str, Any]) -> tuple[str, str | None]:
     except (OSError, UnicodeDecodeError) as e:
         return 'failed', f'read failed: {e}'
 
-    new_text = _flip_task_in_section(text, section, idx, done, toggle.get('text'))
+    # A line generated from GitHub Issues: the issue is the source of truth.
+    fm = (parse_project_file(md_path) or {}).get('raw_frontmatter') or {}
+    ref = issue_ref(toggle.get('text') or '')
+    if ref and in_issue_block(text, toggle.get('text') or ''):
+        return _toggle_issue(ref, done) if ref_in_note_repo(ref, fm, GITHUB_OWNER) else _OUTSIDE_REPO
+
+    # A trailing issue link means the line was generated: if it is gone from
+    # the block (issue closed, block re-rendered) a stale idx would flip an
+    # unrelated manual line, so go to the issue instead. In a note with a
+    # block the index shifts on every render, so a line looked up by text
+    # that no longer matches is stale too — never fall back to idx there.
+    use_idx = ref is None and not (has_issue_block(text) and toggle.get('text'))
+    new_text = _flip_task_in_section(text, section, idx, done, toggle.get('text'), idx_fallback=use_idx)
+    if new_text is None and ref:
+        return _toggle_issue(ref, done) if ref_in_note_repo(ref, fm, GITHUB_OWNER) else _OUTSIDE_REPO
+    if new_text is None and not use_idx and ref is None:
+        return 'conflict', 'task changed since the view was rendered'
     if new_text is None:
         return 'failed', f'task not found: section={section} idx={idx}'
     if new_text == text:
@@ -528,22 +515,34 @@ def _board_import(slug: str, parsed: dict[str, Any], focus_text: str | None) -> 
     return None
 
 
-def _write_commit_push(md_path: Path, new_text: str, msg: str) -> bool:
+def _write_commit_push(md_path: Path, new_text: str, msg: str,
+                       rebuild: Callable[[str], str] | None = None) -> bool:
+    """`rebuild`, when given, recomputes the text from the file as it is after
+    the pull, so an Obsidian edit pulled in just now is not overwritten by
+    `new_text` (computed from the pre-pull read). Unchanged → nothing to push."""
     pr = _run_git('pull', '--ff-only')
     if pr.returncode != 0:
-        post_log('warn', 'board-sync pre-push pull failed', {'stderr': pr.stderr.strip()[-300:]})
+        post_log('warn', 'vault write: pre-push pull failed', {'stderr': pr.stderr.strip()[-300:]})
         return False
+    if rebuild is not None:
+        try:
+            fresh = md_path.read_text(encoding='utf-8')
+        except (OSError, UnicodeDecodeError):
+            return False
+        new_text = rebuild(fresh)
+        if new_text == fresh:
+            return True
     md_path.write_text(new_text, encoding='utf-8')
     if _run_git('add', str(md_path.relative_to(PLANNER_DIR))).returncode != 0:
         return False
     commit = _run_git('-c', 'user.name=planner-sync', '-c', 'user.email=planner-sync@home-ops',
                       'commit', '-m', msg)
     if commit.returncode != 0:
-        post_log('warn', 'board-sync commit failed', {'stderr': commit.stderr.strip()[-300:]})
+        post_log('warn', 'vault write: commit failed', {'stderr': commit.stderr.strip()[-300:]})
         return False
     push = _run_git('push')
     if push.returncode != 0:
-        post_log('warn', 'board-sync push conflict', {'stderr': push.stderr.strip()[-300:]})
+        post_log('warn', 'vault write: push conflict', {'stderr': push.stderr.strip()[-300:]})
         return False
     return True
 
@@ -630,6 +629,65 @@ def queue_sync_once() -> None:
         post_log('error', 'queue sync failed', {'status': status, 'error': (body or {}).get('error')})
 
 
+# ── issues sync (GitHub Issues → Now/Next/Later blocks, pilot 2026-11-14) ─
+
+_issues_due = 0.0
+_board_conflict_warned: set[str] = set()  # slugs already warned about, once per process
+_orphan_warned: set[tuple[str, str]] = set()  # (slug, section) with START but no END
+
+
+def issues_sync_once(board_slugs: Collection[str] = ()) -> None:
+    """Notes with `zadania: github` + `repo:` get their generated blocks
+    re-rendered from open issues, at most every ISSUES_INTERVAL seconds.
+    Runs right after the tick's pull, like board sync. A note whose slug is on
+    the Board is skipped: board render rewrites Now/Next/Later without the
+    markers, so the two sources would duplicate every line."""
+    global _issues_due
+    if time.monotonic() < _issues_due:
+        return
+    _issues_due = time.monotonic() + ISSUES_INTERVAL
+    for md_path in _project_files(PLANNER_DIR):
+        rec = parse_project_file(md_path) or {}
+        fm = rec.get('raw_frontmatter') or {}
+        if fm.get('zadania') != 'github' or not fm.get('repo'):
+            continue
+        if rec['slug'] in board_slugs:
+            if rec['slug'] not in _board_conflict_warned:
+                _board_conflict_warned.add(rec['slug'])
+                post_log('warn', f'issues sync skipped: {rec["slug"]} is on the Board — pick one source')
+            continue
+        repo = note_repo(fm, GITHUB_OWNER)
+        if repo is None:
+            post_log('warn', f'issues sync: bad repo "{fm["repo"]}" in {md_path.name}')
+            continue
+        issues = fetch_open_issues(repo)
+        if issues is None:
+            post_log('warn', f'issues fetch failed: {repo}')
+            continue
+        rendered = render_issue_blocks(issues)
+        current = md_path.read_text(encoding='utf-8')
+        for key in orphan_sections(current):
+            if (rec['slug'], key) not in _orphan_warned:
+                _orphan_warned.add((rec['slug'], key))
+                post_log('warn', f'issues sync: {rec["slug"]} {key} has START without END — fix the note')
+        new_md = replace_issue_blocks(current, rendered)
+        if new_md == current:
+            continue
+        if _write_commit_push(md_path, new_md, f'issues sync: {rec["slug"]}',
+                              rebuild=lambda text: replace_issue_blocks(text, rendered)):
+            post_log('info', f'issues sync: {rec["slug"]}', {'repo': repo, 'open': len(issues)})
+
+
+def _toggle_issue(ref: tuple[str, int], done: bool) -> tuple[str, str | None]:
+    """Dziś toggle on a generated line → close/reopen the issue; the next
+    sync tick re-renders the block (forced, without waiting ISSUES_INTERVAL)."""
+    global _issues_due
+    if not set_issue_state(ref[0], ref[1], done):
+        return 'failed', f'GitHub issue {ref[0]}#{ref[1]} update failed'
+    _issues_due = 0.0
+    return 'applied', None
+
+
 # ── main loop ─────────────────────────────────────────────────────────
 
 def sync_once() -> None:
@@ -643,11 +701,17 @@ def sync_once() -> None:
     # Board tab: reconcile board_tasks ↔ vault, per slug, isolated so one
     # project's failure doesn't block the rest. Runs before the parse below
     # so the projects table reflects any DB→vault render from this same tick.
-    for slug in _board_slugs():
+    board_slugs = _board_slugs()
+    for slug in board_slugs:
         try:
             board_sync_once(slug)
         except (OSError, ValueError, subprocess.SubprocessError) as e:
             post_log('error', f'board-sync raised for {slug}: {type(e).__name__}', {'err': str(e)[:500]})
+
+    try:
+        issues_sync_once(board_slugs)
+    except (OSError, ValueError, subprocess.SubprocessError) as e:
+        post_log('error', f'issues-sync raised: {type(e).__name__}', {'err': str(e)[:500]})
 
     project_files = _project_files(PLANNER_DIR)
     if not project_files:

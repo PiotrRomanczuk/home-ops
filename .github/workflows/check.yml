@@ -45,6 +45,10 @@ jobs:
             agents/_common.py \
             agents/elitedesk/elitedesk-watcher.py \
             agents/elitedesk/planner-sync.py \
+            agents/elitedesk/issues_gh.py \
+            agents/elitedesk/issues_md.py \
+            agents/elitedesk/issues_note.py \
+            agents/elitedesk/task_flip.py \
             agents/rpi/rpi-watcher.py \
             agents/rpi/rpi-sentinel.py \
             agents/win10/win10-watcher.py \
