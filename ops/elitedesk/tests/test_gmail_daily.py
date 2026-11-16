@@ -209,7 +209,7 @@ class CardTest(unittest.TestCase):
             daily_mod.post_card('h', 'ok', log=lambda *_: None)
 
     def test_successful_run_exits_0_even_when_the_card_cannot_be_posted(self):
-        stats = {'new': 0, 'added': 0, 'removed': 0, 'inbox': 0, 'review': 0, 'gone': 0}
+        stats = {'new': 0, 'added': 0, 'removed': 0, 'inbox': 0, 'review': 0, 'gone': 0, 'proposed': 0, 'archived': 0}
         with mock.patch.dict('os.environ', {}, clear=True), mock.patch.object(daily_mod.gmail_inventory, 'STATE_DIR', Path('.')):
             with mock.patch.object(daily_mod, 'daily', lambda *a, **k: stats), \
                     mock.patch.object(daily_mod, 'Gmail', mock.MagicMock()), \
