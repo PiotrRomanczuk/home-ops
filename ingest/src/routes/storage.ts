@@ -1,12 +1,12 @@
 import type { Hono } from 'hono';
 import { tokenOnly, viewerOrToken } from '../auth.ts';
 import { pool } from '../db.ts';
-import { parsePlaces } from '../storage-model.ts';
+import { BACKUP, PORZADEK, parsePlaces, STANY } from '../storage-model.ts';
 
-// storage_places (migration 029) — the vault storage register, one row per
+// storage_places (migration 034) — the vault storage register, one row per
 // place note. planner-sync POSTs the full set when the notes change; the
-// handler upserts by id and deletes ids that left the vault, in one
-// transaction, like /api/projects/sync. Contract: docs/adr/2026-11-12-storage-places.md.
+// handler upserts by id and deletes ids that left the vault (not rejected
+// notes), in one transaction, like /api/projects/sync. Contract: docs/adr/2026-11-12-storage-places.md.
 
 // ::text on dates — node-pg would turn a `date` into a local-midnight Date.
 const COLS = `id, nazwa, gdzie, sciezka, rola, stan, porzadek, backup,
@@ -24,7 +24,9 @@ const UPSERT = `INSERT INTO public.storage_places
     sprawdzenie = EXCLUDED.sprawdzenie, problem = EXCLUDED.problem, note_path = EXCLUDED.note_path,
     updated_at = EXCLUDED.updated_at, synced_at = now(), raw_frontmatter = EXCLUDED.raw_frontmatter`;
 
-// Filters the GET accepts; values are checked against the column's CHECK by Postgres.
+// Filters the GET accepts. The status ones are checked against their enum (a typo is a 400,
+// not an empty "all clean" list); `gdzie` is free text.
+const ENUM_FILTERS: Record<string, readonly string[]> = { stan: STANY, porzadek: PORZADEK, backup: BACKUP };
 const FILTERS = ['stan', 'porzadek', 'backup', 'gdzie'] as const;
 
 export function registerStorageRoutes(app: Hono): void {
@@ -66,10 +68,11 @@ export function registerStorageRoutes(app: Hono): void {
           JSON.stringify(p.raw_frontmatter),
         ]);
       }
-      const ids = parsed.places.map((p) => p.id);
-      const del = await client.query(`DELETE FROM public.storage_places WHERE id <> ALL($1::int[])`, [ids]);
+      // A rejected note keeps its row (last valid version): a typo must not erase a place.
+      const keep = [...parsed.places.map((p) => p.id), ...parsed.rejected.flatMap((r) => (r.id ? [r.id] : []))];
+      const del = await client.query(`DELETE FROM public.storage_places WHERE id <> ALL($1::int[])`, [keep]);
       await client.query('COMMIT');
-      return c.json({ upserted: ids.length, removed: del.rowCount ?? 0, rejected: parsed.rejected });
+      return c.json({ upserted: parsed.places.length, removed: del.rowCount ?? 0, rejected: parsed.rejected });
     } catch (err) {
       await client.query('ROLLBACK');
       console.error('storage sync failed:', err);
@@ -85,6 +88,7 @@ export function registerStorageRoutes(app: Hono): void {
     for (const key of FILTERS) {
       const value = c.req.query(key);
       if (!value) continue;
+      if (ENUM_FILTERS[key] && !ENUM_FILTERS[key].includes(value)) return c.json({ error: `bad filter ${key}` }, 400);
       params.push(value);
       where.push(`${key} = $${params.length}`);
     }

@@ -68,6 +68,23 @@ class ParsePlaceTest(unittest.TestCase):
         rec = sm.parse_place(NOTE.replace('porzadek: problem', 'porzadek: 🟢'), 'x.md')
         self.assertEqual(rec['porzadek'], '🟢')
 
+    def test_reads_notes_with_bom_and_crlf(self) -> None:
+        rec = sm.parse_place('\ufeff' + NOTE.replace('\n', '\r\n'), 'x.md')
+        self.assertEqual(rec['id'], 8)
+        self.assertEqual(rec['porzadek'], 'problem')
+        self.assertEqual(rec['sprawdzenie'], 'rclone about gdrive:')
+
+    def test_cuts_a_trailing_comment_from_bare_values_only(self) -> None:
+        note = NOTE.replace('backup: problem', 'backup: ok # sprawdzić', 1).replace(
+            'problem: "176', 'gdzie: C# dysk\nproblem: "176')
+        rec = sm.parse_place(note, 'x.md')
+        self.assertEqual(rec['backup'], 'ok')
+        self.assertEqual(rec['gdzie'], 'C# dysk')
+
+    def test_a_value_that_is_only_a_comment_is_empty(self) -> None:
+        rec = sm.parse_place(NOTE.replace('test_odtworzenia:', 'test_odtworzenia: # jeszcze nie'), 'x.md')
+        self.assertIsNone(rec['test_odtworzenia'])
+
 
 class ParsePlacesTest(unittest.TestCase):
     def test_walks_the_register_folder_in_name_order(self) -> None:

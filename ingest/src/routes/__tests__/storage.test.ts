@@ -1,6 +1,6 @@
-/* Integration test for storage_places (029): POST /api/storage/sync full-set
+/* Integration test for storage_places (034): POST /api/storage/sync full-set
  * upsert + delete, rejections, and GET /api/storage filters + summary.
- * Skips when DATABASE_URL is unset. Needs migration 029.
+ * Skips when DATABASE_URL is unset. Needs migration 034.
  */
 import type { Hono } from 'hono';
 import type pg from 'pg';
@@ -23,7 +23,7 @@ beforeAll(async () => {
   const pgMod = await import('pg');
   pool = new pgMod.default.Pool({ connectionString: dbUrl, max: 4 });
   const r = await pool.query(`SELECT to_regclass('public.storage_places') AS t`);
-  if (!r.rows[0].t) throw new Error('apply migration 029 first');
+  if (!r.rows[0].t) throw new Error('apply migration 034 first');
   const { Hono: HonoCls } = await import('hono');
   app = new HonoCls();
   (await import('../storage.ts')).registerStorageRoutes(app);
@@ -81,6 +81,25 @@ describe.skipIf(skip)('POST /api/storage/sync + GET /api/storage', () => {
       test_odtworzenia: '2026-11-13',
       sprawdzone: '2026-11-12',
     });
+  });
+
+  it('keeps the row of a rejected note (last valid version) instead of deleting it', async () => {
+    await req('POST', '/api/storage/sync', { places: [place(1), place(2)] });
+    const r = await json(await req('POST', '/api/storage/sync', { places: [place(1), place(2, { porzadek: '🟢' })] }));
+    expect(r).toMatchObject({ upserted: 1, removed: 0 });
+    expect(r.rejected).toEqual([{ index: 1, reason: 'bad status value', id: 2 }]);
+    const g = await json(await req('GET', '/api/storage'));
+    expect(g.places.map((p: Json) => [p.id, p.porzadek])).toEqual([
+      [1, 'ok'],
+      [2, 'ok'],
+    ]);
+  });
+
+  it('answers 400 to a filter value outside the enum', async () => {
+    const r = await req('GET', '/api/storage?backup=zielony');
+    expect(r.status).toBe(400);
+    expect(await json(r)).toEqual({ error: 'bad filter backup' });
+    expect((await req('GET', '/api/storage?gdzie=cokolwiek')).status).toBe(200);
   });
 
   it('filters by status and counts the summary', async () => {

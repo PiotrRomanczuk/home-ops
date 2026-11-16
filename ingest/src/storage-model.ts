@@ -33,7 +33,8 @@ export interface PlaceInput {
 
 export interface PlacesPayload {
   places: PlaceInput[];
-  rejected: Array<{ index: number; reason: string }>;
+  /** `id` is set when the note had a usable id — its mirror row must survive the sync. */
+  rejected: Array<{ index: number; reason: string; id?: number }>;
 }
 
 type Obj = Record<string, unknown>;
@@ -60,11 +61,16 @@ function oneOf<T extends string>(v: unknown, allowed: readonly T[], fallback: T)
   return allowed.includes(v as T) ? (v as T) : undefined;
 }
 
+/** The note id if it is storable, else undefined. */
+export function validId(raw: unknown): number | undefined {
+  return typeof raw === 'number' && Number.isInteger(raw) && raw >= 1 && raw <= MAX_ID ? raw : undefined;
+}
+
 /** Returns the valid place, or the reason it was rejected. */
 export function parsePlace(raw: unknown): PlaceInput | string {
   if (!isObj(raw)) return 'not an object';
-  const id = raw.id;
-  if (typeof id !== 'number' || !Number.isInteger(id) || id < 1 || id > MAX_ID) return 'bad id';
+  const id = validId(raw.id);
+  if (id === undefined) return 'bad id';
   const nazwa = optText(raw.nazwa, MAX_NAME);
   if (!nazwa) return 'nazwa required';
   const notePath = optText(raw.note_path, MAX_NAME);
@@ -110,8 +116,10 @@ export function parsePlaces(body: unknown): PlacesPayload | string {
   const seen = new Set<number>();
   raw.forEach((item, index) => {
     const place = parsePlace(item);
-    if (typeof place === 'string') rejected.push({ index, reason: place });
-    else if (seen.has(place.id)) rejected.push({ index, reason: `duplicate id ${place.id}` });
+    if (typeof place === 'string') {
+      const id = isObj(item) ? validId(item.id) : undefined;
+      rejected.push(id === undefined ? { index, reason: place } : { index, reason: place, id });
+    } else if (seen.has(place.id)) rejected.push({ index, reason: `duplicate id ${place.id}`, id: place.id });
     else {
       seen.add(place.id);
       places.push(place);

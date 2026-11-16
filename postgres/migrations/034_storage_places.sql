@@ -1,4 +1,4 @@
--- 029_storage_places.sql
+-- 034_storage_places.sql
 -- Created: 2026-11-12
 --
 -- The storage register: every place where Piotr's data lives (hosts,

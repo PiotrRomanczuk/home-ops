@@ -53,7 +53,18 @@ describe('parsePlaces', () => {
     if (typeof r === 'string') throw new Error(r);
     expect(r.places.map((p) => p.nazwa)).toEqual(['Google Drive']);
     expect(r.rejected).toEqual([
-      { index: 1, reason: 'duplicate id 8' },
+      { index: 1, reason: 'duplicate id 8', id: 8 },
+      { index: 2, reason: 'bad id' },
+    ]);
+  });
+
+  it('carries the id of a rejected note so its mirror row can be kept', () => {
+    const r = parsePlaces({ places: [place({ porzadek: '🟢' }), place({ id: 9, nazwa: '' }), place({ id: 0 })] });
+    if (typeof r === 'string') throw new Error(r);
+    expect(r.places).toEqual([]);
+    expect(r.rejected).toEqual([
+      { index: 0, reason: 'bad status value', id: 8 },
+      { index: 1, reason: 'nazwa required', id: 9 },
       { index: 2, reason: 'bad id' },
     ]);
   });

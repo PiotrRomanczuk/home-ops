@@ -24,10 +24,12 @@ FIELDS = (
 
 _FRONTMATTER_RE = re.compile(r'^---\n(.*?)\n---\n', re.DOTALL)
 _INT_RE = re.compile(r'-?\d+')
+_COMMENT_RE = re.compile(r'(^|\s+)#.*$')
 
 
 def _value(raw: str) -> Any:
-    """One YAML scalar: double-quoted (JSON escapes), single-quoted, int or bare text."""
+    """One YAML scalar: double-quoted (JSON escapes), single-quoted, int or bare text
+    (a trailing ` # comment` is cut off bare text only)."""
     raw = raw.strip()
     if len(raw) >= 2 and raw[0] == raw[-1] == '"':
         try:
@@ -36,13 +38,14 @@ def _value(raw: str) -> Any:
             return raw[1:-1]
     if len(raw) >= 2 and raw[0] == raw[-1] == "'":
         return raw[1:-1].replace("''", "'")
+    raw = _COMMENT_RE.sub('', raw)
     if _INT_RE.fullmatch(raw):
         return int(raw)
     return raw
 
 
 def parse_frontmatter(text: str) -> dict[str, Any] | None:
-    m = _FRONTMATTER_RE.match(text)
+    m = _FRONTMATTER_RE.match(text.lstrip('\ufeff').replace('\r\n', '\n'))
     if not m:
         return None
     out: dict[str, Any] = {}

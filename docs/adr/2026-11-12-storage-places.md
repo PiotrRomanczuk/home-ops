@@ -6,7 +6,7 @@ status: accepted
 
 # ADR: the vault storage register mirrored as `storage_places`
 
-**Date**: 2026-11-12 · **Author**: Piotr (with Claude) · **Scope**: planner-sync, ingest `/api/storage*`, migration 029
+**Date**: 2026-11-12 · **Author**: Piotr (with Claude) · **Scope**: planner-sync, ingest `/api/storage*`, migration 034
 
 ## Context
 
@@ -33,14 +33,18 @@ A table cell cannot be validated, queried or updated by a machine.
   notes (`agents/elitedesk/storage_md.py`) and POSTs the full set to
   `POST /api/storage/sync` **only when the notes change** (md5 of the parsed
   set). The handler validates (`ingest/src/storage-model.ts`), upserts by `id`
-  and deletes ids that left the vault, in one transaction. An empty valid set
+  and deletes ids that left the vault, in one transaction. **A rejected note
+  does not delete its row**: ids of rejected notes (when the id itself is
+  valid) are kept, so the mirror holds the last valid version until the note
+  is fixed — a typo in a status must not erase a place from the register. An empty valid set
   is refused (400) so a broken clone cannot wipe the table.
 - **Statuses are enums enforced twice** (TS validator + CHECK constraints):
   `porzadek` ok / do-poprawy / problem / niesprawdzone; `backup` the same plus
   nie-wymaga / brak-oceny; `stan` aktywne / usuniete. Invalid notes are
   rejected individually and logged by planner-sync with their note path.
 - `GET /api/storage` (viewer or token) returns the places ordered by id, with
-  optional `stan`, `porzadek`, `backup`, `gdzie` filters and per-status counts.
+  optional `stan`, `porzadek`, `backup`, `gdzie` filters and per-status counts;
+  a status filter outside its enum is a 400, not an empty list.
 
 ## Consequences
 

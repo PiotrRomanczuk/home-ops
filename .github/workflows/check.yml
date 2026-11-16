@@ -208,7 +208,7 @@ jobs:
             psql -h 127.0.0.1 -U postgres -d home_ops -v ON_ERROR_STOP=1 \
               -f postgres/migrations/016_project_repo_meta.sql \
               -f postgres/migrations/027_project_signals.sql \
-              -f postgres/migrations/029_storage_places.sql
+              -f postgres/migrations/034_storage_places.sql
           done
 
       - name: integration tests
