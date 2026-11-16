@@ -38,6 +38,17 @@ scripts/deploy-agent.sh elitedesk planner-sync   # planner-sync.py + storage_md.
 <li><b>Brzegi</b>: wpisać <code>porzadek: 🟢</code> w jednej notatce → linia <code>storage sync ok</code> na poziomie <code>warn</code> z <code>rejected: [{note: …, reason: "bad status value"}]</code>, reszta miejsc się zapisuje; usunąć notatkę → jej <code>id</code> znika z tabeli (<code>removed: 1</code>); <code>POST</code> bez tokena → 401; <code>{"places": []}</code> → 400.</li>
 </ol>
 
+<h2>Poprawki r2 (2026-11-16)</h2>
+<p>Recenzja r11: częściowy odczyt vaulta nadal kasował wiersze. Poprawione:</p>
+<ul>
+<li><code>parse_places</code> — plik <code>NN-*.md</code>, którego nie da się odczytać (bajt spoza UTF-8), bez frontmattera albo z <code>type</code> ≠ <code>miejsce</code> (np. <code>Miejsce</code>), trafia do payloadu jako zaślepka <code>{id: NN, nazwa: null, unparsed: "…"}</code>. Serwer odrzuca ją (<code>nazwa required</code>, z <code>id</code>), więc wiersz zostaje, a planner-sync loguje notatkę w <code>rejected</code>. Pliki bez prefiksu <code>NN-</code> (README, szablon) są pomijane.</li>
+<li><code>id: "4"</code> (string cyfr) → <code>4</code>; brak <code>id</code> → numer z prefiksu nazwy pliku.</li>
+<li>Frontmatter zamknięty <code>---</code> na końcu pliku bez <code>\n</code> jest rozpoznawany.</li>
+<li>Testy: 7 nowych w <code>ParsePlacesTest</code> (bajt <code>\xff</code>, frontmatter bez końcowego <code>\n</code>, <code>type: Miejsce</code>, brak frontmattera, <code>id: "4"</code>, brak <code>id</code>, pominięty README) + <code>storage.test.ts</code>: sync <code>[1, 2]</code> → <code>[1, zaślepka 2]</code> daje <code>removed: 0</code>, wiersz 2 bez zmian.</li>
+</ul>
+<p><b>Ręcznie:</b> w kopii vaulta zepsuć jedną notatkę (dopisać bajt <code>\xff</code>, zmienić <code>type: Miejsce</code>, usunąć frontmatter), uruchomić planner-sync → w logu <code>rejected</code> ze ścieżką, <code>removed: 0</code>, miejsce nadal w <code>GET /api/storage</code>.</p>
+<p><b>Bramki:</b> <code>agents/tests</code> 104 OK; <code>npm run check</code> zielone; vitest z Postgresem 17 (migracje jak w <code>check.yml</code> + 017, 034 dwa razy) 149/149, <code>storage.test.ts</code> 6/6.</p>
+
 <h2>Poza zakresem (świadomie)</h2>
 <p>Tabela historii audytu <code>storage_checks</code> i sam cotygodniowy audyt (wykonanie poleceń z <code>sprawdzenie</code>) — osobny PR. Karta na stronie „Dziś” — gdy audyt zacznie produkować odchylenia. Zapis z konsoli do vaulta — nie, vault zostaje jedynym edytorem.</p>
 </body></html>

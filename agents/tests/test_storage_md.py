@@ -99,6 +99,50 @@ class ParsePlacesTest(unittest.TestCase):
         self.assertEqual([p['id'] for p in places], [8, 74])
         self.assertEqual(places[0]['note_path'], '2-Obszary/mapy/miejsca/08-google-drive.md')
 
+    def _parse(self, files: dict[str, bytes]) -> list[dict]:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            folder = root / sm.PLACES_DIR
+            folder.mkdir(parents=True)
+            for name, data in files.items():
+                (folder / name).write_bytes(data)
+            return sm.parse_places(root)
+
+    def _only(self, name: str, data: bytes) -> dict:
+        places = self._parse({name: data, 'README.md': b'# opis\n'})
+        self.assertEqual(len(places), 1)
+        return places[0]
+
+    def test_unreadable_note_becomes_a_stub_with_its_id(self) -> None:
+        rec = self._only('12-x.md', NOTE.encode() + b'\xff')
+        self.assertEqual((rec['id'], rec['nazwa']), (12, None))
+        self.assertIn('unreadable', rec['unparsed'])
+
+    def test_frontmatter_closed_at_end_of_file_still_parses(self) -> None:
+        rec = self._only('08-x.md', b'---\ntype: miejsce\nid: 8\nnazwa: A\n---')
+        self.assertEqual((rec['id'], rec['nazwa']), (8, 'A'))
+        self.assertNotIn('unparsed', rec)
+
+    def test_wrong_type_becomes_a_stub(self) -> None:
+        rec = self._only('08-x.md', NOTE.replace('type: miejsce', 'type: Miejsce').encode())
+        self.assertEqual((rec['id'], rec['nazwa']), (8, None))
+        self.assertIn('unparsed', rec)
+
+    def test_note_without_frontmatter_becomes_a_stub(self) -> None:
+        rec = self._only('09-x.md', b'# pusta notatka\n')
+        self.assertEqual((rec['id'], rec['unparsed']), (9, 'no frontmatter'))
+
+    def test_quoted_id_becomes_int(self) -> None:
+        rec = self._only('04-x.md', NOTE.replace('id: 8', 'id: "4"').encode())
+        self.assertEqual(rec['id'], 4)
+
+    def test_missing_id_comes_from_the_file_prefix(self) -> None:
+        rec = self._only('05-x.md', NOTE.replace('id: 8\n', '').encode())
+        self.assertEqual((rec['id'], rec['nazwa']), (5, 'Google Drive'))
+
+    def test_files_without_a_number_prefix_are_skipped(self) -> None:
+        self.assertEqual(self._parse({'README.md': NOTE.encode(), 'szablon.md': b'x'}), [])
+
     def test_missing_folder_is_an_empty_register(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             self.assertEqual(sm.parse_places(Path(tmp)), [])

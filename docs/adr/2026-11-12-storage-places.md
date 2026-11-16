@@ -36,7 +36,12 @@ A table cell cannot be validated, queried or updated by a machine.
   and deletes ids that left the vault, in one transaction. **A rejected note
   does not delete its row**: ids of rejected notes (when the id itself is
   valid) are kept, so the mirror holds the last valid version until the note
-  is fixed — a typo in a status must not erase a place from the register. An empty valid set
+  is fixed — a typo in a status must not erase a place from the register. The
+  same holds for a note the parser cannot read at all (bad UTF-8, no
+  frontmatter, wrong `type`): when its file name carries the `NN-` number it is
+  sent as a stub (`id` from the prefix, `nazwa: null`), rejected by the server
+  and logged, and its row stays. Files without the prefix (README, template)
+  are ignored. An empty valid set
   is refused (400) so a broken clone cannot wipe the table.
 - **Statuses are enums enforced twice** (TS validator + CHECK constraints):
   `porzadek` ok / do-poprawy / problem / niesprawdzone; `backup` the same plus

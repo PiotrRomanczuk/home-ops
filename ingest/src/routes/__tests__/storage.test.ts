@@ -95,6 +95,19 @@ describe.skipIf(skip)('POST /api/storage/sync + GET /api/storage', () => {
     ]);
   });
 
+  it('keeps the row of an unparsed stub note (nazwa null) unchanged', async () => {
+    await req('POST', '/api/storage/sync', { places: [place(1), place(2)] });
+    const stub = { id: 2, note_path: '2-Obszary/mapy/miejsca/2-x.md', nazwa: null };
+    const r = await json(await req('POST', '/api/storage/sync', { places: [place(1), stub] }));
+    expect(r).toMatchObject({ upserted: 1, removed: 0 });
+    expect(r.rejected).toEqual([expect.objectContaining({ index: 1, id: 2 })]);
+    const g = await json(await req('GET', '/api/storage'));
+    expect(g.places.map((p: Json) => [p.id, p.nazwa])).toEqual([
+      [1, 'miejsce 1'],
+      [2, 'miejsce 2'],
+    ]);
+  });
+
   it('answers 400 to a filter value outside the enum', async () => {
     const r = await req('GET', '/api/storage?backup=zielony');
     expect(r.status).toBe(400);
