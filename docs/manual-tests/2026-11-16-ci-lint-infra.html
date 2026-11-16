@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>2026-11-16 — CI lint-infra</title>
+<style>body{font:15px/1.5 system-ui;max-width:820px;margin:2rem auto;padding:0 1rem}code,pre{background:#f3f3f3;padding:2px 5px;border-radius:4px}pre{padding:10px;overflow:auto}</style></head><body>
+<p><em>2026-11-16</em></p>
+<h1>CI: shellcheck + hadolint + ingest image build</h1>
+<h2>What was added</h2>
+<ul>
+<li><code>.github/workflows/lint-infra.yml</code> (new; <code>check.yml</code>/<code>flow.yml</code> untouched because of PR #84). Triggers: <code>pull_request</code>, <code>push</code> to main/dev/test.</li>
+<li>Job <code>shellcheck</code>: all tracked <code>*.sh</code> (13) plus extension-less sh/bash-shebang scripts under <code>ops/</code>, <code>bin/</code> (none today), <code>--severity=warning</code>.</li>
+<li>Job <code>hadolint</code> (image <code>hadolint/hadolint:v2.12.0</code>): the 4 Dockerfiles, config <code>.hadolint.yaml</code>.</li>
+<li>Job <code>ingest-image</code>: <code>docker build ingest/</code>, no push, no secrets.</li>
+<li>Findings: 1 shellcheck (SC2095, <code>pg-backup.sh</code>) → narrow <code>disable</code> with comment (behaviour unchanged); hadolint DL3008/DL3013 → ignored in <code>.hadolint.yaml</code> with justification.</li>
+</ul>
+<h2>How to check</h2>
+<pre>docker run --rm -v "$PWD:/mnt" -w /mnt koalaman/shellcheck:stable --severity=warning $(git ls-files '*.sh')
+for f in ingest/Dockerfile postgres/Dockerfile ops/llm-eval/Dockerfile ops/llm-eval/strummy/Dockerfile.strummy; do
+  docker run --rm -i -v "$PWD/.hadolint.yaml:/.hadolint.yaml:ro" hadolint/hadolint:v2.12.0 hadolint --config /.hadolint.yaml - &lt; $f
+done
+docker build ingest/</pre>
+<p>Expected: no output / exit 0 everywhere. On the PR: checks <code>shellcheck</code>, <code>hadolint</code>, <code>ingest-image</code> green.</p>
+<h2>Local results (2026-11-16)</h2>
+<ul><li>shellcheck: clean · hadolint: clean (4/4) · docker build ingest/: OK</li>
+<li><code>npm run check</code> OK · agents/tests 88 OK · ops/elitedesk/tests 93 OK</li></ul>
+</body></html>
