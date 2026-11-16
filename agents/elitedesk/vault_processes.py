@@ -91,6 +91,7 @@ def parse_process_file(path: Path, vault_root: Path) -> dict[str, Any] | None:
         'bpmn_xml': xml,
         'bpmn_hash': digest,
         'path': str(path.relative_to(vault_root)),
+        'bpmn_path': str((path.parent / bpmn_name).relative_to(vault_root)),
         'warnings': warnings,
     }
 

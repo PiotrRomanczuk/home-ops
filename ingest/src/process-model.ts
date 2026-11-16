@@ -3,6 +3,8 @@
 
 export const MAX_PROCESSES = 100;
 export const MAX_BPMN_CHARS = 512 * 1024;
+/** planner-sync's cap (`MAX_BPMN_BYTES`) counts UTF-8 bytes, not characters. */
+export const MAX_BPMN_BYTES = 512 * 1024;
 
 export interface ProcessRecord {
   slug: string;

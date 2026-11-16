@@ -61,6 +61,7 @@ class ProcessNotesTest(unittest.TestCase):
         self.assertEqual(rec['warnings'], [])
         self.assertEqual(len(rec['bpmn_hash']), 64)
         self.assertEqual(rec['path'], '2-Obszary/mapy/procesy/lead-pipeline.md')
+        self.assertEqual(rec['bpmn_path'], '2-Obszary/mapy/procesy/lead-pipeline.bpmn')
 
     def test_lane_mismatch_is_a_warning(self):
         self.write('lead-pipeline.bpmn', BPMN.replace('vectordigital', 'natalia-cv'))

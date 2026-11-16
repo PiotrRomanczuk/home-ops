@@ -13,6 +13,7 @@ interface Props {
   pressure: PressureRow[];
   selected: string | null;
   onSelect: (id: string | null) => void;
+  onOpenProcess: (slug: string) => void;
 }
 
 function Chips({ title, ids, onSelect }: { title: string; ids: string[]; onSelect: (id: string) => void }) {
@@ -33,7 +34,7 @@ function Chips({ title, ids, onSelect }: { title: string; ids: string[]; onSelec
   );
 }
 
-export function NodeSheet({ map, pressure, selected, onSelect }: Props) {
+export function NodeSheet({ map, pressure, selected, onSelect, onOpenProcess }: Props) {
   const node = map.nodes.find((n) => n.id === selected);
   const isHost = !!selected?.startsWith('host:');
   const row = pressure.find((p) => p.slug.toLowerCase() === selected);
@@ -88,7 +89,15 @@ export function NodeSheet({ map, pressure, selected, onSelect }: Props) {
               <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Procesy (BPMN)</h3>
               <ul className="space-y-0.5 text-sm">
                 {processes.map((p) => (
-                  <li key={p.slug}>{p.title}</li>
+                  <li key={p.slug}>
+                    <button
+                      type="button"
+                      className="text-primary underline-offset-4 hover:underline"
+                      onClick={() => onOpenProcess(p.slug)}
+                    >
+                      {p.title}
+                    </button>
+                  </li>
                 ))}
               </ul>
             </section>
