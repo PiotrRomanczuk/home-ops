@@ -5,7 +5,7 @@ One stdlib HTTP server that renders the state directory on each request (no buil
 framework), until the data lives in home-ops proper. Routes:
   GET  /            budget, counts, running tasks, GPU supervisor, last runs, failed, "Czeka na Piotra"
   GET  /r/<id>      one task's result file
-  POST /stop        creates the STOP file (workers finish their task and quit)
+  POST /stop        creates the STOP file (workers finish their task and quit); needs STATE/status.token
 
 Env: SPRINT_STATE (as runner.py), SPRINT_STATUS_PORT (8787),
 SPRINT_STATUS_HOST (127.0.0.1; 0.0.0.0 = whole LAN, no login — the page shows task results).
@@ -19,8 +19,10 @@ import re
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import parse_qs
 
 import sprint_tasks as q
+import status_auth as auth
 import status_panels as panels
 
 STATE = Path(os.environ.get('SPRINT_STATE', '~/.local/state/home-ops/sprint')).expanduser()
@@ -73,6 +75,8 @@ def page() -> str:
            f'</div><p class="dim">Agenci Claude: {e(why)}</p><h2>GPU</h2>{panels.gpu_html(STATE)}<h2>W toku</h2><table>']
     for p in sorted((STATE / 'running').glob('*.md')):
         t = q.parse(p)
+        if not t:
+            continue
         mins = int((time.time() - p.stat().st_mtime) / 60)
         out.append(f'<tr><td class="m">{e(t["id"])}</td><td>{e(str(t.get("model")))}</td><td class="dim">{mins} min</td></tr>')
     out.append('</table><h2>Ostatnie przebiegi</h2><table><tr><th>kiedy</th><th>zadanie</th><th>model</th><th>min</th><th>$</th><th></th></tr>')
@@ -85,17 +89,16 @@ def page() -> str:
     out += [f'<li>{e(text)} <a class="dim" href="/r/{e(tid)}">({e(tid)})</a></li>' for tid, text in waiting()] or ['<li class="dim">nic</li>']
     out.append('</ul><h2>Nieudane</h2><ul>')
     out += [f'<li class="m">{e(p.stem)}</li>' for p in sorted((STATE / 'failed').glob('*.md'))] or ['<li class="dim">brak</li>']
-    out.append('</ul><h2>Wyłącznik</h2><form method="post" action="/stop" onsubmit="return confirm(\'Zatrzymać agentów?\')">'
-               '<button>Zatrzymaj agentów Claude</button></form>')
+    out.append('</ul><h2>Wyłącznik</h2>' + auth.stop_form(STATE, HOST))
     return ''.join(out)
 
 
 class Handler(BaseHTTPRequestHandler):
-    def send(self, body: str, refresh: bool = False) -> None:
+    def send(self, body: str, refresh: bool = False, code: int = 200) -> None:
         meta = '<meta http-equiv="refresh" content="30">' if refresh else ''
         doc = (f'<!doctype html><html lang="pl"><meta charset="utf-8"><meta name="viewport" content="width=device-width,'
                f'initial-scale=1">{meta}<title>Mac worker</title><style>{CSS}</style>{body}</html>').encode()
-        self.send_response(200)
+        self.send_response(code)
         self.send_header('Content-Type', 'text/html; charset=utf-8')
         self.send_header('Content-Length', str(len(doc)))
         self.end_headers()
@@ -111,6 +114,10 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         if self.path == '/stop':
+            form = parse_qs(self.rfile.read(min(int(self.headers.get('Content-Length') or 0), 4096)).decode(errors='replace'))
+            if not auth.valid(STATE, (form.get('token') or [''])[0]):
+                return self.send('<p class="bad">Brak albo zły token (plik status.token w katalogu stanu).</p>'
+                                 '<p><a href="/">← sprint</a></p>', code=403)
             (STATE / 'STOP').touch()
         self.send_response(303)
         self.send_header('Location', '/')

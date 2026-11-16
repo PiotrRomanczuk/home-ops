@@ -1,6 +1,8 @@
-"""journal.py — what the runner writes down: every run in full (STATE/logs/runs.jsonl) and one row
-per run in the weekly vault report (3-Zasoby/analysis/<week start>-mac-worker-tydzien.md, started
-from report-head.md). The week starts at the subscription's weekly reset (budget.week_start)."""
+"""journal.py — what the runner writes down: every run in full (STATE/logs/runs.jsonl: `ts` with its UTC offset,
+the task's frontmatter as `task` — attempts, interrupts, not_before, resume, … —, then the run with its whole
+stderr up to 64 KB) and one row per run in the weekly vault report
+(3-Zasoby/analysis/<week start>-mac-worker-tydzien.md, started from report-head.md). The week starts at the
+subscription's weekly reset (budget.week_start)."""
 from __future__ import annotations
 
 import json
@@ -20,9 +22,11 @@ def report_path(week_start: date) -> Path:
 
 def record(state: Path, task: dict[str, Any], run: dict[str, Any], outcome: str, week_start: date,
            lock: threading.Lock) -> None:
+    meta = {k: v for k, v in task.items() if k not in ('body', 'path')}  # as the task stands after this run
     with (state / 'logs' / 'runs.jsonl').open('a') as f:
-        f.write(json.dumps({'ts': datetime.now().isoformat(timespec='seconds'), 'outcome': outcome,
-                            'project': task.get('project'), 'kind': task.get('kind'), **run}, ensure_ascii=False) + '\n')
+        f.write(json.dumps({'ts': datetime.now().astimezone().isoformat(timespec='seconds'), 'outcome': outcome,
+                            'project': task.get('project'), 'kind': task.get('kind'), 'task': meta, **run},
+                           ensure_ascii=False) + '\n')
     res = run['res']
     usage = res.get('usage') or {}
     tokens = sum(int(usage.get(k) or 0) for k in ('input_tokens', 'output_tokens', 'cache_read_input_tokens', 'cache_creation_input_tokens'))

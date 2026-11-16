@@ -15,6 +15,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import lifecycle
 import sprint_tasks as q
 
 STATE = Path('~/.local/state/home-ops/sprint').expanduser()
@@ -62,6 +63,9 @@ def repo_dirs() -> dict[str, Path]:
 
 
 def main() -> None:
+    instance = lifecycle.single_instance(STATE)  # setup() below would take the running tasks from a live runner
+    if instance is None:
+        sys.exit(f'the runner is running ({STATE}/runner.lock); stop it (touch STOP) before seeding')
     q.setup(STATE)
     notes = active_notes()
     pilot = next((n for n in notes if n.stem == PILOT), notes[0])

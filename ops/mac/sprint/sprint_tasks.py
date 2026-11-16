@@ -18,46 +18,32 @@
     <prompt for the worker>
 
 A task moves queue/ → running/ → done/ | failed/ by rename, so a crashed
-runner leaves it visible in running/ (start() puts those back). A task whose
-`after` ended in failed/ goes to failed/ too instead of waiting forever.
+runner leaves it visible in running/ (setup() puts those back). A task whose `after` ended in failed/ — or
+names no task for 24 h — goes to failed/ too instead of waiting forever. A file that is not a whole task
+(header never closed, no prompt) or is younger than MIN_AGE is skipped, so a half-written file never runs.
 """
 from __future__ import annotations
 
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
+from task_files import load, parse, write  # noqa: F401  (parse and write are part of this module's API)
+
 DIRS = ('queue', 'running', 'done', 'failed', 'results', 'logs')
 ESCALATE = {'haiku': 'sonnet', 'sonnet': 'opus', 'opus': 'fable'}  # local:* → sonnet
 MAX_INTERRUPTS = 3
+MIN_AGE = 5  # seconds a queue file rests before it may start: a planner may still be writing it
+ORPHAN_AFTER = 24 * 3600  # an `after` naming no task anywhere is given this long to appear
 
 
 def stronger(model: str) -> str:
     return 'sonnet' if model.startswith('local:') else ESCALATE.get(model, 'fable')
 
 
-def parse(path: Path) -> dict[str, Any]:
-    text = path.read_text()
-    meta: dict[str, Any] = {}
-    body = text
-    if text.startswith('---\n'):
-        head, _, body = text[4:].partition('\n---\n')
-        for line in head.splitlines():
-            key, sep, value = line.partition(':')
-            if sep:
-                meta[key.strip()] = value.split('  #')[0].strip()
-    meta['id'] = meta.get('id') or path.stem
-    for key, default in (('priority', 50), ('max_minutes', 45), ('attempts', 0), ('interrupts', 0)):
-        try:
-            meta[key] = int(meta.get(key, default))
-        except ValueError:
-            meta[key] = default
-    return {**meta, 'body': body.strip(), 'path': path}
-
-
-def write(path: Path, task: dict[str, Any]) -> None:
-    head = '\n'.join(f'{k}: {v}' for k, v in task.items() if k not in ('body', 'path') and v not in (None, ''))
-    path.write_text(f'---\n{head}\n---\n{task["body"]}\n')
+def is_local(task: dict[str, Any]) -> bool:
+    return str(task.get('model') or '').startswith('local:')
 
 
 def setup(state: Path) -> None:
@@ -84,18 +70,27 @@ def eligible(state: Path, now: datetime | None = None) -> list[dict[str, Any]]:
     """Queued tasks past their `not_before`, whose `after` is done and whose `lock` is free, best first."""
     now = now or datetime.now(timezone.utc)
     done = ids(state, 'done')
-    locks = {t.get('lock') for t in map(parse, (state / 'running').glob('*.md')) if t.get('lock')}
-    tasks = [parse(p) for p in (state / 'queue').glob('*.md')]
+    locks = {t.get('lock') for t in load(state / 'running') if t.get('lock')}
+    tasks = load(state / 'queue', MIN_AGE)
     ok = [t for t in tasks if (not t.get('after') or t['after'] in done) and t.get('lock') not in locks and not waiting(t, now)]
     return sorted(ok, key=lambda t: (t['priority'], t['id']))
 
 
 def drop_blocked(state: Path) -> None:
-    """Fail queued tasks whose `after` task failed — they could never become eligible."""
+    """Fail queued tasks that could never become eligible: their `after` failed, or names no task in any
+    folder for more than ORPHAN_AFTER (the reason goes into the file as `failed_reason`)."""
     failed = ids(state, 'failed')
-    for path in (state / 'queue').glob('*.md'):
-        if parse(path).get('after') in failed:
-            path.rename(state / 'failed' / path.name)
+    known = failed | ids(state, 'queue') | ids(state, 'running') | ids(state, 'done')
+    for task in load(state / 'queue', MIN_AGE):
+        after = task.get('after')
+        if after in failed:
+            reason = f'after: {after} ended in failed/'
+        elif after and after not in known and time.time() - task['path'].stat().st_mtime > ORPHAN_AFTER:
+            reason = f'after: {after} does not exist'
+        else:
+            continue
+        task['failed_reason'] = reason
+        finish(state, task, 'failed')
 
 
 def claim(state: Path, accept: Callable[[dict[str, Any]], bool] | None = None) -> dict[str, Any] | None:

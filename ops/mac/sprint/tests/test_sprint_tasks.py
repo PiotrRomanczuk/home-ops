@@ -24,6 +24,8 @@ class QueueTest(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.state = Path(self.tmp.name)
         q.setup(self.state)
+        self.addCleanup(setattr, q, 'MIN_AGE', q.MIN_AGE)
+        q.MIN_AGE = 0  # files written a moment ago may start (test_hardening.py covers the rest period)
 
     def tearDown(self) -> None:
         self.tmp.cleanup()
