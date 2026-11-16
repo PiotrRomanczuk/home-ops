@@ -110,13 +110,24 @@ def _gh_headers() -> dict[str, str]:
 def _gh_request(path: str) -> Any:
     """GET against the GitHub REST API. Returns parsed JSON, or None on any
     error (404, rate limit, network) — callers treat that as 'no data', not
-    fatal, since one project's API hiccup shouldn't drop the whole sync."""
+    fatal, since one project's API hiccup shouldn't drop the whole sync.
+    `_gh_request.status(path)` gives the last HTTP status (0 = network/parse
+    error) so repo_health can tell a 404 from a failure."""
     req = urllib.request.Request(f'{GITHUB_API}{path}', headers=_gh_headers())
     try:
         with urllib.request.urlopen(req, timeout=15) as r:
-            return json.loads(r.read())
-    except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError):
-        return None
+            body = json.loads(r.read())
+            _STATUS[path] = 200
+            return body
+    except urllib.error.HTTPError as e:
+        _STATUS[path] = e.code
+    except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError):
+        _STATUS[path] = 0
+    return None
+
+
+_STATUS: dict[str, int] = {}
+_gh_request.status = _STATUS.get  # type: ignore[attr-defined]
 
 
 def _gh_commits_30d(owner_repo: str) -> tuple[int, str | None]:

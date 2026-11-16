@@ -21,6 +21,8 @@ import { titleOf } from '../task-title.ts';
 // Known-noise patterns the digest and the "Dziś" tab hide from "needs
 // attention". Matched against the digit-normalised `pattern` (numbers → N).
 // Each entry is a decision already taken; say which and when.
+// Routes/pressure.ts also tests them against the same digit-normalised pattern
+// (`/api/pressure`), so never use `\d` here: it would match in the digest only.
 export const MUTED = [
   // 2026-07-16: GPU lane switched off; lane back since 2026-10-19 but the
   // 100 stuck `summarise` jobs were deleted 2026-10-20, so this stays quiet.
