@@ -1,5 +1,5 @@
 [Unit]
-Description=home-ops gmail-daily — inventory new mail, categorise, label (never deletes)
+Description=home-ops gmail-daily — mirror All Mail, categorise, label (never deletes)
 After=docker.service network-online.target
 Wants=network-online.target
 OnFailure=unit-failure-mail@%n.service

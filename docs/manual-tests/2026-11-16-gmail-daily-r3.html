@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>gmail-daily — poprawki r3 po recenzji PR #68</title>
+<style>
+  body { font:15px/1.55 -apple-system, system-ui, sans-serif; max-width:860px; margin:0 auto; padding:24px 16px 64px; color:#1d1d1b; background:#fafaf8; }
+  h1 { font-size:24px; margin:0 0 4px; } h2 { font-size:18px; margin:28px 0 8px; border-bottom:1px solid #e3e2dc; }
+  .meta { color:#6b6b66; font-size:13px; } code, pre { font:13px/1.45 ui-monospace, Menlo, monospace; }
+  pre { background:#efeeea; padding:10px 12px; border-radius:6px; overflow-x:auto; }
+  table { border-collapse:collapse; width:100%; font-size:14px; } td, th { border-bottom:1px solid #e3e2dc; padding:5px 8px; text-align:left; vertical-align:top; }
+  .ok { color:#2f6b4f; font-weight:600; }
+</style>
+</head>
+<body>
+<h1>gmail-daily — poprawki r3 po recenzji PR #68</h1>
+<div class="meta">2026-11-16 · branch <code>feat/gmail-cleanup</code> · bez danych osobowych, wszystkie testy na atrapach (bez IMAP, bez Gmaila) + jednorazowy Postgres</div>
+
+<h2>Co zostało zrobione</h2>
+<table>
+<tr><th>Uwaga z recenzji</th><th>Poprawka</th></tr>
+<tr><td>🟠 Puste reguły / <code>me</code></td><td><code>gmail_labels.refuse_unseeded(cfg)</code> na początku <code>daily()</code> — <code>RuntimeError</code> przed IMAP i przed jakąkolwiek zmianą; <code>main()</code> wysyła kartę <code>error</code> i kończy kodem 1.</td></tr>
+<tr><td>🟠 Limit zmian</td><td><code>MAX_CHANGES = 5000</code> (dodania + zdjęcia). <code>reconcile_live</code> liczy cały plan przed zapisem; powyżej limitu <code>RuntimeError</code> (zero zmian, zero utworzonych etykiet) i karta <code>error</code>.</td></tr>
+<tr><td>🟠 <code>SystemExit</code> z <code>Reporter.from_env</code></td><td><code>post_card()</code> łapie <code>(Exception, SystemExit)</code> — udany przebieg bez <code>INGEST_*</code> kończy się kodem 0.</td></tr>
+<tr><td>⚪ Wyłączone reguły</td><td><code>gmail_db.rule_labels()</code> (<code>SELECT DISTINCT label FROM gmail.rule</code>, migracja 025 bez zmian) → <code>managed_labels(cfg, expected, all_rule_labels)</code>: etykieta wyłączonej reguły jest zdejmowana, wiadomość ma jedną kategorię.</td></tr>
+<tr><td>⚪ Opis synca</td><td>ADR, README, unit systemd, stary raport i opis PR: pełne lustro All Mail (<code>SEARCH ALL</code> + <code>FETCH</code> nagłówków), nie „tylko nowe”.</td></tr>
+</table>
+
+<h2>Jak sprawdzić ręcznie</h2>
+<pre>python3 -m unittest ops/elitedesk/tests/test_gmail_daily.py -v
+python3 -m unittest discover -s ops/elitedesk/tests -p 'test_*.py'
+# rule_labels() na prawdziwym Postgresie (jednorazowy kontener, 127.0.0.1, losowy port):
+docker run -d --rm --name pg-r3 -p 127.0.0.1::5432 -e POSTGRES_PASSWORD=x -e POSTGRES_DB=home_ops postgres:17-alpine
+docker exec -i pg-r3 psql -U postgres -d home_ops -v ON_ERROR_STOP=1 -q &lt; postgres/migrations/025_gmail.sql
+CONTAINER=pg-r3 python3 -c "import sys; sys.path.insert(0,'ops/elitedesk'); import gmail_db; print(gmail_db.rule_labels())"
+docker rm -f pg-r3</pre>
+
+<h2>Wynik</h2>
+<ul>
+  <li class="ok">Nowe testy w <code>test_gmail_daily.py</code>: puste <code>rules</code> / puste <code>me</code> (IMAP nie wywołany, brak zmian), limit (3 zmiany &gt; 2 → odmowa bez zapisu; dokładnie na limicie przechodzi; liczą się też zdjęcia; domyślnie 5000), etykieta wyłączonej reguły zdejmowana (i test negatywny bez <code>rule_labels</code>), <code>post_card</code> przy braku <code>INGEST_*</code> i przy błędzie sieci, <code>main()</code> kod 0 bez karty, <code>main()</code> przy odmowie → karta <code>error</code> + wyjątek + zamknięcie IMAP.</li>
+  <li>Pełny wynik poleceń i liczby testów: w pliku wyniku zadania <code>fix-home-ops-68-r3</code>.</li>
+</ul>
+</body>
+</html>

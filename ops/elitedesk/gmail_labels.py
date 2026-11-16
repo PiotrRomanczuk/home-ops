@@ -14,11 +14,20 @@ FIXED = ('Ludzie', 'Ludzie/Wysłane', 'Ludzie/Znajomi', 'Ludzie/Firmy', 'Inne/Do
          'Społecznościowe', 'Promocje', 'Newslettery', 'Powiadomienia', FALLBACK)
 
 
-def managed_labels(cfg: dict, expected: dict[str, set[str]]) -> list[str]:
+def refuse_unseeded(cfg: dict) -> None:
+    """Stop a run whose rules were not loaded: without rules/"me" every message falls into the built-in
+    categories and the reconciler would strip the real labels (gmail.rules_json() is empty before the seed)."""
+    if not cfg['rules'] or not cfg['me']:
+        raise RuntimeError('gmail.rule / gmail.config are empty (rules not seeded?) — run gmail_import.py rules first')
+
+
+def managed_labels(cfg: dict, expected: dict[str, set[str]], all_rule_labels=()) -> list[str]:
     """Every label name the reconciler may touch: today's categories, all rule/subrule labels
-    (so a category that lost all its messages is still cleaned up) and the built-in ones."""
+    (so a category that lost all its messages is still cleaned up), the built-in ones and
+    `all_rule_labels` = labels of every row in gmail.rule, disabled ones too (so a disabled rule's
+    label is stripped instead of leaving a second category on its messages)."""
     rule_labels = {r.label for r in cfg['rules']} | {r.label for _, r in cfg['subrules']}
-    return sorted(set(expected) | rule_labels | set(FIXED))
+    return sorted(set(expected) | rule_labels | set(all_rule_labels) | set(FIXED))
 
 
 def protected_ids(db: sqlite3.Connection, cfg: dict) -> set[str]:

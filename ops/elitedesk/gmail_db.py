@@ -104,6 +104,11 @@ def load_rules() -> dict:
     return out[0]['r'] if out else {}
 
 
+def rule_labels() -> list[str]:
+    """Labels of every row in gmail.rule — enabled or not (gmail.rules_json() only returns enabled ones)."""
+    return [r['label'] for r in psql_json('SELECT DISTINCT label FROM gmail.rule')]
+
+
 def rules_count() -> int:
     """Rows in gmail.rule (the rules in Postgres are the source of truth once there are any)."""
     return psql_json('SELECT count(*)::int AS n FROM gmail.rule')[0]['n']
