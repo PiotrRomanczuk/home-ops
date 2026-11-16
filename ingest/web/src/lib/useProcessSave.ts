@@ -13,7 +13,7 @@ export type SaveState =
 const POLL_MS = 3000;
 const POLL_LIMIT = 60; // ~3 min — planner-sync ticks every 60 s
 
-export function useProcessSave(slug: string, onApplied: () => void) {
+export function useProcessSave(slug: string) {
   const [state, setState] = useState<SaveState>({ kind: 'idle' });
   const timer = useRef<number | null>(null);
 
@@ -27,7 +27,7 @@ export function useProcessSave(slug: string, onApplied: () => void) {
   }, [slug, stop]);
 
   const save = useCallback(
-    async (xml: string, baseHash: string) => {
+    async (xml: string, baseHash: string, onApplied: () => void) => {
       stop();
       setState({ kind: 'sending' });
       try {
@@ -48,7 +48,7 @@ export function useProcessSave(slug: string, onApplied: () => void) {
         setState({ kind: 'error', error: e instanceof Error ? e.message : String(e) });
       }
     },
-    [slug, onApplied, stop],
+    [slug, stop],
   );
 
   const reset = useCallback(() => {

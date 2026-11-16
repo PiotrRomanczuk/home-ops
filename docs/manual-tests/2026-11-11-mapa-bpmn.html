@@ -58,10 +58,25 @@ git -C /tmp/sandbox/vault.git log -1      # → "planner-sync: procesy: … edyt
 scripts/deploy-agent.sh elitedesk planner-sync     # kopiuje też process_writes.py</pre>
 <p>Kolejność jak przy #74: najpierw migracja i ingest, potem agent. Bez trasy agent po cichu pomija drenaż i próbuje w następnym przebiegu. Strummy prod nie jest dotykany. Kontrola i tak: 10 kontenerów <code>StudentProduction</code> Up, <code>strummy.online</code> → 200.</p>
 
+<h2>Poprawki r1 (recenzja head f404781)</h2>
+<p>Dodane scenariusze. Pętla gita ma testy na tymczasowym repo (bare remote + dwa klony), bez prawdziwego vaulta: <code>python3 -m unittest agents/tests/test_process_git.py</code>.</p>
+<table>
+<tr><th>#</th><th>Scenariusz</th><th>Oczekiwane</th></tr>
+<tr><td>B1</td><td>Obsidian wypycha edycję <code>.bpmn</code> po tym, jak sync odczytał vault, a przed <code>git pull</code> zapisu</td><td>Hash sprawdzany ponownie po pullu: status „conflict”, plik w klonie = wersja z Obsidiana, bez commita</td></tr>
+<tr><td>B2</td><td>Push odrzucony (remote poszedł naprzód albo hook odrzuca)</td><td>Lokalny commit cofnięty (<code>reset --hard @{u}</code> + pull): <code>HEAD</code> = upstream, drzewo czyste, status „conflict”</td></tr>
+<tr><td>B3</td><td><code>git add</code> / <code>commit</code> pada po zapisie pliku; równoległy wątek toggles</td><td>Plik przywrócony; <code>GIT_LOCK</code> trzymany przez całą sekwencję (test sprawdza z drugiego wątku)</td></tr>
+<tr><td>B4</td><td>Przesuń element i z powrotem, zapisz</td><td>„applied” bez commita (bajty identyczne albo git nie widzi zmiany)</td></tr>
+<tr><td>B5</td><td><code>mark</code> nie przeszedł, plik już w vaulcie</td><td>Warn w logu; kolejny tick widzi, że vault ma dokładnie ten XML → „applied” zamiast „conflict”</td></tr>
+<tr><td>F1</td><td>Zapisz, po „Zapisane w vaulcie” edytuj i zapisz drugi raz, zanim sync odeśle nową wersję</td><td>Drugi zapis idzie z hashem własnego pierwszego zapisu (sha256 w przeglądarce): „applied”, nie „conflict”; komunikat „Zapisane…” nie znika</td></tr>
+<tr><td>F2</td><td>Edytuj, przełącz się do Obsidiana, zmień <code>.bpmn</code>, wróć do karty; zmiana procesu na liście</td><td>Brak refetchu przy powrocie do karty; zmiana z vaulta → „Diagram zmienił się w vaulcie. Wczytaj z vaulta (porzuć zmiany)”, edycje nie giną po cichu; <code>confirm</code> przy zmianie procesu, <code>beforeunload</code> przy zamykaniu karty</td></tr>
+<tr><td>F3</td><td>Zapis ~300 tys. znaków „ł” (ponad 512 KiB w UTF-8)</td><td>413 zamiast przyjęcia i późniejszego pominięcia przez sync</td></tr>
+</table>
+<p class="warn">Ręcznie w przeglądarce F1/F2 nie klikałem w tej sesji: reguły decyzji są w czystej funkcji <code>decideImport</code> (vitest), a efekt w React sprawdzono typecheckiem i buildem.</p>
+
 <h2>Ograniczenia</h2>
 <ul>
 <li>bpmn-js przy zapisie przeformatowuje cały XML (<code>format: true</code>), więc pierwszy commit edytora zmienia dużo linii (tu +150/−46), a kolejne już mało.</li>
-<li>Zapis dochodzi do vaulta w rytmie planner-sync (do ok. 60 s). Celowo nie dokładałem drugiego wątku piszącego do gita, bo między wątkami nie ma blokady.</li>
+<li>Zapis dochodzi do vaulta w rytmie planner-sync (do ok. 60 s). Wątek toggles i wątek synchronizacji dzielą jeden klon, więc cała sekwencja pull → zapis → commit → push (toggles, board-sync, zapis BPMN) jest pod wspólnym <code>GIT_LOCK</code> (<code>process_git.py</code>).</li>
 <li>Odznaki lanes rozpoznają projekty i węzły zewnętrzne. <code>github</code> jest na mapie hostem, więc w procesie pokazuje „?”.</li>
 </ul>
 </main></body></html>

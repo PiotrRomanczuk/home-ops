@@ -43,6 +43,7 @@ from queue_md import parse_queue_md  # noqa: E402
 from task_ticks import TickTracker  # noqa: E402
 from vault_parse import parse_frontmatter  # noqa: E402
 from process_writes import check_write, commit_message  # noqa: E402
+from process_git import GIT_LOCK, apply_process_write, locked  # noqa: E402
 from vault_processes import find_processes  # noqa: E402
 
 HOST_NAME = os.environ.get('HOST_NAME', 'elitedesk')
@@ -100,7 +101,8 @@ def ensure_clone() -> bool:
 
 
 def pull() -> bool:
-    r = _run_git('pull', '--ff-only')
+    with GIT_LOCK:
+        r = _run_git('pull', '--ff-only')
     if r.returncode != 0:
         post_log('warn', 'git pull failed (keeping existing checkout)', {'stderr': r.stderr[-500:]})
         return False
@@ -266,6 +268,7 @@ def _flip_task_in_section(text: str, section: str, idx: int, done: bool,
     return '\n'.join(lines)
 
 
+@locked
 def _apply_one_toggle(toggle: dict[str, Any]) -> tuple[str, str | None]:
     """Returns (status, error). status ∈ {'applied', 'conflict', 'failed'}."""
     slug = toggle['slug']
@@ -514,6 +517,7 @@ def _board_import(slug: str, parsed: dict[str, Any], focus_text: str | None) -> 
     return None
 
 
+@locked
 def _write_commit_push(md_path: Path, new_text: str, msg: str) -> bool:
     pr = _run_git('pull', '--ff-only')
     if pr.returncode != 0:
@@ -698,7 +702,8 @@ _process_sync_state: dict[str, Any] = {'status': None, 'problems': None}
 
 def process_writes_once() -> None:
     """Drain BPMN saves (migration 030): write each file, commit, push, mark.
-    A write whose base hash no longer matches the vault is a conflict."""
+    A write whose base hash no longer matches the vault is a conflict; the git
+    sequence (process_git) re-checks the hash after its own pull."""
     req = urllib.request.Request(f'{PROCESS_WRITES_URL}?limit=10', headers={'X-Ingest-Token': ic.token})
     try:
         with urllib.request.urlopen(req, timeout=8) as r:
@@ -712,9 +717,13 @@ def process_writes_once() -> None:
         rec = current.get(w.get('slug'))
         verdict, reason = check_write(w, rec)
         if verdict == 'apply' and rec is not None:
-            ok = _write_commit_push(PLANNER_DIR / rec['bpmn_path'], w['bpmn_xml'], commit_message(w))
-            verdict, reason = ('applied', None) if ok else ('conflict', 'git pull/commit/push failed — see planner-sync logs')
-        ic.request(f'{PROCESS_WRITES_URL}/{w["id"]}/mark', {'status': verdict, 'error': reason}, timeout=10)
+            verdict, reason = apply_process_write(
+                _run_git, PLANNER_DIR / rec['bpmn_path'], rec['bpmn_path'], w['bpmn_xml'],
+                w['base_hash'], commit_message(w))
+        mark_status, _ = ic.request(f'{PROCESS_WRITES_URL}/{w["id"]}/mark',
+                                    {'status': verdict, 'error': reason}, timeout=10)
+        if mark_status != 200:
+            post_log('warn', f'mark process write {w["id"]} {verdict} failed', {'http': mark_status})
         post_log('info' if verdict == 'applied' else 'warn', f'process write #{w["id"]} {w.get("slug")}: {verdict}',
                  {'reason': reason})
         if verdict == 'applied':

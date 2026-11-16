@@ -68,6 +68,7 @@ jobs:
             agents/elitedesk/vault_parse.py \
             agents/elitedesk/vault_processes.py \
             agents/elitedesk/process_writes.py \
+            agents/elitedesk/process_git.py \
             agents/rpi/rpi-watcher.py \
             agents/rpi/rpi-sentinel.py \
             agents/win10/win10-watcher.py \

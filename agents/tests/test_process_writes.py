@@ -40,6 +40,12 @@ class CheckWriteTest(unittest.TestCase):
         # A broken diagram is reported as broken even when the vault also moved on.
         self.assertEqual(pw.check_write(write(bpmn_xml='nope', base_hash='b' * 64), CURRENT)[0], 'failed')
 
+    def test_vault_already_holding_the_xml_is_applied(self):
+        # B4/B5: retry after a lost `mark`, or a save that changed nothing.
+        import hashlib
+        current = {**CURRENT, 'bpmn_hash': hashlib.sha256(XML.encode('utf-8')).hexdigest()}
+        self.assertEqual(pw.check_write(write(base_hash='b' * 64), current), ('applied', None))
+
     def test_commit_message_names_process_and_write(self):
         self.assertEqual(pw.commit_message(write()), 'procesy: pr-flow edytowany w Mapie (home-ops, zapis #7)')
 

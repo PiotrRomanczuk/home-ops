@@ -3,7 +3,7 @@
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle } from 'lucide-react';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import { fetchProcess, type MapResponse } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { BpmnEditor } from './BpmnEditor';
@@ -22,7 +22,18 @@ export function ProcessesView({ map, slug, onOpen, onSelect }: Props) {
     queryKey: ['process', current],
     queryFn: () => fetchProcess(current as string),
     enabled: !!current,
+    refetchOnWindowFocus: false, // a refetch must not swap the diagram under unsaved edits
   });
+  const isDirty = useRef(false);
+  const onDirtyChange = useCallback((v: boolean) => {
+    isDirty.current = v;
+  }, []);
+  const open = (next: string) => {
+    if (next === current) return;
+    if (isDirty.current && !window.confirm('Niezapisane zmiany w diagramie zostaną utracone. Otworzyć inny proces?'))
+      return;
+    onOpen(next);
+  };
   const nodes = useMemo(() => new Map(map.nodes.map((n) => [n.id, n])), [map.nodes]);
   const onRefresh = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ['process', current] });
@@ -45,7 +56,7 @@ export function ProcessesView({ map, slug, onOpen, onSelect }: Props) {
           <button
             key={proc.slug}
             type="button"
-            onClick={() => onOpen(proc.slug)}
+            onClick={() => open(proc.slug)}
             className={cn(
               'w-full rounded-md px-2.5 py-2 text-left text-sm hover:bg-muted',
               proc.slug === current && 'bg-muted text-foreground',
@@ -75,7 +86,14 @@ export function ProcessesView({ map, slug, onOpen, onSelect }: Props) {
                 </p>
               ))}
             </header>
-            <BpmnEditor process={p} nodes={nodes} onSelect={onSelect} onRefresh={onRefresh} />
+            <BpmnEditor
+              key={p.slug}
+              process={p}
+              nodes={nodes}
+              onSelect={onSelect}
+              onRefresh={onRefresh}
+              onDirtyChange={onDirtyChange}
+            />
           </>
         )}
       </section>

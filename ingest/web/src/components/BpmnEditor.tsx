@@ -5,11 +5,11 @@
 import 'bpmn-js/dist/assets/diagram-js.css';
 import 'bpmn-js/dist/assets/bpmn-js.css';
 import 'bpmn-js/dist/assets/bpmn-font/css/bpmn-embedded.css';
-import Modeler from 'bpmn-js/lib/Modeler';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import type { MapNode, ProcessDetail } from '@/lib/api';
 import { laneBadge, SAVE_MESSAGE } from '@/lib/bpmn';
+import { useBpmnModeler } from '@/lib/useBpmnModeler';
 import { useProcessSave } from '@/lib/useProcessSave';
 import { cn } from '@/lib/utils';
 import { STATUS_DOT } from './status';
@@ -25,13 +25,6 @@ interface Overlays {
 interface ElementRegistry {
   filter(fn: (e: Lane) => boolean): Lane[];
 }
-interface Canvas {
-  zoom(mode: 'fit-viewport'): void;
-  scroll(delta: { dx: number; dy: number }): void;
-}
-
-/** Fit, then move right so the tool palette doesn't cover the lane labels. */
-const PALETTE_GAP = 64;
 
 interface Props {
   process: ProcessDetail;
@@ -39,6 +32,8 @@ interface Props {
   onSelect: (id: string) => void;
   /** Refetch the process (and map) from the API — after a save or to resolve a conflict. */
   onRefresh: () => void;
+  /** Reports unsaved edits, so the list can ask before switching to another process. */
+  onDirtyChange: (isDirty: boolean) => void;
 }
 
 function span(className: string, text: string): HTMLSpanElement {
@@ -66,20 +61,22 @@ function badgeElement(name: string, nodes: Map<string, MapNode>, onSelect: (id: 
   return el;
 }
 
-export function BpmnEditor({ process, nodes, onSelect, onRefresh }: Props) {
+export function BpmnEditor({ process, nodes, onSelect, onRefresh, onDirtyChange }: Props) {
   const container = useRef<HTMLDivElement>(null);
-  const modeler = useRef<Modeler | null>(null);
-  const [isDirty, setDirty] = useState(false);
-  const [importError, setImportError] = useState<string | null>(null);
-  const [imported, setImported] = useState(0);
-  const { state, save, reset } = useProcessSave(process.slug, onRefresh);
+  const { state, save, reset } = useProcessSave(process.slug);
+  const { modeler, isDirty, pending, importError, imported, reload, markSaved, snapshot } = useBpmnModeler(
+    container,
+    { xml: process.bpmn_xml, hash: process.bpmn_hash },
+    reset,
+  );
 
   useEffect(() => {
-    const m = new Modeler({ container: container.current as HTMLDivElement });
-    m.on('commandStack.changed', () => setDirty(true));
-    modeler.current = m;
-    return () => m.destroy();
-  }, []);
+    onDirtyChange(isDirty);
+    if (!isDirty) return;
+    const warn = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [isDirty, onDirtyChange]);
 
   const decorate = useCallback(() => {
     const m = modeler.current;
@@ -91,24 +88,7 @@ export function BpmnEditor({ process, nodes, onSelect, onRefresh }: Props) {
         position: { top: 6, left: 38 }, // just right of the lane's name strip
         html: badgeElement(lane.businessObject.name ?? '', nodes, onSelect),
       });
-  }, [nodes, onSelect]);
-
-  // Import only when the vault copy changes — a map refresh must not wipe edits.
-  useEffect(() => {
-    const m = modeler.current;
-    if (!m || !process.bpmn_xml) return;
-    setImportError(null);
-    m.importXML(process.bpmn_xml)
-      .then(() => {
-        const canvas = m.get<Canvas>('canvas');
-        canvas.zoom('fit-viewport');
-        canvas.scroll({ dx: PALETTE_GAP, dy: 0 });
-        setDirty(false);
-        reset();
-        setImported((n) => n + 1);
-      })
-      .catch((e: Error) => setImportError(e.message));
-  }, [process.bpmn_xml, reset]);
+  }, [modeler, nodes, onSelect]);
 
   useEffect(() => {
     if (imported) decorate();
@@ -116,12 +96,17 @@ export function BpmnEditor({ process, nodes, onSelect, onRefresh }: Props) {
 
   const onSave = async () => {
     const m = modeler.current;
-    if (!m || !process.bpmn_hash) return;
+    const { baseHash, edits } = snapshot();
+    if (!m || !baseHash) return;
     const { xml } = await m.saveXML({ format: true });
-    if (xml) await save(xml, process.bpmn_hash);
+    if (!xml) return;
+    await save(xml, baseHash, async () => {
+      await markSaved(xml, edits); // the vault now holds `xml`: it is the base for the next save
+      onRefresh();
+    });
   };
 
-  const canSave = isDirty && !!process.bpmn_hash && state.kind !== 'sending' && state.kind !== 'queued';
+  const canSave = isDirty && state.kind !== 'sending' && state.kind !== 'queued';
   const message =
     state.kind === 'idle' || state.kind === 'sending'
       ? null
@@ -134,9 +119,10 @@ export function BpmnEditor({ process, nodes, onSelect, onRefresh }: Props) {
           {state.kind === 'sending' ? 'Wysyłam…' : 'Zapisz do vaulta'}
         </Button>
         {isDirty && state.kind === 'idle' && <span className="text-xs text-warn">niezapisane zmiany</span>}
-        {state.kind === 'conflict' && (
-          <Button size="sm" variant="outline" onClick={onRefresh}>
-            Wczytaj z vaulta
+        {pending && <span className="text-xs text-warn">Diagram zmienił się w vaulcie.</span>}
+        {(state.kind === 'conflict' || pending) && (
+          <Button size="sm" variant="outline" onClick={() => reload(onRefresh)}>
+            Wczytaj z vaulta (porzuć zmiany)
           </Button>
         )}
         {message && (

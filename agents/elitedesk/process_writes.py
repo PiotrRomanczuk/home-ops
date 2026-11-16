@@ -3,6 +3,8 @@
 The browser posts the edited diagram plus the hash of the version it opened
 (migration 030). Before planner-sync commits anything, `check_write` decides:
 
+  applied   — the vault file already holds exactly this XML (retry after a
+              lost `mark`, or a save that changed nothing): no git needed
   apply     — the vault file still has that hash and the new XML parses
   conflict  — the file changed since it was opened (Obsidian edit, another
               save); the editor must reload, nothing is overwritten
@@ -12,6 +14,7 @@ Pure: no git, no network. planner-sync does the commit + push.
 """
 from __future__ import annotations
 
+import hashlib
 import xml.etree.ElementTree as ET
 from typing import Any
 
@@ -31,6 +34,8 @@ def check_write(write: dict[str, Any], current: dict[str, Any] | None) -> tuple[
         return 'failed', f'not valid XML: {e}'
     if root.tag != _DEFINITIONS:
         return 'failed', f'root element is {root.tag}, not bpmn:definitions'
+    if current.get('bpmn_hash') == hashlib.sha256(xml.encode('utf-8')).hexdigest():
+        return 'applied', None
     if current.get('bpmn_hash') != write.get('base_hash'):
         return 'conflict', 'diagram changed in the vault since it was opened — reload and redo the edit'
     return 'apply', None

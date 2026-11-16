@@ -1,7 +1,7 @@
 import type { Hono } from 'hono';
 import { tokenOnly } from '../auth.ts';
 import { pool } from '../db.ts';
-import { MAX_BPMN_CHARS } from '../process-model.ts';
+import { MAX_BPMN_BYTES } from '../process-model.ts';
 
 // BPMN saves from the Mapa tab (migration 030). A viewer posts the edited
 // diagram with the hash it was opened at; planner-sync drains the queue into
@@ -19,7 +19,7 @@ export function registerProcessWritesRoutes(app: Hono): void {
     const baseHash = body?.base_hash;
     if (typeof xml !== 'string' || !DEFINITIONS_RE.test(xml))
       return c.json({ error: 'bpmn_xml must be BPMN XML' }, 400);
-    if (xml.length > MAX_BPMN_CHARS) return c.json({ error: 'diagram too large' }, 413);
+    if (Buffer.byteLength(xml, 'utf8') > MAX_BPMN_BYTES) return c.json({ error: 'diagram too large' }, 413);
     if (typeof baseHash !== 'string' || !/^[0-9a-f]{64}$/.test(baseHash))
       return c.json({ error: 'base_hash (sha256 hex) required' }, 400);
     const slug = c.req.param('slug');

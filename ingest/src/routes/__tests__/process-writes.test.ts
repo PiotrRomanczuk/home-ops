@@ -61,6 +61,13 @@ describe.skipIf(skip)('process writes', () => {
     expect(r.status).toBe(404);
   });
 
+  it('caps the diagram in UTF-8 bytes, like planner-sync does', async () => {
+    // 300k characters but ~600 kB: under a character cap, over the byte cap.
+    const polish = `${XML}<!--${'ł'.repeat(300_000)}-->`;
+    expect((await save({ bpmn_xml: polish, base_hash: HASH })).status).toBe(413);
+    expect((await save({ bpmn_xml: `${XML}<!--${'x'.repeat(300_000)}-->`, base_hash: HASH })).status).toBe(202);
+  });
+
   it('queues, drains, marks once, and the browser sees the outcome', async () => {
     const queued = await save({ bpmn_xml: XML, base_hash: HASH });
     expect(queued.status).toBe(202);
