@@ -1,0 +1,7 @@
+# hadolint config — used by .github/workflows/lint-infra.yml
+# Both rules are ignored on purpose: all four Dockerfiles track the distro /
+# PyPI "latest" so security updates land on rebuild; pinning exact apt/pip
+# versions would break builds whenever Debian or PyPI rotate a package.
+ignored:
+  - DL3008 # apt-get install without =version pins (postgres, llm-eval images)
+  - DL3013 # pip install without ==version pins (llm-eval images)

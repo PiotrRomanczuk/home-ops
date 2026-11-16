@@ -1,0 +1,63 @@
+name: lint-infra
+
+# Shell + Dockerfile linting and an ingest image build. Kept separate from
+# check.yml / flow.yml on purpose (those are changed by PR #84).
+
+on:
+  push:
+    branches: [main, dev, test]
+  pull_request:
+
+jobs:
+  shellcheck:
+    name: shellcheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: shellcheck (--severity=warning)
+        run: |
+          set -euo pipefail
+          shellcheck --version
+          files=$(git ls-files '*.sh')
+          # extension-less scripts with an sh/bash shebang under ops/ and bin/
+          for f in $(git ls-files 'ops/*' 'bin/*'); do
+            case "$f" in *.*) continue ;; esac
+            [ -f "$f" ] || continue
+            if head -n1 "$f" | grep -qE '^#!.*[/ ](ba)?sh( |$)'; then
+              files="$files"$'\n'"$f"
+            fi
+          done
+          echo "$files" | sed '/^$/d'
+          echo "$files" | sed '/^$/d' | xargs shellcheck --severity=warning
+
+  hadolint:
+    name: hadolint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: hadolint v2.12.0
+        run: |
+          set -euo pipefail
+          status=0
+          for f in ingest/Dockerfile postgres/Dockerfile ops/llm-eval/Dockerfile ops/llm-eval/strummy/Dockerfile.strummy; do
+            echo "== $f"
+            docker run --rm -i -v "$PWD/.hadolint.yaml:/.hadolint.yaml:ro" \
+              hadolint/hadolint:v2.12.0 hadolint --config /.hadolint.yaml - < "$f" || status=1
+          done
+          exit "$status"
+
+  ingest-image:
+    name: ingest-image (docker build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: docker build ingest/ (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: ingest
+          push: false

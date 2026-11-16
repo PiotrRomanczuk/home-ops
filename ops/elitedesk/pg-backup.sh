@@ -50,6 +50,7 @@ ssh -o BatchMode=yes -o ConnectTimeout=15 "$DEST_HOST" "ls -1 '$NAS_BASE'" 2>/de
       fdate=$(echo "$fname" | grep -oE '[0-9]{8}' | head -1)
       fepoch=$(date -d "$fdate" +%s)
       if [ "$fepoch" -lt "$CUTOFF_EPOCH" ]; then
+        # shellcheck disable=SC2095 # kept as-is on purpose: adding -n changes live uwh behaviour; ssh reads the loop's stdin today
         ssh -o BatchMode=yes -o ConnectTimeout=15 "$DEST_HOST" "rm -f '$NAS_BASE/$fname'"
         log "  pruned remote: $fname"
       fi
