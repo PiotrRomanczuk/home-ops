@@ -57,11 +57,15 @@ export function JournalView() {
   const hourly = (key: 'cpu' | 'gpu') => j?.hours.map((h) => (h.samples ? (h[key] ?? 0) : null)) ?? [];
   const net = j?.hours.map((h) => (h.samples ? (h.rx_mb ?? 0) + (h.tx_mb ?? 0) : null)) ?? [];
   const isToday = day === today();
+  const goTo = (d: string) => {
+    setDay(d);
+    setSelected(null);
+  };
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 px-4 py-3">
       <div className="flex items-center gap-2">
-        <Button variant="ghost" size="icon" onClick={() => setDay(shiftDay(day, -1))} aria-label="Poprzedni dzień">
+        <Button variant="ghost" size="icon" onClick={() => goTo(shiftDay(day, -1))} aria-label="Poprzedni dzień">
           <ChevronLeft />
         </Button>
         <h2 className="min-w-56 text-center text-sm font-medium">{DAY_LABEL.format(new Date(`${day}T12:00:00Z`))}</h2>
@@ -69,13 +73,13 @@ export function JournalView() {
           variant="ghost"
           size="icon"
           disabled={isToday}
-          onClick={() => setDay(shiftDay(day, 1))}
+          onClick={() => goTo(shiftDay(day, 1))}
           aria-label="Następny dzień"
         >
           <ChevronRight />
         </Button>
         {!isToday && (
-          <Button variant="outline" size="sm" onClick={() => setDay(today())}>
+          <Button variant="outline" size="sm" onClick={() => goTo(today())}>
             dziś
           </Button>
         )}
@@ -87,7 +91,7 @@ export function JournalView() {
           <div className="flex flex-wrap gap-3">
             <Tile label="aktywnie z Claude (Mac)" value={fmtMin(j.claude.totals.active_min)} />
             <Tile label="sesje / prompty" value={`${j.claude.totals.sessions} / ${j.claude.totals.prompts}`} />
-            <Tile label="PR-y" value={j.claude.prs.length} />
+            <Tile label="PR-y (wszystkie hosty)" value={j.claude.prs.length} />
             <Tile label="błędy narzędzi" value={j.claude.totals.errors} />
             <Tile label="Mac nie spał" value={fmtMin(j.awake_min)} />
           </div>

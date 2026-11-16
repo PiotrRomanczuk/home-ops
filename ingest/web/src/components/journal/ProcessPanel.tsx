@@ -30,7 +30,15 @@ function TopList({ title, rows }: { title: string; rows: { name: string; value: 
 }
 
 export function ProcessPanel({ day }: { day: JournalDay }) {
-  const { apps, procs } = day;
+  const { apps } = day;
+  // The API has no pid: two runs of one name starting together get an occurrence suffix.
+  const seen = new Map<string, number>();
+  const procs = day.procs.map((p) => {
+    const base = `${p.name}:${p.started}`;
+    const n = seen.get(base) ?? 0;
+    seen.set(base, n + 1);
+    return { p, key: `${base}:${n}` };
+  });
   return (
     <div className="space-y-3">
       <div className="flex flex-col gap-3 md:flex-row">
@@ -62,8 +70,8 @@ export function ProcessPanel({ day }: { day: JournalDay }) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {procs.map((p) => (
-                <TableRow key={`${p.name}:${p.started}`}>
+              {procs.map(({ p, key }) => (
+                <TableRow key={key}>
                   <TableCell className="font-mono text-muted-foreground">
                     {clockOn(p.started, day.day)}–{p.ended ? clockOn(p.ended, day.day) : 'trwa'}
                   </TableCell>

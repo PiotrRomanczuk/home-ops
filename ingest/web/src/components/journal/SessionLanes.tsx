@@ -88,7 +88,11 @@ export function SessionLanes({ lanes, selected, onSelect }: Props) {
                 onFocus={() => setHover(s)}
                 onBlur={() => setHover(null)}
                 onClick={() => onSelect(s.session_id)}
-                onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onSelect(s.session_id)}
+                onKeyDown={(e) => {
+                  if (e.key !== 'Enter' && e.key !== ' ') return;
+                  e.preventDefault();
+                  onSelect(s.session_id);
+                }}
               />
             )),
           )}

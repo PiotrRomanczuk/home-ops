@@ -1,6 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   clockOn,
+  EVENT_LIMIT,
+  fetchEvents,
   fmtMin,
   fmtSec,
   type JournalSession,
@@ -88,5 +90,17 @@ describe('summarySections', () => {
     ]);
     expect(summarySections(null)).toEqual([]);
     expect(summarySections('bez nagłówka')).toEqual([{ title: 'Podsumowanie', lines: ['bez nagłówka'] }]);
+  });
+});
+
+describe('fetchEvents', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('asks for the raised limit and escapes host and session', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ events: [] }) });
+    vi.stubGlobal('fetch', fetchMock);
+    await fetchEvents('mac', 'a/b c');
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(`/api/claude/events?host=mac&session=a%2Fb%20c&limit=${EVENT_LIMIT}`);
+    expect(EVENT_LIMIT).toBe(5000);
   });
 });

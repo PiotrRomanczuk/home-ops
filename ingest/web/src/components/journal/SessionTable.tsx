@@ -4,7 +4,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { clock, fetchEvents, fmtMin, type JournalSession, today } from '@/lib/journal';
+import { clock, EVENT_LIMIT, fetchEvents, fmtMin, type JournalSession, today } from '@/lib/journal';
 import { cn } from '@/lib/utils';
 
 interface Props {
@@ -32,8 +32,11 @@ const KIND_LABEL: Record<string, string> = {
 function Events({ host, session, day }: { host: string; session: string; day: string }) {
   const q = useQuery({ queryKey: ['events', host, session], queryFn: () => fetchEvents(host, session) });
   if (q.isLoading) return <p className="p-3 text-xs text-muted-foreground">Ładuję zdarzenia…</p>;
+  if (q.error) return <p className="p-3 text-xs text-bad">Nie udało się pobrać zdarzeń: {String(q.error)}</p>;
+  const all = q.data?.events ?? [];
   // A session can span days (resumed later): show what happened on this one.
-  const events = (q.data?.events ?? []).filter((e) => today(new Date(e.ts)) === day);
+  const events = all.filter((e) => today(new Date(e.ts)) === day);
+  if (!events.length) return <p className="p-3 text-xs text-muted-foreground">Brak zdarzeń z tego dnia</p>;
   return (
     <ol className="max-h-96 space-y-1 overflow-auto p-3 font-mono text-xs">
       {events.slice(0, 400).map((e) => (
@@ -47,6 +50,9 @@ function Events({ host, session, day }: { host: string; session: string; day: st
           </span>
         </li>
       ))}
+      {all.length >= EVENT_LIMIT && (
+        <li className="text-bad">lista ucięta, pokazano pierwsze {EVENT_LIMIT} zdarzeń sesji</li>
+      )}
       {events.length > 400 && <li className="text-muted-foreground">… i {events.length - 400} więcej</li>}
     </ol>
   );
@@ -64,7 +70,7 @@ export function SessionTable({ sessions, day, selected, onSelect }: Props) {
           <TableHead className={num}>Prompty</TableHead>
           <TableHead className={num}>Akcje</TableHead>
           <TableHead className={num}>Aktywnie</TableHead>
-          <TableHead className={num}>PR</TableHead>
+          <TableHead className={num}>PR (sesja)</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -73,7 +79,14 @@ export function SessionTable({ sessions, day, selected, onSelect }: Props) {
           const row = (
             <TableRow
               key={`${s.host}:${s.session_id}`}
+              tabIndex={0}
+              aria-expanded={open}
               onClick={() => onSelect(open ? null : s.session_id)}
+              onKeyDown={(e) => {
+                if (e.key !== 'Enter' && e.key !== ' ') return;
+                e.preventDefault();
+                onSelect(open ? null : s.session_id);
+              }}
               className={cn('cursor-pointer', open && 'bg-muted')}
             >
               <TableCell className="font-mono text-muted-foreground">
