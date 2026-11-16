@@ -2,7 +2,7 @@ import type { Hono } from 'hono';
 import { viewerOrToken } from '../auth.ts';
 import { pool } from '../db.ts';
 import { buildMap, type MapProcessRow } from '../map-model.ts';
-import { rankPressure } from '../pressure-model.ts';
+import { activeDependents, rankPressure } from '../pressure-model.ts';
 import { loadRuntime, PRESSURE_COLUMNS } from './pressure.ts';
 
 // GET /api/map — project ecosystem graph for the Mapa tab (see map-model.ts),
@@ -33,7 +33,12 @@ export function registerMapRoutes(app: Hono): void {
     ]);
     const map = buildMap(projects.rows, processes);
     const dependents = new Map(map.nodes.map((n) => [n.id, n.dependents]));
-    const scores = new Map(rankPressure(projects.rows, dependents, rt).map((r) => [r.slug.toLowerCase(), r.score]));
+    const scores = new Map(
+      rankPressure(projects.rows, activeDependents(projects.rows, dependents), rt).map((r) => [
+        r.slug.toLowerCase(),
+        r.score,
+      ]),
+    );
     for (const n of map.nodes) n.pressure = scores.get(n.id) ?? null;
     return c.json(map);
   });

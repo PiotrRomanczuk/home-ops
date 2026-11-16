@@ -62,4 +62,9 @@ curl -s -H "X-Ingest-Token: $INGEST_TOKEN" http://192.168.1.75:64421/api/pressur
 <p>Migracji tu nie ma. github-repo-sync działa z checkoutu repo, więc wystarczy <code>git pull</code>. Sprawdź jeszcze, że błędy z <code>app:&lt;slug&gt;</code> z ostatniej doby podbijają <code>runtime.errorPatterns</code> właściwego projektu. Strummy prod nie jest dotykany; standardowa kontrola: 10 kontenerów <code>StudentProduction</code> Up, <code>strummy.online</code> → 200.</p>
 <h3>4. MCP</h3>
 <p>W sesji Claude z serwerem home-ops: „który projekt potrzebuje uwagi?” → <code>get_pressure(limit=5)</code>. Odpowiedź ma się opierać na <code>parts</code>, np. „Strummy: 27 issues, 42 luki, czerwone CI”.</p>
+<section><h2>Poprawki po recenzji (2026-11-16)</h2><ul>
+<li>gaps_parse: akapit shipped kończy się na następnej definicji; ID w nawiasach nie liczą się jako zrobione; lista numerowana i sekcja Roadmap; SHA/UTF/ISO/RFC/ES/TLS/HTTP nie są lukami. Strummy: 36 otwartych luk przed i po.</li>
+<li>repo_health: etykieta bug całym słowem; błąd API (nie 404) → <code>{error:'api'}</code> lub <code>partial: true</code>, model presji traktuje to jako brak danych (<code>hasBlueprint: null</code>).</li>
+<li>Blast radius nie liczy zależnych z verdictem archiwum/scalany/usunięty.</li>
+<li>Jak sprawdzić: <code>python3 -m unittest discover -s ops/elitedesk/tests</code>, <code>cd ingest &amp;&amp; npm run check &amp;&amp; npx vitest run</code>.</li></ul></section>
 </main></body></html>

@@ -53,7 +53,7 @@ export interface PressureRow {
   parts: {
     tasks: { red: number; money: number; other: number; unclassed: number; points: number };
     pain: { n: number; points: number };
-    gaps: { n: number; ids: string[]; points: number; hasBlueprint: boolean };
+    gaps: { n: number; ids: string[]; points: number; hasBlueprint: boolean | null; partial: boolean };
     issues: { open: number; bugs: number; points: number };
     runtime: { errorPatterns: number; ciFailed: boolean; down: boolean; points: number };
   };

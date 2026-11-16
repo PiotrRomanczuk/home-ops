@@ -81,6 +81,7 @@ cd ingest &amp;&amp; DATABASE_URL=postgresql://postgres:ci-placeholder@127.0.0.1
 <tr><td>Filtr cichych projektów</td><td>Ekosystem, przełącznik „uśpione i archiwalne” wyłączony</td><td>Znikają <code>d4-build-agent</code>, <code>rhcsa-lab</code>, <code>szczerze-mowiac</code> i usługi zewnętrzne podpięte tylko do nich. <code>olx-scraper</code> zostaje (zależy od niego job-radar).</td></tr>
 <tr><td>Zoom przetrwa odświeżenie</td><td>Przybliż klaster, poczekaj ponad 60 s (refetch <code>/api/map</code>), najlepiej gdy zmieni się presja</td><td>Widok nie wraca do „fit all”; zmienia się tylko kolor/wartość presji. Układ liczy się od nowa dopiero po zmianie struktury (przełącznik, nowy węzeł). Błąd ładowania ELK pokazuje komunikat zamiast „Układam mapę…”.</td></tr>
 <tr><td>Mapa i tabela „Presja” to ten sam zbiór</td><td>Przełącznik wyłączony → porównaj węzły mapy z wierszami tabeli</td><td>Tabela nie ma <code>szczerze-mowiac</code> (verdict „pomysł”) i ma <code>olx-scraper</code> (potrzebny job-radarowi), tak jak mapa.</td></tr>
+<tr><td>Poprawki: hasBlueprint null/partial</td><td>Tabela „Presja” i popover rozbicia; przy błędzie GitHub API (symuluj: odpowiedź <code>/api/pressure</code> z <code>hasBlueprint: null</code>)</td><td>Kolumna Luki pokazuje „?” (title „GitHub API niedostępne”), rozbicie: „GitHub API niedostępne”; przy <code>partial</code> liczba z „*” i dopiskiem „(częściowo)”. Nie pokazuje już „brak blueprintu” ani „—”. Sprawdzone testami <code>gaps.test.ts</code> (8 przypadków).</td></tr>
 </table>
 
 <h2>Ograniczenia i do dopracowania</h2>

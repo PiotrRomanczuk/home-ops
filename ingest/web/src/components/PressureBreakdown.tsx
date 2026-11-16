@@ -2,6 +2,7 @@
 // (pressure-model.ts), so the ranking is never a black box.
 
 import type { PressureRow } from '@/lib/api';
+import { gapsDetail } from '@/lib/gaps';
 
 function Line({ label, detail, points }: { label: string; detail: string; points: number }) {
   return (
@@ -30,15 +31,7 @@ export function PressureBreakdown({ row }: { row: PressureRow }) {
         points={tasks.points}
       />
       <Line label="Pain points" detail={pain.n ? `${pain.n} otwartych` : ''} points={pain.points} />
-      <Line
-        label="Luki"
-        detail={
-          gaps.hasBlueprint
-            ? `${gaps.n} otwartych${gaps.ids.length ? `: ${gaps.ids.join(', ')}` : ''}`
-            : 'brak blueprintu'
-        }
-        points={gaps.points}
-      />
+      <Line label="Luki" detail={gapsDetail(gaps)} points={gaps.points} />
       <Line
         label="Issues"
         detail={issues.open ? `${issues.open} otwartych, ${issues.bugs} z etykietą bug` : ''}
