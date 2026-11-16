@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any
 
 import gpu_jobs as gj
+import gpu_pause
 import gpu_report
 import machine
 import procs
@@ -38,20 +39,10 @@ def log(event: str, **data: Any) -> None:
     gpu_report.log(GPU, event, **data)
 
 
-def borrowed() -> bool:
-    try:
-        os.kill(int((GPU / 'borrow').read_text().strip()), 0)
-        return True
-    except (FileNotFoundError, ValueError, ProcessLookupError):
-        return False
-    except PermissionError:
-        return True
-
-
 def hold_reason(s: dict[str, Any]) -> str | None:
     if not machine.away(s, IDLE_MIN):
         return 'Piotr przy Macu'
-    if borrowed():
+    if gpu_pause.borrowed(GPU):
         return 'lokalny LLM używa GPU'
     if s['foreign']:
         return 'song2logic uruchomiony poza nadzorcą'
@@ -86,13 +77,6 @@ def stop_shards(reason: str) -> None:
         log('stopped', reason=reason, shards=sorted(shards))
 
 
-def pause(on: bool) -> None:
-    for n, sh in shards.items():
-        if sh['paused'] != on and procs.send(sh['proc'].pid, signal.SIGSTOP if on else signal.SIGCONT):
-            sh['paused'] = on
-            log('paused' if on else 'resumed', shard=n)
-
-
 def start_missing(job: dict[str, Any], progress: gj.Progress) -> None:
     for n in range(1, job['shards'] + 1):
         if n in shards or progress.shard_done(job, n) or time.time() < retry_at.get(f'{job["name"]}.{n}', 0):
@@ -114,9 +98,9 @@ def tick(jobs: list[dict[str, Any]], progress: gj.Progress) -> None:
     if stop:
         stop_shards(stop)
     elif hold:
-        pause(True)
+        gpu_pause.pause(shards, True, log)
     else:
-        pause(False)
+        gpu_pause.pause(shards, False, log)
         if machine.can_start(s):
             start_missing(job, progress)
     reason = stop or hold or (None if machine.can_start(s) else 'czeka na warunki')

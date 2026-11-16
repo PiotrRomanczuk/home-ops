@@ -19,7 +19,7 @@ Cel: sekcja Now ma być krótką listą zadań do wykonania, a nie dziennikiem s
 - Odhaczaj tylko to, co da się udowodnić (scalony PR, istniejący plik, commit na main). W razie wątpliwości zostaw otwarte.
 - Nie wymyślaj zadań. Klasę i rozmiar nadaj na podstawie treści; gdy nie umiesz ocenić klasy, daj 🧹 i dopisz `(klasa do potwierdzenia)`.
 - Gdy w Now jest więcej niż 3 zadania wykonalne, zostaw 3 według rubryki (klasa → ⛓ → mniejszy rozmiar), reszta do Next, nadmiar Next do Later.
-- Frontmatter: ustaw `updated: 2026-11-14`. Nie zmieniaj `status`, `verdict`, `stream`, `dlaczego_teraz`; propozycje zmian tych pól wpisz do wyniku w „Czeka na Piotra”.
+- Frontmatter: ustaw `updated: <dzisiejsza data, YYYY-MM-DD>`. Nie zmieniaj `status`, `verdict`, `stream`, `dlaczego_teraz`; propozycje zmian tych pól wpisz do wyniku w „Czeka na Piotra”.
 - Wikilinki i linki zostają nietknięte. Treść w języku notatki.
 
 ## Kontrola przed commitem

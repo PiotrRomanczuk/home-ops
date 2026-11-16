@@ -10,6 +10,7 @@ Usage: seed.py [--pilot lesson-notes]
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import sys
@@ -18,7 +19,7 @@ from pathlib import Path
 import lifecycle
 import sprint_tasks as q
 
-STATE = Path('~/.local/state/home-ops/sprint').expanduser()
+STATE = Path(os.environ.get('SPRINT_STATE', '~/.local/state/home-ops/sprint')).expanduser()
 VAULT = Path('~/Obsidian/MainCV-Planner').expanduser()
 CODE = Path('~/code').expanduser()
 METHOD = STATE / 'vault-method.md'
@@ -26,6 +27,8 @@ PILOT = sys.argv[sys.argv.index('--pilot') + 1] if '--pilot' in sys.argv else 'l
 
 
 def task(tid: str, body: str, **meta: object) -> None:
+    if any((STATE / where / f'{tid}.md').exists() for where in ('queue', 'running', 'done', 'failed')):
+        return  # already seeded (or done): never queue it twice
     q.write(STATE / 'queue' / f'{tid}.md', {'id': tid, **meta, 'attempts': 0, 'body': body})
 
 
@@ -63,10 +66,11 @@ def repo_dirs() -> dict[str, Path]:
 
 
 def main() -> None:
-    instance = lifecycle.single_instance(STATE)  # setup() below would take the running tasks from a live runner
+    instance = lifecycle.single_instance(STATE)
     if instance is None:
         sys.exit(f'the runner is running ({STATE}/runner.lock); stop it (touch STOP) before seeding')
-    q.setup(STATE)
+    for name in q.DIRS:  # not q.setup(): it would move the tasks of a live runner back to queue/
+        (STATE / name).mkdir(parents=True, exist_ok=True)
     notes = active_notes()
     pilot = next((n for n in notes if n.stem == PILOT), notes[0])
     task(f'vault-pilot-{pilot.stem}', vault_body(pilot, 'To pilotaż: w wyniku opisz też, co w metodzie było niejasne.\n'),
