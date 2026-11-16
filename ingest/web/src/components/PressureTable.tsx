@@ -5,6 +5,7 @@ import { Info } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import type { PressureRow } from '@/lib/api';
+import { gapsCell } from '@/lib/gaps';
 import { cn } from '@/lib/utils';
 import { PressureBreakdown } from './PressureBreakdown';
 import { PressureBadge, StatusDot } from './status';
@@ -60,7 +61,9 @@ export function PressureTable({ rows, selected, onSelect }: Props) {
                 {tasks.red} / {tasks.money}
               </TableCell>
               <TableCell className={num}>{pain.n || '—'}</TableCell>
-              <TableCell className={num}>{gaps.hasBlueprint ? gaps.n : '—'}</TableCell>
+              <TableCell className={num} title={gapsCell(gaps).title}>
+                {gapsCell(gaps).text}
+              </TableCell>
               <TableCell className={num}>
                 {issues.open || '—'}
                 {issues.bugs > 0 && <span className="text-bad"> ({issues.bugs} bug)</span>}
