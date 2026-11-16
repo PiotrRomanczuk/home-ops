@@ -59,7 +59,7 @@ export interface PressureRow {
   parts: {
     tasks: TaskCounts & { points: number };
     pain: { n: number; points: number };
-    gaps: { n: number; ids: string[]; points: number; hasBlueprint: boolean };
+    gaps: { n: number; ids: string[]; points: number; hasBlueprint: boolean | null; partial: boolean };
     issues: { open: number; bugs: number; points: number };
     runtime: { errorPatterns: number; ciFailed: boolean; down: boolean; points: number };
   };
@@ -82,7 +82,8 @@ export function projectPressure(p: PressureInput, dependents: string[], rt: Runt
   const painN = countPain(p.pain_md);
   const gaps = rec(meta.gaps);
   const gapIds = Array.isArray(gaps.ids) ? gaps.ids.filter((x): x is string => typeof x === 'string') : [];
-  const gapN = num(gaps.count);
+  const gapsError = gaps.error !== undefined; // GitHub API failed: no data, not "0 gaps"
+  const gapN = gapsError ? 0 : num(gaps.count);
   const issues = rec(meta.issues);
   const bugs = num(issues.bugs);
   const open = num(issues.open);
@@ -94,7 +95,13 @@ export function projectPressure(p: PressureInput, dependents: string[], rt: Runt
   const parts = {
     tasks: { ...t, points: taskPts },
     pain: { n: painN, points: W.pain * painN },
-    gaps: { n: gapN, ids: gapIds, points: W.gap * Math.min(gapN, W.gapCap), hasBlueprint: !!meta.gaps },
+    gaps: {
+      n: gapN,
+      ids: gapIds,
+      points: W.gap * Math.min(gapN, W.gapCap),
+      hasBlueprint: gapsError ? null : !!meta.gaps,
+      partial: gaps.partial === true,
+    },
     issues: { open, bugs, points: W.bug * bugs + W.issue * Math.max(0, open - bugs) },
     runtime: { errorPatterns, ciFailed, down, points: runtimePts },
   };
@@ -115,6 +122,16 @@ export function projectPressure(p: PressureInput, dependents: string[], rt: Runt
     dependents,
     parts,
   };
+}
+
+/** Dependents map for `rankPressure`, without projects that are archived/removed. */
+export function activeDependents(projects: PressureInput[], dependents: Map<string, string[]>): Map<string, string[]> {
+  const excluded = new Set(
+    projects
+      .filter((p) => WEIGHTS.excludedVerdicts.includes(str(rec(p.raw_frontmatter).verdict) ?? ''))
+      .map((p) => p.slug.toLowerCase()),
+  );
+  return new Map([...dependents].map(([k, v]) => [k, v.filter((d) => !excluded.has(d.toLowerCase()))]));
 }
 
 export function rankPressure(projects: PressureInput[], dependents: Map<string, string[]>, rt: Runtime): PressureRow[] {

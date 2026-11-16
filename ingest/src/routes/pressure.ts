@@ -2,7 +2,7 @@ import type { Hono } from 'hono';
 import { viewerOrToken } from '../auth.ts';
 import { pool } from '../db.ts';
 import { buildMap } from '../map-model.ts';
-import { type Runtime, rankPressure, WEIGHTS } from '../pressure-model.ts';
+import { activeDependents, type Runtime, rankPressure, WEIGHTS } from '../pressure-model.ts';
 import { MUTED } from './digest.ts';
 
 // GET /api/pressure — projects ranked by how much attention they need (see
@@ -49,6 +49,9 @@ export function registerPressureRoutes(app: Hono): void {
     ]);
     const map = buildMap(projects.rows);
     const dependents = new Map(map.nodes.map((n) => [n.id, n.dependents]));
-    return c.json({ projects: rankPressure(projects.rows, dependents, rt), weights: WEIGHTS });
+    return c.json({
+      projects: rankPressure(projects.rows, activeDependents(projects.rows, dependents), rt),
+      weights: WEIGHTS,
+    });
   });
 }

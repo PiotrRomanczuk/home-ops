@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { type PressureInput, projectPressure, type Runtime, rankPressure, WEIGHTS } from '../pressure-model.ts';
+import {
+  activeDependents,
+  type PressureInput,
+  projectPressure,
+  type Runtime,
+  rankPressure,
+  WEIGHTS,
+} from '../pressure-model.ts';
 import { countPain, countTasks } from '../vault-tasks.ts';
 
 const quiet: Runtime = { errorPatterns: new Map(), down: new Set() };
@@ -44,7 +51,7 @@ describe('projectPressure', () => {
     );
     // tasks 4+2, pain 2, gaps capped 15, issues 3·1 + 1·2, runtime 2·2 + 5 + 5
     expect(row?.parts.tasks.points).toBe(6);
-    expect(row?.parts.gaps).toEqual({ n: 20, ids: ['SKL-1'], points: 15, hasBlueprint: true });
+    expect(row?.parts.gaps).toEqual({ n: 20, ids: ['SKL-1'], points: 15, hasBlueprint: true, partial: false });
     expect(row?.parts.issues.points).toBe(5);
     expect(row?.parts.runtime).toEqual({ errorPatterns: 2, ciFailed: true, down: true, points: 14 });
     expect(row?.base).toBe(42);
@@ -79,5 +86,33 @@ describe('rankPressure', () => {
     );
     expect(rows.map((r) => r.slug)).toEqual(['home-ops', 'A', 'b']);
     expect(rows[0]?.dependents).toEqual(['job-radar', 'd4-build-agent']);
+  });
+});
+
+describe('review fixes (#75)', () => {
+  it('a GitHub API error in gaps is no data, not zero gaps', () => {
+    const row = projectPressure(input({ repo_meta: { gaps: { error: 'api' } } }), [], quiet);
+    expect(row?.parts.gaps).toMatchObject({ n: 0, points: 0, hasBlueprint: null });
+  });
+
+  it('a partial gaps result is flagged', () => {
+    const row = projectPressure(
+      input({ repo_meta: { gaps: { count: 2, ids: ['A-1', 'A-2'], partial: true } } }),
+      [],
+      quiet,
+    );
+    expect(row?.parts.gaps).toMatchObject({ n: 2, partial: true });
+  });
+
+  it('archived dependents do not raise blast radius', () => {
+    const projects = [
+      input(),
+      input({ slug: 'old', raw_frontmatter: { verdict: 'archiwum' } }),
+      input({ slug: 'live', raw_frontmatter: { verdict: 'aktywny' } }),
+    ];
+    const dependents = activeDependents(projects, new Map([['strummy', ['old', 'live']]]));
+    expect(dependents.get('strummy')).toEqual(['live']);
+    const [row] = rankPressure([projects[0] as PressureInput], dependents, quiet);
+    expect(row?.blast).toBe(1.25);
   });
 });
