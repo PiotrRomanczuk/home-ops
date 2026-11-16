@@ -56,6 +56,7 @@ class IssuesWiringTest(unittest.TestCase):
         ps.post_log = lambda *a, **k: None
         ps._issues_due = 0.0
         ps._board_conflict_warned.clear()
+        ps._orphan_warned.clear()
 
     def tearDown(self) -> None:
         for k, v in self.saved.items():
@@ -158,6 +159,50 @@ class IssuesWiringTest(unittest.TestCase):
         self.assertIn('- [ ] manual line', before)
         self.assertEqual(self.closed, [('o/r', 1, False), ('o/r', 1, True)])
         self.assertEqual([c for c in git_calls if 'commit' in c], [])
+
+    def _stale_manual_setup(self) -> tuple[str, list[tuple]]:
+        """Block with 1 issue + 2 manual lines; the view was rendered with 2 issues, M2 edited since."""
+        ps.issues_sync_once()
+        self.p.write_text(self.p.read_text().replace('- [ ] manual line', '- [ ] M1\n- [ ] M2 reworded'), encoding='utf-8')
+        git_calls: list[tuple] = []
+        ps._run_git = lambda *a: git_calls.append(a) or subprocess.CompletedProcess(a, 0, '', '')
+        return self.p.read_text(), git_calls
+
+    def test_stale_text_in_note_with_block_never_falls_back_to_idx(self) -> None:
+        before, git_calls = self._stale_manual_setup()
+        status, err = ps._apply_one_toggle({'slug': 'p', 'section': 'now', 'idx': 2, 'done': True, 'text': 'M2 old'})
+        self.assertEqual((status, err), ('conflict', 'task changed since the view was rendered'))
+        self.assertEqual(self.p.read_text(), before)
+        self.assertEqual([c for c in git_calls if 'commit' in c], [])
+
+    def test_note_without_block_keeps_idx_fallback(self) -> None:
+        self.p.write_text(OPTED_IN, encoding='utf-8')
+        status, _ = ps._apply_one_toggle({'slug': 'p', 'section': 'now', 'idx': 0, 'done': True, 'text': 'reworded'})
+        self.assertEqual(status, 'applied')
+        self.assertIn('- [x] manual line', self.p.read_text())
+
+    def test_reworded_manual_line_linking_to_foreign_repo_does_not_close_it(self) -> None:
+        ps.issues_sync_once()
+        self.p.write_text(self.p.read_text().replace(
+            '- [ ] manual line', '- [ ] 🔴 **Secret** — [#9](https://github.com/x/other/issues/9)'), encoding='utf-8')
+        before = self.p.read_text()
+        old = '🔴 **Secret old** — [#9](https://github.com/x/other/issues/9)'
+        status, err = ps._apply_one_toggle({'slug': 'p', 'section': 'now', 'idx': 1, 'done': True, 'text': old})
+        self.assertEqual((status, err), ('conflict', 'issue link outside the note repo'))
+        self.assertEqual(self.closed, [])
+        self.assertEqual(self.p.read_text(), before)
+
+    def test_orphan_start_is_warned_once_and_not_duplicated(self) -> None:
+        ps.issues_sync_once()
+        broken = self.p.read_text().replace('<!-- github-issues:end -->\n', '', 1)
+        self.p.write_text(broken, encoding='utf-8')
+        logs: list[tuple] = []
+        ps.post_log = lambda *a, **k: logs.append(a)
+        for _ in range(2):
+            ps._issues_due = 0.0
+            ps.issues_sync_once()
+        self.assertEqual(self.p.read_text(), broken)
+        self.assertEqual(len([a for a in logs if 'START without END' in a[1]]), 1)
 
     def test_write_failures_are_logged_without_board_sync_prefix(self) -> None:
         logs: list[tuple] = []

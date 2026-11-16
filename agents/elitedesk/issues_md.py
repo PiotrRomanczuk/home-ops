@@ -60,8 +60,31 @@ def render_issue_blocks(issues: list[dict[str, Any]]) -> dict[str, list[str]]:
 
 
 def _is_header(line: str, name: str) -> bool:
-    m = re.match(r'^## +(.+?)\s*$', line)
-    return bool(m) and (m.group(1) == name or m.group(1).startswith(name + ' '))
+    """`## Now`, `## Now — …`, `## Now (≤ 3)`; not `## Now or never` / `## Next steps`."""
+    return bool(re.match(rf'^## +{name}(?:\s*$|\s+[—–-]\s|\s*\()', line))
+
+
+def _sections(lines: list[str]) -> list[tuple[str, int, int]]:
+    """(key, header index, exclusive end) of each Now/Next/Later section present."""
+    out = []
+    for name, key in SECTIONS:
+        head = next((i for i, line in enumerate(lines) if _is_header(line, name)), None)
+        if head is not None:
+            end = next((j for j in range(head + 1, len(lines)) if lines[j].startswith('## ')), len(lines))
+            out.append((key, head, end))
+    return out
+
+
+def _has_start(lines: list[str], head: int, end: int) -> bool:
+    return any(line.startswith('<!-- github-issues:start') for line in lines[head + 1:end])
+
+
+def orphan_sections(md: str) -> list[str]:
+    """Sections with a START marker but no END (hand-edited): left alone by
+    replace_issue_blocks, the note needs fixing."""
+    lines = md.split('\n')
+    return [key for key, head, end in _sections(lines)
+            if _has_start(lines, head, end) and not _block_bounds(lines, head + 1, end)]
 
 
 def _block_bounds(lines: list[str], start: int, end: int) -> tuple[int, int] | None:
@@ -74,15 +97,17 @@ def replace_issue_blocks(md: str, rendered: dict[str, list[str]]) -> str:
     """Swap the generated block of each Now/Next/Later section; insert it right
     under the header when missing. Sections absent from the note are skipped."""
     lines = md.split('\n')
-    for name, key in SECTIONS:
-        head = next((i for i, line in enumerate(lines) if _is_header(line, name)), None)
-        if head is None:
+    for name, key in SECTIONS:  # re-scan per section: earlier edits shift the indexes
+        found = [sec for sec in _sections(lines) if sec[0] == key]
+        if not found:
             continue
-        end = next((j for j in range(head + 1, len(lines)) if lines[j].startswith('## ')), len(lines))
+        _, head, end = found[0]
         block = rendered.get(key, [])
         bounds = _block_bounds(lines, head + 1, end)
         if bounds:
             lines[bounds[0]:bounds[1] + 1] = [START, *block, END]
+            continue
+        if _has_start(lines, head, end):  # START without END: don't add a second block
             continue
         if lines[head + 1:head + 2] == ['']:  # header already followed by a blank line
             lines[head + 2:head + 2] = [START, *block, END, '']
@@ -94,14 +119,12 @@ def replace_issue_blocks(md: str, rendered: dict[str, list[str]]) -> str:
 def in_issue_block(md: str, task_text: str) -> bool:
     """True when `task_text` is a task line inside a generated block — a Dziś
     toggle on such a line closes the issue instead of editing markdown."""
-    inside = False
-    for line in md.split('\n'):
-        if line.startswith('<!-- github-issues:start'):
-            inside = True
-        elif line.strip() == END:
-            inside = False
-        elif inside and (m := _TASK_RE.match(line)) and m.group(1) == task_text.strip():
-            return True
+    lines = md.split('\n')
+    for _, head, end in _sections(lines):
+        bounds = _block_bounds(lines, head + 1, end)
+        for line in lines[bounds[0] + 1:bounds[1]] if bounds else ():
+            if (m := _TASK_RE.match(line)) and m.group(1) == task_text.strip():
+                return True
     return False
 
 

@@ -51,6 +51,8 @@ def fetch_open_issues(repo: str) -> list[dict[str, Any]] | None:
     try:
         while url:
             page, link = _gh('GET', url)
+            if not isinstance(page, list):
+                return None
             items.extend(page)
             nxt = re.search(r'<([^>]+)>;\s*rel="next"', link)
             url = nxt.group(1) if nxt else ''

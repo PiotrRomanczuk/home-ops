@@ -43,6 +43,10 @@ class IssuesGhTest(unittest.TestCase):
         gh._gh = boom
         self.assertIsNone(gh.fetch_open_issues('o/r'))
 
+    def test_non_list_page_returns_none(self) -> None:
+        gh._gh = lambda method, url, payload=None: ({'message': 'oops'}, '')
+        self.assertIsNone(gh.fetch_open_issues('o/r'))
+
     def test_empty_token_is_not_cached(self) -> None:
         gh._token_cache = ''
         results = iter([subprocess.CompletedProcess([], 1, '', ''), subprocess.CompletedProcess([], 0, 'tok\n', '')])

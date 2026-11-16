@@ -43,7 +43,8 @@ sys.path.insert(0, str(_here))
 sys.path.insert(0, str(_here.parent))
 from _common import IngestClient, Shutdown  # noqa: E402
 from issues_gh import fetch_open_issues, set_issue_state  # noqa: E402
-from issues_md import in_issue_block, issue_ref, render_issue_blocks, replace_issue_blocks  # noqa: E402
+from issues_md import in_issue_block, issue_ref, orphan_sections, render_issue_blocks, replace_issue_blocks  # noqa: E402
+from issues_note import has_issue_block, note_repo, ref_in_note_repo  # noqa: E402
 from queue_md import parse_queue_md  # noqa: E402
 from task_flip import TOGGLE_LINE_RE as _TOGGLE_LINE_RE, flip_task_in_section as _flip_task_in_section  # noqa: E402
 from task_ticks import TickTracker  # noqa: E402
@@ -247,6 +248,9 @@ def _find_project_file(vault_root: Path, slug: str) -> Path | None:
 # ── task writeback (UI checkbox toggle → markdown file → git push) ────
 
 
+_OUTSIDE_REPO = ('conflict', 'issue link outside the note repo')
+
+
 def _apply_one_toggle(toggle: dict[str, Any]) -> tuple[str, str | None]:
     """Returns (status, error). status ∈ {'applied', 'conflict', 'failed'}."""
     slug = toggle['slug']
@@ -270,16 +274,22 @@ def _apply_one_toggle(toggle: dict[str, Any]) -> tuple[str, str | None]:
         return 'failed', f'read failed: {e}'
 
     # A line generated from GitHub Issues: the issue is the source of truth.
+    fm = (parse_project_file(md_path) or {}).get('raw_frontmatter') or {}
     ref = issue_ref(toggle.get('text') or '')
     if ref and in_issue_block(text, toggle.get('text') or ''):
-        return _toggle_issue(ref, done)
+        return _toggle_issue(ref, done) if ref_in_note_repo(ref, fm, GITHUB_OWNER) else _OUTSIDE_REPO
 
     # A trailing issue link means the line was generated: if it is gone from
     # the block (issue closed, block re-rendered) a stale idx would flip an
-    # unrelated manual line, so go to the issue instead.
-    new_text = _flip_task_in_section(text, section, idx, done, toggle.get('text'), idx_fallback=ref is None)
+    # unrelated manual line, so go to the issue instead. In a note with a
+    # block the index shifts on every render, so a line looked up by text
+    # that no longer matches is stale too — never fall back to idx there.
+    use_idx = ref is None and not (has_issue_block(text) and toggle.get('text'))
+    new_text = _flip_task_in_section(text, section, idx, done, toggle.get('text'), idx_fallback=use_idx)
     if new_text is None and ref:
-        return _toggle_issue(ref, done)
+        return _toggle_issue(ref, done) if ref_in_note_repo(ref, fm, GITHUB_OWNER) else _OUTSIDE_REPO
+    if new_text is None and not use_idx and ref is None:
+        return 'conflict', 'task changed since the view was rendered'
     if new_text is None:
         return 'failed', f'task not found: section={section} idx={idx}'
     if new_text == text:
@@ -623,6 +633,7 @@ def queue_sync_once() -> None:
 
 _issues_due = 0.0
 _board_conflict_warned: set[str] = set()  # slugs already warned about, once per process
+_orphan_warned: set[tuple[str, str]] = set()  # (slug, section) with START but no END
 
 
 def issues_sync_once(board_slugs: Collection[str] = ()) -> None:
@@ -645,9 +656,9 @@ def issues_sync_once(board_slugs: Collection[str] = ()) -> None:
                 _board_conflict_warned.add(rec['slug'])
                 post_log('warn', f'issues sync skipped: {rec["slug"]} is on the Board — pick one source')
             continue
-        repo = str(fm['repo']) if '/' in str(fm['repo']) else f"{GITHUB_OWNER}/{fm['repo']}"
-        if not re.fullmatch(r'[\w.-]+/[\w.-]+', repo):
-            post_log('warn', f'issues sync: bad repo "{repo}" in {md_path.name}')
+        repo = note_repo(fm, GITHUB_OWNER)
+        if repo is None:
+            post_log('warn', f'issues sync: bad repo "{fm["repo"]}" in {md_path.name}')
             continue
         issues = fetch_open_issues(repo)
         if issues is None:
@@ -655,6 +666,10 @@ def issues_sync_once(board_slugs: Collection[str] = ()) -> None:
             continue
         rendered = render_issue_blocks(issues)
         current = md_path.read_text(encoding='utf-8')
+        for key in orphan_sections(current):
+            if (rec['slug'], key) not in _orphan_warned:
+                _orphan_warned.add((rec['slug'], key))
+                post_log('warn', f'issues sync: {rec["slug"]} {key} has START without END — fix the note')
         new_md = replace_issue_blocks(current, rendered)
         if new_md == current:
             continue

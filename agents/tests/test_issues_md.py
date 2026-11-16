@@ -100,6 +100,21 @@ class ReplaceBlocksTest(unittest.TestCase):
     def test_missing_section_is_skipped(self) -> None:
         self.assertEqual(im.replace_issue_blocks('# P\n\nno sections\n', self.rendered), '# P\n\nno sections\n')
 
+    def test_start_without_end_is_left_alone(self) -> None:
+        once = im.replace_issue_blocks(NOTE, self.rendered)
+        broken = once.replace(im.END + '\n', '', 1)  # Now block loses its END
+        self.assertEqual(im.orphan_sections(broken), ['now'])
+        out = im.replace_issue_blocks(broken, self.rendered)
+        self.assertEqual(out.count(im.START), 3)
+        self.assertEqual(out.split('## Next')[0], broken.split('## Next')[0])
+
+    def test_next_steps_header_is_not_the_next_section(self) -> None:
+        md = '## Next steps\n\n- [ ] x\n\n## Next (≤ 7)\n\n## Later\n'
+        out = im.replace_issue_blocks(md, {'now': [], 'next': ['- [ ] **A** — y'], 'later': []})
+        self.assertLess(out.index('## Next (≤ 7)'), out.index(im.START))
+        self.assertTrue(out.startswith('## Next steps\n\n- [ ] x\n\n## Next (≤ 7)'))
+        self.assertTrue(im._is_header('## Now — focus', 'Now') and not im._is_header('## Now or never', 'Now'))
+
 
 class ToggleTest(unittest.TestCase):
     def test_only_generated_lines_count_as_issue_lines(self) -> None:
@@ -110,6 +125,11 @@ class ToggleTest(unittest.TestCase):
         self.assertFalse(im.in_issue_block(md, manual))
         self.assertEqual(im.issue_ref(generated), ('o/r', 1))
         self.assertIsNone(im.issue_ref('no link here'))
+
+    def test_manual_line_under_orphan_start_is_not_in_block(self) -> None:
+        md = NOTE.replace('## Next (≤ 7)', f'## Next (≤ 7)\n{im.START}')  # START, no END anywhere
+        manual = '🔴 S 2026-10-17 **Rotacja** — [#5](https://github.com/o/r/issues/5) odsyłacz w ręcznej linii'
+        self.assertFalse(im.in_issue_block(md, manual))
 
     def test_issue_ref_uses_trailing_link_not_a_link_in_the_title(self) -> None:
         line = im.issue_line(issue(10, 'Fix [#3](https://github.com/o/r/issues/3) regress', ['plan/now']))

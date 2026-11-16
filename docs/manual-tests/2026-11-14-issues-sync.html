@@ -53,6 +53,20 @@ print('bez zmian' if n==t else 'zmienione bloki')"</pre>Oczekiwane: <code>bez zm
 <tr><td><b>Bramki</b></td><td class="ok"><code>python3 -m unittest discover -s agents/tests -p 'test_*.py'</code> → 109 OK (było 98); <code>python3 -m py_compile agents/elitedesk/*.py</code> OK.</td></tr>
 </table>
 
+<h2>Poprawki r3 (2026-11-16)</h2>
+<p>Druga recenzja PR #85 (werdykt „popraw”) — poprawki w agencie planner-sync, bez zrzutów ekranu. Nowa logika w osobnym module <code>agents/elitedesk/issues_note.py</code>.</p>
+<table><tr><th>Co</th><th>Jak sprawdzić</th></tr>
+<tr><td><b>Brak fallbacku na <code>idx</code> w notatce z blokiem</b>: odhaczenie przeredagowanej ręcznej linii daje <code>conflict</code> („task changed since the view was rendered”), plik i git nietknięte. Notatka bez bloku zachowuje stary fallback.</td>
+<td><code>test_stale_text_in_note_with_block_never_falls_back_to_idx</code>, <code>test_note_without_block_keeps_idx_fallback</code>. Ręcznie: w Obsidianie przeredaguj ręczną linię w Strummy, nie odświeżaj Projektów, kliknij ją — nic się nie zmienia w vaulcie.</td></tr>
+<tr><td><b>Tylko repo notatki</b>: odsyłacz do innego repo w przeredagowanej ręcznej linii nie zamyka cudzego issue (<code>conflict</code>, „issue link outside the note repo”).</td>
+<td><code>test_reworded_manual_line_linking_to_foreign_repo_does_not_close_it</code>.</td></tr>
+<tr><td><b>START bez END</b>: <code>in_issue_block</code> liczy tylko pary START…END w obrębie sekcji; <code>replace_issue_blocks</code> nie wstawia drugiego bloku, a sync loguje raz na proces <code>warn</code> „has START without END — fix the note”.</td>
+<td><code>test_start_without_end_is_left_alone</code>, <code>test_manual_line_under_orphan_start_is_not_in_block</code>, <code>test_orphan_start_is_warned_once_and_not_duplicated</code>.</td></tr>
+<tr><td><b>Drobne</b>: <code>## Next steps</code> nie jest sekcją Next; strona API niebędąca listą → <code>None</code>; nowe moduły w liście <code>py_compile</code> w <code>check.yml</code>.</td>
+<td><code>test_next_steps_header_is_not_the_next_section</code>, <code>test_non_list_page_returns_none</code>.</td></tr>
+<tr><td><b>Bramki</b></td><td class="ok"><code>unittest discover -s agents/tests</code> → 120 OK (było 112); <code>ops/elitedesk/tests</code> → 93 OK; <code>py_compile agents/elitedesk/*.py</code> OK. Planner-sync nie uruchamiany na vaulcie ani na uwh.</td></tr>
+</table>
+
 <h2>Poza zakresem (świadomie)</h2>
 <p>Releases w notatce (Strummy nie ma jeszcze <code>dev</code>/<code>test</code>, Vercel buduje z <code>main</code>, auto-bump wyłączony — decyzja właściciela); reguła globalna dla wszystkich projektów — po przeglądzie pilota 2026-11-21; <code>check.yml</code> nietknięty — nowe moduły kompiluje i testuje <code>unittest discover</code>, a każdy z 9 otwartych PR-ów zmienia ten plik.</p>
 </body></html>
