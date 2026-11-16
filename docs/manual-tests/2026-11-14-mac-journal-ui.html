@@ -57,7 +57,7 @@
   <li>Przejdź „←” na wczoraj. Dzień bez danych pokazuje puste wykresy i komunikat „Tego dnia nie było sesji Claude”. Przycisk „→” jest wyłączony na dziś.</li>
   <li>Przed 21:30 sekcja notatki mówi, że podsumowanie powstaje o 21:30. Po przebiegu <code>day-summary</code> pokazuje „Dzień” i „Co dalej”.</li>
   <li>Najedź na kolumny wykresów godzinowych: w nagłówku jest wartość godziny albo „uśpiony”.</li>
-  <li>Sesja wznowiona innego dnia (np. zaczęta 14.11, wznowiona 16.11): w dzienniku 16.11 rozwiń jej wiersz — widać tylko zdarzenia z 16.11 (zapytanie prosi o do 5000 zdarzeń, nie o domyślne 1000). Gdy sesja ma 5000 lub więcej zdarzeń, na dole listy jest „lista ucięta, pokazano pierwsze 5000 zdarzeń sesji”. Dzień bez zdarzeń tej sesji pokazuje „Brak zdarzeń z tego dnia”, błąd API — „Nie udało się pobrać zdarzeń”.</li>
+  <li>Sesja wznowiona innego dnia (np. zaczęta 14.11, wznowiona 16.11): w dzienniku 16.11 rozwiń jej wiersz — widać tylko zdarzenia z 16.11 (zapytanie prosi o do 5000 zdarzeń, nie o domyślne 1000). Gdy sesja ma 5000 lub więcej zdarzeń, na dole listy jest „lista ucięta, pokazano pierwsze 5000 zdarzeń sesji”. Sesja ≥5000 zdarzeń, wznowiona innego dnia: zamiast „Brak zdarzeń z tego dnia” jest komunikat „Zdarzeń z tego dnia nie ma wśród pierwszych 5000 zdarzeń sesji (lista ucięta)”. Nazwa sesji w wierszu jest przyciskiem (Tab + Enter/spacja rozwija, <code>aria-expanded</code>). Dzień bez zdarzeń tej sesji pokazuje „Brak zdarzeń z tego dnia”, błąd API — „Nie udało się pobrać zdarzeń”.</li>
   <li>Zaznacz pasek sesji, potem „←”: zaznaczenie znika, żaden pasek nie jest wyszarzony. Z klawiatury: Tab na pasek lub wiersz, Enter/Spacja zaznacza i rozwija (Spacja nie przewija strony).</li>
 </ol>
 

@@ -82,3 +82,12 @@ export function summarySections(md: string | null): { title: string; lines: stri
   }
   return out;
 }
+
+export type EventsNotice = 'truncated-empty' | 'empty' | 'truncated' | null;
+
+/** What to tell about a session's event list: `all` fetched, `shown` left after the day filter. */
+export function eventsNotice(all: number, shown: number): EventsNotice {
+  const isTruncated = all >= EVENT_LIMIT;
+  if (shown === 0) return isTruncated ? 'truncated-empty' : 'empty';
+  return isTruncated ? 'truncated' : null;
+}

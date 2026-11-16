@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   clockOn,
   EVENT_LIMIT,
+  eventsNotice,
   fetchEvents,
   fmtMin,
   fmtSec,
@@ -102,5 +103,14 @@ describe('fetchEvents', () => {
     await fetchEvents('mac', 'a/b c');
     expect(fetchMock.mock.calls[0]?.[0]).toBe(`/api/claude/events?host=mac&session=a%2Fb%20c&limit=${EVENT_LIMIT}`);
     expect(EVENT_LIMIT).toBe(5000);
+  });
+});
+
+describe('eventsNotice', () => {
+  it('tells apart empty, truncated-empty, truncated and complete lists', () => {
+    expect(eventsNotice(0, 0)).toBe('empty');
+    expect(eventsNotice(EVENT_LIMIT, 0)).toBe('truncated-empty');
+    expect(eventsNotice(EVENT_LIMIT, 12)).toBe('truncated');
+    expect(eventsNotice(30, 30)).toBeNull();
   });
 });

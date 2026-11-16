@@ -4,7 +4,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { clock, EVENT_LIMIT, fetchEvents, fmtMin, type JournalSession, today } from '@/lib/journal';
+import { clock, EVENT_LIMIT, eventsNotice, fetchEvents, fmtMin, type JournalSession, today } from '@/lib/journal';
 import { cn } from '@/lib/utils';
 
 interface Props {
@@ -36,7 +36,14 @@ function Events({ host, session, day }: { host: string; session: string; day: st
   const all = q.data?.events ?? [];
   // A session can span days (resumed later): show what happened on this one.
   const events = all.filter((e) => today(new Date(e.ts)) === day);
-  if (!events.length) return <p className="p-3 text-xs text-muted-foreground">Brak zdarzeń z tego dnia</p>;
+  const notice = eventsNotice(all.length, events.length);
+  if (notice === 'truncated-empty')
+    return (
+      <p className="p-3 text-xs text-bad">
+        Zdarzeń z tego dnia nie ma wśród pierwszych {EVENT_LIMIT} zdarzeń sesji (lista ucięta)
+      </p>
+    );
+  if (notice === 'empty') return <p className="p-3 text-xs text-muted-foreground">Brak zdarzeń z tego dnia</p>;
   return (
     <ol className="max-h-96 space-y-1 overflow-auto p-3 font-mono text-xs">
       {events.slice(0, 400).map((e) => (
@@ -50,7 +57,7 @@ function Events({ host, session, day }: { host: string; session: string; day: st
           </span>
         </li>
       ))}
-      {all.length >= EVENT_LIMIT && (
+      {notice === 'truncated' && (
         <li className="text-bad">lista ucięta, pokazano pierwsze {EVENT_LIMIT} zdarzeń sesji</li>
       )}
       {events.length > 400 && <li className="text-muted-foreground">… i {events.length - 400} więcej</li>}
@@ -79,14 +86,7 @@ export function SessionTable({ sessions, day, selected, onSelect }: Props) {
           const row = (
             <TableRow
               key={`${s.host}:${s.session_id}`}
-              tabIndex={0}
-              aria-expanded={open}
               onClick={() => onSelect(open ? null : s.session_id)}
-              onKeyDown={(e) => {
-                if (e.key !== 'Enter' && e.key !== ' ') return;
-                e.preventDefault();
-                onSelect(open ? null : s.session_id);
-              }}
               className={cn('cursor-pointer', open && 'bg-muted')}
             >
               <TableCell className="font-mono text-muted-foreground">
@@ -94,7 +94,17 @@ export function SessionTable({ sessions, day, selected, onSelect }: Props) {
               </TableCell>
               <TableCell className="max-w-md truncate">
                 {s.live_status && <span className="mr-1.5 inline-block size-2 rounded-full bg-good" title="trwa" />}
-                {s.title ?? s.session_id.slice(0, 8)}
+                <button
+                  type="button"
+                  aria-expanded={open}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSelect(open ? null : s.session_id);
+                  }}
+                  className="max-w-full truncate text-left"
+                >
+                  {s.title ?? s.session_id.slice(0, 8)}
+                </button>
               </TableCell>
               <TableCell className="font-mono">{s.project_slug ?? '—'}</TableCell>
               <TableCell className="font-mono text-muted-foreground">
