@@ -28,6 +28,11 @@ export type FlowNode = ProjectFlowNode | ExternalFlowNode | ClusterFlowNode;
 /** depends_on = amber (risk), feeds = blue (data flow) — same hues as the legend. */
 export const EDGE_COLOR = { depends_on: '#d29922', feeds: '#58a6ff' } as const;
 
+/** Identity of the graph's shape. Equal keys = the same ELK layout stays valid;
+ *  pressure / health changes alone don't alter it. */
+export const structureKeyOf = (spec: GraphSpec): string =>
+  `${spec.nodes.map((n) => `${n.id}@${n.parent ?? ''}`).join('|')}#${spec.edges.map((e) => e.id).join('|')}`;
+
 const ZERO: Box = { x: 0, y: 0, width: 0, height: 0 };
 
 export function toFlow(

@@ -75,6 +75,14 @@ cd ingest &amp;&amp; DATABASE_URL=postgresql://postgres:ci-placeholder@127.0.0.1
 <pre>ssh uwh 'cd ~/code/logs-stack &amp;&amp; git pull &amp;&amp; docker compose up -d --build ingest'   # obraz buduje SPA sam</pre>
 <p>Strummy prod nie jest dotykany. Kontrola i tak: 10 kontenerów <code>StudentProduction</code> Up, <code>strummy.online</code> → 200.</p>
 
+<h2>Poprawki po recenzji (2026-11-15)</h2>
+<p>Recenzja PR #76 wskazała trzy rozbieżności; poprawione jednym commitem na wierzchu brancha. Sprawdzone testami jednostkowymi (<code>graph.test.ts</code>, 11/11), nie ręcznie w przeglądarce.</p>
+<table><tr><th>Co</th><th>Jak sprawdzić ręcznie</th><th>Oczekiwany wynik</th></tr>
+<tr><td>Filtr cichych projektów</td><td>Ekosystem, przełącznik „uśpione i archiwalne” wyłączony</td><td>Znikają <code>d4-build-agent</code>, <code>rhcsa-lab</code>, <code>szczerze-mowiac</code> i usługi zewnętrzne podpięte tylko do nich. <code>olx-scraper</code> zostaje (zależy od niego job-radar).</td></tr>
+<tr><td>Zoom przetrwa odświeżenie</td><td>Przybliż klaster, poczekaj ponad 60 s (refetch <code>/api/map</code>), najlepiej gdy zmieni się presja</td><td>Widok nie wraca do „fit all”; zmienia się tylko kolor/wartość presji. Układ liczy się od nowa dopiero po zmianie struktury (przełącznik, nowy węzeł). Błąd ładowania ELK pokazuje komunikat zamiast „Układam mapę…”.</td></tr>
+<tr><td>Mapa i tabela „Presja” to ten sam zbiór</td><td>Przełącznik wyłączony → porównaj węzły mapy z wierszami tabeli</td><td>Tabela nie ma <code>szczerze-mowiac</code> (verdict „pomysł”) i ma <code>olx-scraper</code> (potrzebny job-radarowi), tak jak mapa.</td></tr>
+</table>
+
 <h2>Ograniczenia i do dopracowania</h2>
 <ul>
 <li><code>stream:</code> ma dziś tylko kilka notatek (szablon pyta o niego przy nowych). Grupy w Ekosystemie zgęstnieją, gdy reszta je dostanie. Projekty bez streamu stoją luzem.</li>

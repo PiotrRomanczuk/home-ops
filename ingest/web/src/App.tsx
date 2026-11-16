@@ -42,8 +42,11 @@ export function App() {
   }, [map, view, showQuiet]);
   const highlight = useMemo(() => (map && selected ? impactOf(map, selected) : null), [map, selected]);
   const rows = useMemo(
-    () => (pressureQ.data?.projects ?? []).filter((r) => showQuiet || r.status !== 'dormant'),
-    [pressureQ.data, showQuiet],
+    () =>
+      (pressureQ.data?.projects ?? []).filter(
+        (r) => showQuiet || !map || visibleIds(map, false).has(r.slug.toLowerCase()),
+      ),
+    [pressureQ.data, showQuiet, map],
   );
   const counts = map && {
     shown: visibleIds(map, showQuiet).size,
