@@ -53,6 +53,16 @@ class CommandTest(unittest.TestCase):
         self.assertEqual(cmd[cmd.index('--model') + 1], 'qwen')
         self.assertNotIn('--dangerously-skip-permissions', cmd)
 
+    def test_a_bench_task_answers_in_the_message_with_read_only_tools(self):
+        state = Path(tempfile.gettempdir())
+        bench = claude_run.command('claude', {**TASK, 'kind': 'bench'}, 'local:qwen', state, state)
+        self.assertEqual(bench[bench.index('--tools') + 1], 'Read,Grep,Glob')
+        self.assertTrue(bench[2].endswith('Odpowiedz w tej wiadomości; wynik zapisze runner.'))
+        self.assertNotIn('results/t1.md', bench[2])
+        code = claude_run.command('claude', {**TASK, 'kind': 'code'}, 'sonnet', state, state)
+        self.assertNotIn('--tools', code)
+        self.assertIn('results/t1.md', code[2])
+
     def test_the_hook_dependency_is_documented(self):
         self.assertIn('guard-bash.py', claude_run.__doc__)
         self.assertIn('guard-bash.py', deny_rules.__doc__)

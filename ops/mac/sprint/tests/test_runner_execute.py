@@ -49,7 +49,7 @@ class ExecuteTest(unittest.TestCase):
             patch.start()
             self.addCleanup(patch.stop)
 
-    def execute(self, run: dict, **meta) -> dict:
+    def execute(self, run: dict, _where: str = 'queue', **meta) -> dict:
         tid = run['id']
         q.write(self.state / 'queue' / f'{tid}.md', {'id': tid, 'model': run['model'], **meta, 'body': f'do {tid}'})
         task = q.claim(self.state)
@@ -57,7 +57,7 @@ class ExecuteTest(unittest.TestCase):
             runner.execute(task, config.load(self.state))
         self.assertEqual(called.call_args.kwargs['local_minutes'], config.DEFAULTS['local']['max_minutes'])
         self.assertFalse((self.state / 'running' / f'{tid}.md').exists())
-        return q.parse(self.state / 'queue' / f'{tid}.md')
+        return q.parse(self.state / _where / f'{tid}.md')
 
     def test_a_session_limit_requeues_on_the_same_model_and_pauses_every_worker(self):
         before = time.time()
@@ -108,6 +108,28 @@ class ExecuteTest(unittest.TestCase):
         task = self.execute(self.failing('vault'), kind='vault')
         self.assertEqual((task['model'], task['attempts']), (q.stronger('sonnet'), 1))
         self.assertNotEqual(task['model'], 'sonnet')
+
+    def test_a_bench_answer_is_saved_by_the_runner_and_the_task_is_done(self):
+        run = row_run('done', 'bn', rc=0)
+        run['res'].update(is_error=False, result='odpowiedź modelu')
+        self.execute(run, kind='bench', _where='done')
+        text = (self.state / 'results' / 'bn.md').read_text()
+        self.assertIn('# bn — wynik bench (zapisany przez runner)', text)
+        self.assertIn('odpowiedź modelu', text)
+
+    def test_a_bench_run_with_an_empty_result_retries(self):
+        run = row_run('done', 'be', rc=0)
+        run['res'].update(is_error=False, result='  ')
+        task = self.execute(run, kind='bench')
+        self.assertEqual(task['attempts'], 1)
+        self.assertFalse((self.state / 'results' / 'be.md').exists())
+
+    def test_a_code_task_that_wrote_no_file_still_retries(self):
+        run = row_run('done', 'cn', rc=0)
+        run['res'].update(is_error=False, result='gotowe')
+        task = self.execute(run, kind='code')
+        self.assertEqual(task['attempts'], 1)
+        self.assertFalse((self.state / 'results' / 'cn.md').exists())
 
 
 if __name__ == '__main__':

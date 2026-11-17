@@ -92,6 +92,7 @@ jobs:
             ops/mac/sprint/feed.py \
             ops/mac/sprint/deny_rules.py \
             ops/mac/sprint/status_auth.py \
+            ops/mac/sprint/bench_result.py \
             ops/mac/gpu/gpu_pause.py \
             ops/mac/gpu/gpu_worker.py \
             ops/mac/gpu/gpu_jobs.py \

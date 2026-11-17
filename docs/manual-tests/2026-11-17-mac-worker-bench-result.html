@@ -1,0 +1,15 @@
+<!doctype html><html lang="pl"><head><meta charset="utf-8"><title>mac-worker: wynik bench zapisywany przez runner</title></head><body>
+<h1>mac-worker: wynik <code>kind: bench</code> zapisywany przez runner</h1>
+<p><em>2026-11-17</em> — branch <code>sprint/ho-sprint-followups</code>, bez PR-a (wdrożenie i wybór (a) vs (d) należą do Piotra).</p>
+<h2>Co zrobiono</h2>
+<ul>
+<li><code>bench_result.py</code> (nowy): <code>write_result</code> zapisuje <code>STATE/results/&lt;id&gt;.md</code> z <code>res.result</code>, gdy <code>kind == bench</code>, <code>rc == 0</code>, brak <code>is_error</code> i wynik niepusty.</li>
+<li><code>runner.execute</code>: wywołanie przed <code>outcomes.mtime</code>/<code>classify</code>; <code>outcomes.py</code> bez zmian.</li>
+<li><code>claude_run.command</code>: dla bench prompt kończy „Odpowiedz w tej wiadomości; wynik zapisze runner.” i <code>--tools Read,Grep,Glob</code>; <code>--permission-mode</code> i <code>--disallowedTools</code> bez zmian.</li>
+<li><code>check.yml</code>: <code>bench_result.py</code> w <code>py_compile</code>.</li>
+</ul>
+<h2>Jak sprawdzić ręcznie</h2>
+<ol><li><code>python3 -m unittest discover -s ops/mac/sprint/tests -p 'test_*.py'</code> — 84 testy OK; <code>ops/mac/gpu/tests</code> — 19 OK.</li>
+<li>Zadanie <code>kind: bench</code> w kolejce po wdrożeniu: po przebiegu istnieje <code>results/&lt;id&gt;.md</code> z nagłówkiem „wynik bench (zapisany przez runner)”, zadanie w <code>done/</code>.</li>
+<li>Mutanty: usunięcie wywołania <code>write_result</code> → test bench/done pada; usunięcie warunku <code>kind == 'bench'</code> (w <code>claude_run</code> i w <code>write_result</code>) → testy padają.</li></ol>
+<p>Brak UI, brak zrzutów ekranu.</p></body></html>

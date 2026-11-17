@@ -39,8 +39,11 @@ def command(claude: str, task: dict[str, Any], model: str, state: Path, vault: P
     tid, session = task['id'], str(task.get('resume') or '')
     head = (f'Kontynuuj zadanie {tid} od miejsca przerwania (limit albo przerwany przebieg). Najpierw sprawdź, '
             'co już zrobiłeś (worktree, branch, commity, PR, plik wyniku), i nie powtarzaj tego.') if session else task['body']
-    prompt = f'{head}\n\nID zadania: {tid}. Wynik zapisz w {state}/results/{tid}.md.'
+    bench = task.get('kind') == 'bench'  # answers in the message, runner saves it (bench_result.py): read-only tools
+    tail = 'Odpowiedz w tej wiadomości; wynik zapisze runner.' if bench else f'Wynik zapisz w {state}/results/{tid}.md.'
+    prompt = f'{head}\n\nID zadania: {tid}. {tail}'
     return [claude, '-p', prompt, *(['--resume', session] if session else []),
+            *(['--tools', 'Read,Grep,Glob'] if bench else []),
             '--disallowedTools', *denied(state),
             '--model', model.split('local:', 1)[-1], '--effort', str(task.get('effort') or 'medium'),
             '--permission-mode', 'auto', '--permission-prompts', 'none', '--output-format', 'json',

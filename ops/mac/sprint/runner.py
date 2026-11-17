@@ -14,6 +14,7 @@ What a run means for its task (limit, interrupted, done, retry) is outcomes.py. 
 and feeds the queue (feed.py). lifecycle.py: one runner per STATE (flock); an exception in a thread goes to
 logs/runner-errors.jsonl and fails its task; main() exits 1 when a thread is gone, so launchd restarts it;
 SIGTERM or that exit first end every run (their process groups are outside the launchd job's).
+`kind: bench` answers in the message and the runner saves it (bench_result.py).
 Env: SPRINT_STATE, SPRINT_PLANNER=0 (no planner/summary tasks), CLAUDE_BIN.  Stop: `touch $SPRINT_STATE/STOP`.
 """
 from __future__ import annotations
@@ -28,6 +29,7 @@ from typing import Any
 
 HERE = Path(__file__).resolve().parent
 sys.path.append(str(HERE.parent / 'gpu'))  # repo layout; the installed copies sit side by side
+import bench_result  # noqa: E402
 import budget as b  # noqa: E402
 import claude_run  # noqa: E402
 import config  # noqa: E402
@@ -78,6 +80,7 @@ def execute(task: dict[str, Any], cfg: dict[str, Any]) -> None:
     model = str(task.get('model') or 'sonnet')
     run = claude_run.run(CLAUDE, task, model, STATE, journal.VAULT, cfg['local']['base_url'],
                          local_minutes=cfg['local']['max_minutes'])
+    bench_result.write_result(STATE, task, run)  # before mtime: classify wants a file written during this run
     if outcomes.wants_usage(run):  # a limit without a reset hour in the message
         budget.refresh(force=True)
     outcome, meta = outcomes.classify(run, datetime.now(timezone.utc), kind=task.get('kind'), limits=budget.limits,
