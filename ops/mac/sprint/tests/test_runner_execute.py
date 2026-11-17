@@ -95,6 +95,20 @@ class ExecuteTest(unittest.TestCase):
         self.assertNotIn('resume', task)
         self.assertNotIn('not_before', task)
 
+    def failing(self, tid: str) -> dict:
+        run = row_run('done', tid, rc=1)
+        run['res'].update(is_error=True, result='lint failed')
+        return run
+
+    def test_a_failed_code_task_on_sonnet_retries_on_sonnet(self):
+        task = self.execute(self.failing('code'), kind='code')  # outcomes.NO_ESCALATION: meta['escalate'] is False
+        self.assertEqual((task['model'], task['attempts']), ('sonnet', 1))
+
+    def test_a_failed_vault_task_on_sonnet_retries_on_a_stronger_model(self):
+        task = self.execute(self.failing('vault'), kind='vault')
+        self.assertEqual((task['model'], task['attempts']), (q.stronger('sonnet'), 1))
+        self.assertNotEqual(task['model'], 'sonnet')
+
 
 if __name__ == '__main__':
     unittest.main()

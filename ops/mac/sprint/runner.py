@@ -134,8 +134,8 @@ def main() -> None:
     workers = int(config.load(STATE)['claude']['workers'])
     threads = [threading.Thread(target=worker, args=(i,), name=f'worker-{i}', daemon=True) for i in range(workers)]
     threads.append(threading.Thread(target=housekeeping, name='housekeeping', daemon=True))
+    lifecycle.on_sigterm(threads[:-1])  # before the first run can start
     [t.start() for t in threads]
-    lifecycle.on_sigterm(threads[:-1])
     lifecycle.watch(STATE, threads, stopping)
     lifecycle.notify('Mac worker zatrzymany (STOP). Bieżące zadania dobiegają końca.')
     for t in threads[:-1]:

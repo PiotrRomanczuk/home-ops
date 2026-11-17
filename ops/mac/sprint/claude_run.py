@@ -7,8 +7,9 @@ same harness against Ollama's Anthropic API (no subscription use) and, for its d
 STATE/gpu/borrow so the GPU supervisor pauses its shards.
 
 Hard limit: the run is its own process group (start_new_session). At `max_minutes` (for `local:*` at most the
-config's `local.max_minutes`) the whole group gets SIGTERM, ten seconds later SIGKILL, so the shell, npm, pytest
-and dev servers the worker started die with `claude`. A worktree the run left behind is named in
+config's `local.max_minutes`) the whole group gets SIGTERM, ten seconds later SIGKILL. On TERM `claude` ends its
+own Bash tool shells, so normally nothing is left; after the KILL (a hung `claude`) the tool's shells, which sit
+outside the group, may survive. A worktree the run left behind is named in
 `res.orphan_worktree`, never removed here (it may hold unpushed commits).
 
 Its own group also takes the run out of the launchd job's group, so the job's stop no longer reaches it:

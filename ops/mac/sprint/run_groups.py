@@ -31,7 +31,8 @@ CLOSED = threading.Event()
 
 
 def stop_group(p: subprocess.Popen[str], grace: float) -> tuple[str, str]:
-    """SIGTERM the run's process group, SIGKILL after `grace` seconds; → (stdout, stderr) it had written."""
+    """SIGTERM the run's process group, SIGKILL after `grace` seconds; → (stdout, stderr) it had written.
+    Only the group: after a KILL, tool shells that `claude` started outside it may survive (on TERM claude ends them)."""
     for sig in (signal.SIGTERM, signal.SIGKILL):
         try:
             os.killpg(p.pid, sig)

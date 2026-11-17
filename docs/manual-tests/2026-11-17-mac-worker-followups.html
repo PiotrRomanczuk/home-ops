@@ -1,0 +1,15 @@
+<!doctype html><html lang="pl"><head><meta charset="utf-8"><title>2026-11-17 mac-worker — poprawki po recenzji r15</title></head><body>
+<h1>mac-worker: poprawki po recenzji r15 (PR #83)</h1><p>2026-11-17. Branch <code>sprint/ho-sprint-followups</code> (od <code>feat/claude-sprint</code> @ 75590e5).</p>
+<h2>Zmiany</h2><ul>
+<li><code>runner.py</code>: <code>lifecycle.on_sigterm</code> przed startem wątków.</li>
+<li><code>claude_run.py</code> / <code>run_groups.stop_group</code>: docstring zgodny z faktem (po KILL mogą zostać powłoki narzędzia Bash spoza grupy).</li>
+<li>Testy: <code>tests/test_runner_followups.py</code> (kolejność SIGTERM, <code>watch</code> → <code>stop_all</code> przed <code>SystemExit(1)</code>, <code>CLOSED</code>), <code>test_runner_execute.py</code> (<code>escalate</code>).</li></ul>
+<h2>Jak sprawdzić</h2><pre>python3 -m unittest discover -s ops/mac/sprint/tests -p 'test_*.py'   # Ran 80, OK
+python3 -m unittest discover -s ops/mac/gpu/tests -p 'test_*.py'      # Ran 19, OK
+python3 -m py_compile ops/mac/sprint/{runner,claude_run,run_groups}.py ...  # ok</pre>
+<h2>Mutanty (każdy na kopii pliku, potem przywrócony)</h2><table border="1"><tr><th>Mutant</th><th>Zmiana</th><th>Wynik</th></tr>
+<tr><td>F</td><td>run_groups: <code>if CLOSED.is_set()</code> → <code>if False</code></td><td>FAIL test_nothing_starts_once_stop_all_ran</td></tr>
+<tr><td>G</td><td>lifecycle.watch: bez <code>shutdown()</code></td><td>FAIL test_a_dead_thread_shuts_everything_down_before_the_exit</td></tr>
+<tr><td>N</td><td>runner: <code>meta.get('escalate', True)</code> → <code>True</code></td><td>FAIL test_a_failed_code_task_on_sonnet_retries_on_sonnet</td></tr>
+<tr><td>P1</td><td>on_sigterm po starcie wątków</td><td>FAIL test_main_installs_the_sigterm_handler_before_it_starts_a_thread</td></tr></table>
+<p>Ręcznej przeglądarki nie użyto (kod bez UI).</p></body></html>
