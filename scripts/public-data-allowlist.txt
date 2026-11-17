@@ -15,5 +15,8 @@ noreply
 # systemd unit names such as backup@nightly.service are not addresses.
 \.(service|timer|socket)$
 
+# Dummy phone number (all zeros) used in examples and tests.
+^\+48[ -]?0{3}[ -]?0{3}[ -]?0{3}$
+
 # Fictional senders used by the Gmail test fixtures (see the 2026-11-17 privacy audit).
 file:^ops/elitedesk/tests/test_gmail_(classify|llm)\.py$

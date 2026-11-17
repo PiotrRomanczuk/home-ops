@@ -51,6 +51,7 @@ run_case "systemd unit" 0 notes.txt "backup${at}nightly.service"
 run_case "gmail fixture name outside the fixture files" 1 notes.txt "ania${at}gmail.com"
 run_case "gmail fixture in allowed test file" 0 ops/elitedesk/tests/test_gmail_llm.py "ania${at}gmail.com"
 run_case "phone +48 without separators" 1 notes.txt "call +48600100200"
+run_case "dummy phone" 0 notes.txt "call +48 000 000 000"
 run_case "upper-case e-mail vs lower-case rule" 0 notes.txt "contact: ME${at}EXAMPLE.COM"
 run_case "image with marker, e-mail-like text in base64" 0 docs/manual-tests/r.html "<!-- data-demo=\"true\" --><img src=\"data:image/png;base64,QQ${at}abc.de\">"
 
