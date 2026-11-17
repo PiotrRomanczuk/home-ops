@@ -12,6 +12,7 @@
   "local": {
     "max_tasks_per_day": 8,
     "idle_min": 10,
-    "base_url": "http://127.0.0.1:11434"
+    "base_url": "http://127.0.0.1:11434",
+    "max_minutes": 20
   }
 }

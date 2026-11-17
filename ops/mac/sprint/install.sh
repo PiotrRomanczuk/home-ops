@@ -1,6 +1,6 @@
 #!/bin/sh
 # install.sh — install the Mac worker for the current user (no sudo):
-#   runner + status page → ~/bin/home-ops/sprint/ (with ../gpu/machine.py), their LaunchAgents,
+#   runner + status page → ~/bin/home-ops/sprint/ (with ../gpu/machine.py, procs.py), their LaunchAgents,
 #   STATE/config.json from config.example.json if missing, and the GPU supervisor's LaunchAgent
 #   once its root-owned code exists (sudo ../gpu/install-gpu.sh first).
 # Re-running replaces the code and reloads the agents; a STOP file in STATE keeps the runner idle.
@@ -12,7 +12,7 @@ AGENTS="$HOME/Library/LaunchAgents"
 UID_=$(id -u)
 
 mkdir -p "$DEST" "$STATE" "$HOME/Library/Logs/home-ops" "$AGENTS"
-cp "$HERE"/*.py "$HERE"/*.md "$HERE/../gpu/machine.py" "$DEST/"
+cp "$HERE"/*.py "$HERE"/*.md "$HERE/../gpu/machine.py" "$HERE/../gpu/procs.py" "$DEST/"
 [ -f "$STATE/config.json" ] || cp "$HERE/config.example.json" "$STATE/config.json"
 
 load() {  # load <label> <plist source>

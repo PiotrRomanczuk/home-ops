@@ -1,0 +1,151 @@
+<!doctype html><html lang="pl"><head><meta charset="utf-8"><title>2026-11-17 — mac-worker: SIGTERM bez sierot</title>
+<style>body{font:15px/1.5 system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;color:#222}pre{background:#f4f4f4;padding:1em;overflow:auto;font-size:13px}h2{border-bottom:1px solid #ddd}td,th{border:1px solid #ccc;padding:4px 8px;text-align:left}table{border-collapse:collapse}.ok{color:#060}.bad{color:#a00}</style></head><body>
+<h1>Mac worker: zatrzymanie runnera nie zostawia procesów <code>claude</code></h1>
+<p><strong>Data</strong>: 2026-11-17 · <strong>PR</strong>: #83 (<code>feat/claude-sprint</code>), poprawki r4 z recenzji <code>review-r14-ho79-83</code> · <strong>Zakres</strong>: <code>ops/mac/sprint</code></p>
+
+<h2>Co zrobiono</h2>
+<ul>
+<li><b>Problem:</b> od r3 każdy przebieg <code>claude</code> ma własną grupę procesów (twardy limit czasu). Przez to nie należy już do grupy joba launchd: <code>launchctl kickstart -k</code>, <code>bootout</code> czy reinstalacja zabijały tylko <code>runner.py</code>. <code>claude</code> pracował dalej jako sierota, a nowy runner przenosił jego zadanie z <code>running/</code> do <code>queue/</code> i uruchamiał je drugi raz.</li>
+<li><b><code>run_groups.py</code> (nowy):</b> rejestr żywych grup (<code>LIVE</code>). <code>stop_all()</code> wysyła TERM, a po 10 s KILL, i od tej chwili nie pozwala wystartować nowemu przebiegowi. Grupa (pgid, czas startu systemu, czas startu lidera) trafia do pliku zadania w <code>running/</code>.</li>
+<li><b><code>lifecycle.py</code>:</b> handler SIGTERM wywołuje <code>shutdown()</code>: flaga <code>halted</code> w pamięci (bez pliku STOP), <code>stop_all</code>, do 30 s na to, żeby workery odłożyły zadania jako <code>interrupted</code>. Potem wyjście z kodem 0, w limicie <code>ExitTimeOut</code> 60 s. Tak samo działa wyjście z kodem 1 po padnięciu wątku (<code>watch()</code>).</li>
+<li><b><code>sprint_tasks.setup()</code>:</b> po SIGKILL albo awarii zatrzymuje grupę z pliku zadania, jeśli to nadal ta sama grupa (ten sam boot i ten sam lider, czyli PID nie został użyty ponownie). Potem liczy przerwanie (<code>interrupts</code> +1) i dopiero wtedy przenosi zadanie do <code>queue/</code>.</li>
+<li>Przy okazji: <code>local.max_minutes</code> (domyślnie 20) to twardy limit każdego <code>local:*</code>, a <code>planner.md</code> wstrzymuje <code>local:*</code>/<code>bench-*</code>. Utracona sesja (<code>No conversation found</code>) kończy się <code>interrupted</code> bez <code>resume</code>. Do listy zakazów doszło <code>Bash(git push * --force*)</code>, sprawdzone na żywo. Lista <code>py_compile</code> w <code>check.yml</code> jest uzupełniona, a <code>install.sh</code> kopiuje też <code>procs.py</code>.</li>
+</ul>
+
+<h2>Jak przetestować ręcznie</h2>
+<p>Bez <code>install.sh</code> i bez LaunchAgentów. Runner działa z osobnym <code>SPRINT_STATE</code> w <code>/tmp</code>, a atrapa <code>CLAUDE_BIN</code> (skrypt sh) odpowiada na <code>/usage</code> i przy zadaniu robi <code>sleep 300</code> we wnuku. SIGTERM wysłany ręcznie to ten sam sygnał, który launchd wysyła przy <code>kickstart -k</code> i <code>bootout</code>.</p>
+<ol>
+<li>Z katalogu repo: <code>/tmp/sigterm-demo-83.sh $PWD/ops/mac/sprint</code> (skrypt jest niżej).</li>
+<li>Oczekiwane:
+<table><tr><th>Krok</th><th>Oczekiwany wynik</th></tr>
+<tr><td>1. start</td><td>2 procesy atrapy, w plikach w <code>running/</code> są <code>pgid</code>, <code>pgid_boot</code> i <code>pgid_start</code></td></tr>
+<tr><td>2. SIGTERM</td><td>kod wyjścia 0, <b>0 procesów atrapy</b>, <code>running/</code> puste, oba zadania w <code>queue/</code> z <code>interrupts: 1</code>, <code>attempts: 0</code>, model bez zmian, <code>not_before</code> za +10 min</td></tr>
+<tr><td>3. restart</td><td>każde zadanie startuje dokładnie raz (razem 4 starty), działają 2 procesy</td></tr>
+<tr><td>4. SIGKILL</td><td>2 sieroty (handler nie ma szansy zadziałać), pliki zostają w <code>running/</code></td></tr>
+<tr><td>5. restart</td><td><code>setup()</code> zabija sieroty: działają tylko 2 nowe przebiegi (PID-y różne od tych z kroku 3)</td></tr>
+<tr><td>6. SIGTERM</td><td>trzecie przerwanie → <code>failed/</code> (<code>MAX_INTERRUPTS</code> = 3)</td></tr></table></li>
+<li>Na koniec <code>pgrep -fl "sleep 300"</code> nie powinno nic zwrócić.</li>
+<li>Na Macu po wdrożeniu (Piotr): przy zadaniu w toku <code>launchctl kickstart -k gui/$(id -u)/pl.pionat.home-ops.sprint</code>, a potem <code>pgrep -fl "sprint:"</code>. Powinny być widoczne tylko przebiegi nowego runnera.</li>
+</ol>
+
+<h2 class="ok">Wynik na nowym kodzie (2026-11-17)</h2><pre>== 1. start runner (pid via start)
+fake claude processes running: 2
+pgid: 1358
+pgid_boot: 1794057367
+pgid_start: Tue Nov 17 03:26:15 2026
+pgid: 1360
+pgid_boot: 1794057367
+pgid_start: Tue Nov 17 03:26:15 2026
+== 2. SIGTERM to runner (what launchctl kickstart -k / bootout sends)
+runner exit code: 0 after 0 s
+fake claude processes left: 0
+running/: 
+id: one
+model: sonnet
+attempts: 0
+interrupts: 1
+not_before: 2026-11-17T02:36:15+00:00
+id: two
+model: sonnet
+attempts: 0
+interrupts: 1
+not_before: 2026-11-17T02:36:15+00:00
+== 3. clear not_before and restart: each task starts exactly once more
+starts so far:
+1358 sprint:one
+1360 sprint:two
+1416 sprint:one
+1418 sprint:two
+fake claude processes running: 2
+== 4. SIGKILL to runner (no handler can run)
+fake claude processes left after SIGKILL: 2 (orphans, as expected)
+running/: one.md
+two.md
+== 5. restart: setup() stops the orphans before requeueing
+starts so far:
+1358 sprint:one
+1360 sprint:two
+1416 sprint:one
+1418 sprint:two
+1892 sprint:one
+1899 sprint:two
+fake claude processes running: 2 (only the 2 new runs)
+final exit code 0; fake claude left: 0
+failed/: one.md
+two.md  (third interruption = MAX_INTERRUPTS)
+id: one
+interrupts: 3
+id: two
+interrupts: 3
+runner stderr:
+</pre>
+<h2 class="bad">Dla porównania: ten sam scenariusz na <code>fc73593</code> (kroki 2–3)</h2>
+<p>Runner kończy się kodem 143, 2 procesy atrapy zostają, a po restarcie działają <b>4</b> (każde zadanie podwójnie). Sieroty z tego przebiegu zabito potem ręcznie.</p>
+<pre>== 1. start runner (pid via start)
+fake claude processes running: 2
+== 2. SIGTERM to runner (what launchctl kickstart -k / bootout sends)
+/tmp/sigterm-demo-83.sh: line 18:  1996 Terminated: 15          /usr/bin/python3 $SPRINT/runner.py 2&gt;&gt; $T/runner.err
+runner exit code: 143 after 0 s
+fake claude processes left: 2
+running/: one.md
+two.md
+grep: /tmp/sigterm-demo.hMaE/state/queue/*.md: No such file or directory
+== 3. clear not_before and restart: each task starts exactly once more
+sed: /tmp/sigterm-demo.hMaE/state/queue/*.md: No such file or directory
+starts so far:
+2005 sprint:one
+2006 sprint:two
+2052 sprint:one
+2053 sprint:two
+fake claude processes running: 4
+== 4. SIGKILL to runner (no handler can run)
+fake claude processes left after SIGKILL: 4 (orphans, as expected)
+running/: one.md
+two.md
+== 5. restart: setup() stops the orphans before requeueing
+starts so far:
+2005 sprint:one
+2006 sprint:two
+2052 sprint:one
+2053 sprint:two
+2094 sprint:one
+2095 sprint:two
+fake claude processes running: 6 (only the 2 new runs)
+/tmp/sigterm-demo-83.sh: line 23:  2087 Terminated: 15          /usr/bin/python3 $SPRINT/runner.py 2&gt;&gt; $T/runner.err
+final exit code 143; fake claude left: 6
+failed/:   (third interruption = MAX_INTERRUPTS)
+grep: /tmp/sigterm-demo.hMaE/state/failed/*.md: No such file or directory
+runner stderr:
+</pre>
+
+<h2>Testy automatyczne</h2>
+<ul><li><code>tests/test_runner_signals.py</code>: prawdziwy <code>runner.py</code> w podprocesie, z atrapą i SIGTERM; <code>setup()</code> z żywą grupą, z grupą innego lidera i z zadaniem, które nie wystartowało.</li>
+<li><code>tests/test_runner_execute.py</code>: połączenie <code>runner.execute</code> na wierszach z <code>fixtures/runs-2026-11.jsonl</code> (limit sesji, limit Fable, timeout, utracona sesja).</li>
+<li>Testy mutacyjne: wynik <code>results/fix-home-ops-83-r4.md</code>.</li></ul>
+
+<h2>Skrypt scenariusza</h2><pre>#!/bin/bash
+# sigterm-demo-83.sh &lt;sprint dir&gt; — runner with a fake claude: SIGTERM, restart, SIGKILL, restart
+SPRINT=$1; T=$(mktemp -d /tmp/sigterm-demo.XXXX); S=$T/state; mkdir -p $S/queue $T/vault/3-Zasoby/analysis
+W=$(/usr/bin/python3 -c &#x27;from datetime import *; print((datetime.now(timezone.utc)+timedelta(days=6)).isoformat())&#x27;)
+cat &gt; $T/claude &lt;&lt;F
+#!/bin/sh
+if [ &quot;\$2&quot; = /usage ]; then echo &#x27;{&quot;usage_report&quot;:{&quot;rate_limits&quot;:{&quot;limits&quot;:[{&quot;kind&quot;:&quot;session&quot;,&quot;percent&quot;:1,&quot;resets_at&quot;:&quot;$W&quot;},{&quot;kind&quot;:&quot;weekly_all&quot;,&quot;percent&quot;:1,&quot;resets_at&quot;:&quot;$W&quot;}]}}}&#x27;; exit 0; fi
+echo &quot;\$\$ \$(echo &quot;\$@&quot; | grep -o &#x27;sprint:[a-z]*&#x27;)&quot; &gt;&gt; $T/starts
+sleep 300 &amp; wait
+F
+chmod +x $T/claude
+echo &#x27;{&quot;claude&quot;:{&quot;workers&quot;:2,&quot;windows&quot;:[&quot;daily 00:00-00:00&quot;,&quot;daily 12:00-12:00&quot;]}}&#x27; &gt; $S/config.json
+for id in one two; do printf -- &quot;---\nid: $id\nmodel: sonnet\nmax_minutes: 5\ncwd: $T\n---\ndo $id\n&quot; &gt; $S/queue/$id.md; touch -t 202601010000 $S/queue/$id.md; done
+export SPRINT_STATE=$S CLAUDE_BIN=$T/claude SPRINT_PLANNER=0 SPRINT_VAULT=$T/vault
+start() { /usr/bin/python3 $SPRINT/runner.py 2&gt;&gt;$T/runner.err &amp; R=$!; for i in $(seq 200); do [ $(cat $T/starts 2&gt;/dev/null | wc -l) -ge $1 ] &amp;&amp; break; sleep 0.2; done; sleep 0.5; }
+fakes() { pgrep -f &quot;$T/claude&quot; | wc -l | tr -d &#x27; &#x27;; }
+echo &quot;== 1. start runner (pid via start)&quot;; start 2; echo &quot;fake claude processes running: $(fakes)&quot;; grep -h pgid $S/running/*.md
+echo &quot;== 2. SIGTERM to runner (what launchctl kickstart -k / bootout sends)&quot;; t0=$(date +%s); kill -TERM $R; wait $R; echo &quot;runner exit code: $? after $(( $(date +%s)-t0 )) s&quot;
+echo &quot;fake claude processes left: $(fakes)&quot;; echo &quot;running/: $(ls $S/running)&quot;; grep -h -E &quot;^(id|model|attempts|interrupts|not_before):&quot; $S/queue/*.md
+echo &quot;== 3. clear not_before and restart: each task starts exactly once more&quot;; sed -i &#x27;&#x27; &#x27;/^not_before/d&#x27; $S/queue/*.md; touch -t 202601010000 $S/queue/*.md; start 4; echo &quot;starts so far:&quot;; cat $T/starts; echo &quot;fake claude processes running: $(fakes)&quot;
+echo &quot;== 4. SIGKILL to runner (no handler can run)&quot;; kill -KILL $R; wait $R 2&gt;/dev/null; sleep 0.5; echo &quot;fake claude processes left after SIGKILL: $(fakes) (orphans, as expected)&quot;; echo &quot;running/: $(ls $S/running)&quot;
+echo &quot;== 5. restart: setup() stops the orphans before requeueing&quot;; start 6; echo &quot;starts so far:&quot;; cat $T/starts; echo &quot;fake claude processes running: $(fakes) (only the 2 new runs)&quot;
+kill -TERM $R; wait $R; echo &quot;final exit code $?; fake claude left: $(fakes)&quot;; echo &quot;failed/: $(ls $S/failed)  (third interruption = MAX_INTERRUPTS)&quot;; grep -h -E &quot;^(id|interrupts):&quot; $S/failed/*.md
+echo &quot;runner stderr:&quot;; cat $T/runner.err; rm -rf $T
+</pre>
+</body></html>

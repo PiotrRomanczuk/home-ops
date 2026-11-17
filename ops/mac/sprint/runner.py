@@ -12,7 +12,8 @@ May start now (accept_for):
   from the GPU supervisor (STATE/gpu/borrow); escalates to sonnet when it fails.
 What a run means for its task (limit, interrupted, done, retry) is outcomes.py. Housekeeping polls /usage
 and feeds the queue (feed.py). lifecycle.py: one runner per STATE (flock); an exception in a thread goes to
-logs/runner-errors.jsonl and fails its task; main() exits 1 when a thread is gone, so launchd restarts it.
+logs/runner-errors.jsonl and fails its task; main() exits 1 when a thread is gone, so launchd restarts it;
+SIGTERM or that exit first end every run (their process groups are outside the launchd job's).
 Env: SPRINT_STATE, SPRINT_PLANNER=0 (no planner/summary tasks), CLAUDE_BIN.  Stop: `touch $SPRINT_STATE/STOP`.
 """
 from __future__ import annotations
@@ -47,7 +48,7 @@ paused_until = 0.0
 
 
 def stopping() -> bool:
-    return (STATE / 'STOP').exists()
+    return lifecycle.halted.is_set() or (STATE / 'STOP').exists()
 
 
 def claude_reason(task: dict[str, Any], cfg: dict[str, Any]) -> str | None:
@@ -75,7 +76,8 @@ def accept_for(cfg: dict[str, dict[str, Any]]) -> Any:
 def execute(task: dict[str, Any], cfg: dict[str, Any]) -> None:
     global paused_until
     model = str(task.get('model') or 'sonnet')
-    run = claude_run.run(CLAUDE, task, model, STATE, journal.VAULT, cfg['local']['base_url'])
+    run = claude_run.run(CLAUDE, task, model, STATE, journal.VAULT, cfg['local']['base_url'],
+                         local_minutes=cfg['local']['max_minutes'])
     if outcomes.wants_usage(run):  # a limit without a reset hour in the message
         budget.refresh(force=True)
     outcome, meta = outcomes.classify(run, datetime.now(timezone.utc), kind=task.get('kind'), limits=budget.limits,
@@ -103,7 +105,7 @@ def worker(n: int) -> None:
                 continue
         except Exception:  # noqa: BLE001 — else the thread dies and its task stays in running/
             lifecycle.fail(STATE, f'worker-{n}', task)
-        time.sleep(20)
+        lifecycle.halted.wait(20)
 
 
 def housekeeping() -> None:
@@ -133,13 +135,8 @@ def main() -> None:
     threads = [threading.Thread(target=worker, args=(i,), name=f'worker-{i}', daemon=True) for i in range(workers)]
     threads.append(threading.Thread(target=housekeeping, name='housekeeping', daemon=True))
     [t.start() for t in threads]
-    while not stopping():
-        time.sleep(15)
-        gone = lifecycle.dead(threads)
-        if gone and not stopping():  # exit non-zero: launchd (KeepAlive SuccessfulExit=false) starts a fresh runner
-            lifecycle.log_error(STATE, 'main', error=f'thread(s) died: {", ".join(gone)}')
-            lifecycle.notify(f'Mac worker: padł wątek {", ".join(gone)}, restart.')
-            sys.exit(1)
+    lifecycle.on_sigterm(threads[:-1])
+    lifecycle.watch(STATE, threads, stopping)
     lifecycle.notify('Mac worker zatrzymany (STOP). Bieżące zadania dobiegają końca.')
     for t in threads[:-1]:
         t.join(timeout=3600)

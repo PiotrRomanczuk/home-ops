@@ -18,7 +18,8 @@
     <prompt for the worker>
 
 A task moves queue/ → running/ → done/ | failed/ by rename, so a crashed
-runner leaves it visible in running/ (setup() puts those back). A task whose `after` ended in failed/ — or
+runner leaves it visible in running/ (setup() puts those back; one whose run had started, `pgid:`, counts as
+interrupted, and its process group is stopped first if it outlived the runner — run_groups.stop_stale). A task whose `after` ended in failed/ — or
 names no task for 24 h — goes to failed/ too instead of waiting forever. A file that is not a whole task
 (header never closed, no prompt) or is younger than MIN_AGE is skipped, so a half-written file never runs.
 """
@@ -29,6 +30,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
+import run_groups
 from task_files import load, parse, write  # noqa: F401  (parse and write are part of this module's API)
 
 DIRS = ('queue', 'running', 'done', 'failed', 'results', 'logs')
@@ -49,8 +51,15 @@ def is_local(task: dict[str, Any]) -> bool:
 def setup(state: Path) -> None:
     for name in DIRS:
         (state / name).mkdir(parents=True, exist_ok=True)
-    for path in (state / 'running').glob('*.md'):  # left over from a crash
-        path.rename(state / 'queue' / path.name)
+    for path in (state / 'running').glob('*.md'):  # left over from a crash, a SIGKILL or a lost thread
+        task = parse(path)
+        if not (task and task.get('pgid')):  # never started
+            path.rename(state / 'queue' / path.name)
+            continue
+        run_groups.stop_stale(task)  # else the old run goes on next to the new one
+        for key in run_groups.KEYS:
+            task.pop(key, None)
+        finish(state, task, 'interrupted')
 
 
 def ids(state: Path, where: str) -> set[str]:

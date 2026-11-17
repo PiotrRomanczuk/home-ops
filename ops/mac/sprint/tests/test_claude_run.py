@@ -18,7 +18,7 @@ import deny_rules  # noqa: E402
 
 TASK = {'id': 't1', 'body': 'prompt', 'max_minutes': 1}
 MUST_DENY = ('Bash(gh pr merge:*)', 'Bash(gh pr review --approve:*)', 'Bash(ssh:*)', 'Bash(git push --force:*)',
-             'Edit(~/.claude/**)', 'Write(~/.claude/**)')
+             'Bash(git push * --force*)', 'Bash(git push * -f)', 'Edit(~/.claude/**)', 'Write(~/.claude/**)')
 
 
 def alive(pid: int) -> bool:
@@ -90,6 +90,17 @@ class ProcessGroupTest(unittest.TestCase):
         self.assertLess(time.time() - started, 15)
         time.sleep(0.3)
         self.assertFalse(alive(int(pidfile.read_text())))
+
+    def test_a_local_run_stops_at_the_configs_cap_whatever_the_task_says(self):
+        fake = self.dir / 'claude'
+        fake.write_text('#!/bin/sh\nsleep 6  # a mutant without the cap ends here with rc 0, not hanging the suite\n')
+        fake.chmod(0o755)
+        started = time.time()
+        r = claude_run.run(str(fake), {**TASK, 'max_minutes': 60, 'cwd': str(self.dir)}, 'local:qwen', self.dir, self.dir,
+                           'http://127.0.0.1:1', grace=1, local_minutes=0.02)
+        self.assertEqual(r['rc'], 124)
+        self.assertLess(time.time() - started, 10)
+        self.assertFalse((self.dir / 'gpu' / 'borrow').exists())
 
     def test_a_worktree_left_behind_is_named_not_removed(self):
         worktree = self.dir / '.claude' / 'worktrees' / 'sprint-t1'

@@ -6,6 +6,7 @@ Run:
 from __future__ import annotations
 
 import json
+import signal
 import sys
 import tempfile
 import threading
@@ -15,6 +16,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import lifecycle  # noqa: E402
+import run_groups  # noqa: E402
 import runner  # noqa: E402
 import seed  # noqa: E402
 import sprint_tasks as q  # noqa: E402
@@ -30,6 +32,9 @@ class RobustnessTest(unittest.TestCase):
         runner.STATE = self.state
         self.addCleanup(setattr, q, 'MIN_AGE', q.MIN_AGE)
         q.MIN_AGE = 0  # the files written here may start at once
+        self.addCleanup(lifecycle.halted.clear)  # main() → shutdown() sets both for the whole process
+        self.addCleanup(run_groups.CLOSED.clear)
+        self.addCleanup(signal.signal, signal.SIGTERM, signal.getsignal(signal.SIGTERM))
 
     def errors(self) -> list[dict]:
         path = self.state / 'logs' / 'runner-errors.jsonl'
@@ -71,7 +76,8 @@ class RobustnessTest(unittest.TestCase):
         self.add('boom')
         with (mock.patch.object(runner, 'accept_for', lambda cfg: None),
               mock.patch.object(runner.claude_run, 'run', side_effect=RuntimeError('kaboom')),
-              mock.patch.object(runner.time, 'sleep', lambda s: (self.state / 'STOP').touch())):
+              mock.patch.object(runner.lifecycle, 'halted', mock.Mock(wait=lambda s: (self.state / 'STOP').touch(),
+                                                                      is_set=lambda: False))):
             runner.worker(0)  # returns: STOP appears at the sleep after the error
         failed = q.parse(self.state / 'failed' / 'boom.md')
         self.assertIn('runner exception in worker-0', failed['failed_reason'])
