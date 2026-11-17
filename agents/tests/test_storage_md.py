@@ -113,6 +113,32 @@ class ParsePlacesTest(unittest.TestCase):
         self.assertEqual(len(places), 1)
         return places[0]
 
+    def test_id_that_is_not_the_file_number_becomes_a_stub(self) -> None:
+        rec = self._only('08-x.md', NOTE.replace('id: 8', 'id: 8a').encode())
+        self.assertEqual((rec['id'], rec['nazwa']), (8, None))
+        self.assertIn('≠', rec['unparsed'])
+
+    def test_id_zero_becomes_a_stub_with_the_file_number(self) -> None:
+        rec = self._only('13-x.md', NOTE.replace('id: 8', 'id: 0').encode())
+        self.assertEqual((rec['id'], rec['nazwa']), (13, None))
+        self.assertIn('≠', rec['unparsed'])
+
+    def test_copied_note_with_a_foreign_id_does_not_overwrite_that_row(self) -> None:
+        places = self._parse({'09-x.md': NOTE.replace('id: 8', 'id: 10').encode(),
+                              '10-y.md': NOTE.replace('id: 8', 'id: 10').encode()})
+        self.assertEqual([p['id'] for p in places], [9, 10])
+        self.assertIn('≠', places[0]['unparsed'])
+        self.assertTrue(places[1]['note_path'].endswith('/10-y.md'))
+        self.assertNotIn('unparsed', places[1])
+
+    def test_renamed_place_note_without_prefix_becomes_a_stub(self) -> None:
+        rec = self._only('jedenascie.md', NOTE.replace('id: 8', 'id: 11').encode())
+        self.assertEqual((rec['id'], rec['nazwa']), (11, None))
+        self.assertIn('prefix', rec['unparsed'])
+
+    def test_unprefixed_note_that_is_not_a_place_is_skipped(self) -> None:
+        self.assertEqual(self._parse({'README.md': b'# opis\n', 'notes.md': b'---\ntype: x\n---\n'}), [])
+
     def test_unreadable_note_becomes_a_stub_with_its_id(self) -> None:
         rec = self._only('12-x.md', NOTE.encode() + b'\xff')
         self.assertEqual((rec['id'], rec['nazwa']), (12, None))

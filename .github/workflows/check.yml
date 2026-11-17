@@ -45,6 +45,7 @@ jobs:
             agents/_common.py \
             agents/elitedesk/elitedesk-watcher.py \
             agents/elitedesk/planner-sync.py \
+            agents/elitedesk/storage_md.py \
             agents/rpi/rpi-watcher.py \
             agents/rpi/rpi-sentinel.py \
             agents/win10/win10-watcher.py \

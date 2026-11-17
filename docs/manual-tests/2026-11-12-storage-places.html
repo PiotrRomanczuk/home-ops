@@ -49,6 +49,18 @@ scripts/deploy-agent.sh elitedesk planner-sync   # planner-sync.py + storage_md.
 <p><b>Ręcznie:</b> w kopii vaulta zepsuć jedną notatkę (dopisać bajt <code>\xff</code>, zmienić <code>type: Miejsce</code>, usunąć frontmatter), uruchomić planner-sync → w logu <code>rejected</code> ze ścieżką, <code>removed: 0</code>, miejsce nadal w <code>GET /api/storage</code>.</p>
 <p><b>Bramki:</b> <code>agents/tests</code> 104 OK; <code>npm run check</code> zielone; vitest z Postgresem 17 (migracje jak w <code>check.yml</code> + 017, 034 dwa razy) 149/149, <code>storage.test.ts</code> 6/6.</p>
 
+<h2>Poprawki r3 (2026-11-17)</h2>
+<p>Recenzja r13: zły <code>id</code> w notatce nadal kasował wiersz. Poprawione:</p>
+<ul>
+<li><b>Numer z nazwy pliku jest <code>id</code>.</b> Notatka <code>NN-*.md</code> z <code>type: miejsce</code>, której <code>id</code> się nie zgadza (<code>8a</code>, <code>0</code>, &gt; 9999, cudzy numer), daje zaślepkę <code>{id: NN, nazwa: null, unparsed: "id … ≠ file number NN"}</code>. Wiersz NN zostaje, cudzy wiersz nie jest nadpisywany, notatka trafia do <code>rejected</code>.</li>
+<li>Notatka <code>type: miejsce</code> przemianowana bez prefiksu <code>NN-</code> (z poprawnym <code>id</code> ≥ 1) daje zaślepkę z jej <code>id</code>. README* i inne pliki bez <code>type: miejsce</code> są pomijane.</li>
+<li><code>storage_md.py</code> dopisany do <code>py_compile</code> w <code>check.yml</code>; ADR uzupełniony.</li>
+<li>Testy (<code>ParsePlacesTest</code>, +5): <code>id: 8a</code>, <code>id: 0</code>, <code>09-x</code> z <code>id: 10</code> obok <code>10-y</code> (zaślepka 9 + pełny rekord 10 z <code>10-y.md</code>), <code>jedenascie.md</code> z <code>id: 11</code>, bezprefiksowa nie-miejsce pominięta.</li>
+<li>Punkt 5 (merge <code>origin/dev</code> po #85): pominięty, #85 w chwili poprawki nie był scalony.</li>
+</ul>
+<p><b>Ręcznie:</b> w kopii vaulta zmienić <code>id</code> w <code>08-*.md</code> na <code>8a</code> albo skopiować notatkę pod <code>09-…</code> bez zmiany <code>id</code>, uruchomić planner-sync: w logu <code>rejected</code> ze ścieżką, <code>removed: 0</code>, wiersze 8 i 9 nadal w <code>GET /api/storage</code>.</p>
+<p><b>Bramki:</b> <code>agents/tests</code> 109 OK; <code>ops/elitedesk/tests</code> 93 OK; <code>py_compile</code> OK; <code>npm run check</code> zielone; vitest z Postgresem 17 (migracje jak w <code>check.yml</code> + 017) 149/149.</p>
+
 <h2>Poza zakresem (świadomie)</h2>
 <p>Tabela historii audytu <code>storage_checks</code> i sam cotygodniowy audyt (wykonanie poleceń z <code>sprawdzenie</code>) — osobny PR. Karta na stronie „Dziś” — gdy audyt zacznie produkować odchylenia. Zapis z konsoli do vaulta — nie, vault zostaje jedynym edytorem.</p>
 </body></html>

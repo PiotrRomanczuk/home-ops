@@ -89,7 +89,7 @@ def _stub(prefix: str, note_path: str, reason: str) -> dict[str, Any]:
 
 def parse_places(vault_root: Path) -> list[dict[str, Any]]:
     """Every `NN-*.md` note under PLACES_DIR, sorted by file name; [] when the folder is missing.
-    Files without the `NN-` prefix (README, template) are skipped; a numbered file that is
+    Files without the `NN-` prefix (README, template) are skipped unless they are `type: miejsce` with a valid id (stub); a numbered file that is
     unreadable or not a place becomes a stub (see `_stub`)."""
     base = vault_root / PLACES_DIR
     if not base.is_dir():
@@ -97,19 +97,37 @@ def parse_places(vault_root: Path) -> list[dict[str, Any]]:
     places = []
     for path in sorted(base.glob('*.md')):
         m = _PREFIX_RE.match(path.name)
-        if not m:
-            continue
         rel = str(path.relative_to(vault_root))
         try:
             text = path.read_text(encoding='utf-8')
         except (OSError, UnicodeDecodeError) as exc:
-            places.append(_stub(m.group(1), rel, f'unreadable: {type(exc).__name__}'))
+            if m:
+                places.append(_stub(m.group(1), rel, f'unreadable: {type(exc).__name__}'))
             continue
         fm = parse_frontmatter(text)
+        if not m:
+            stub = _unprefixed_stub(fm, rel)
+            if stub:
+                places.append(stub)
+            continue
+        number = int(m.group(1))
         if fm is None:
             places.append(_stub(m.group(1), rel, 'no frontmatter'))
         elif fm.get('type') != 'miejsce':
             places.append(_stub(m.group(1), rel, f"type is {fm.get('type')!r}, not 'miejsce'"))
         else:
-            places.append(parse_place(text, rel))
+            rec = parse_place(text, rel)
+            if rec['id'] != number:
+                rec = _stub(m.group(1), rel, f"id {fm.get('id')!r} ≠ file number {number}")
+            places.append(rec)
     return places
+
+
+def _unprefixed_stub(fm: dict[str, Any] | None, rel: str) -> dict[str, Any] | None:
+    """A `type: miejsce` note renamed without the `NN-` prefix keeps its row via a stub."""
+    if not fm or fm.get('type') != 'miejsce' or Path(rel).name.lower().startswith('readme'):
+        return None
+    pid = _place_id(fm, rel)
+    if isinstance(pid, int) and not isinstance(pid, bool) and pid >= 1:
+        return _stub(str(pid), rel, 'file name without NN- prefix')
+    return None

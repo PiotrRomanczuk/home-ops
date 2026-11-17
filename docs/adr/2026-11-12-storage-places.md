@@ -40,8 +40,11 @@ A table cell cannot be validated, queried or updated by a machine.
   same holds for a note the parser cannot read at all (bad UTF-8, no
   frontmatter, wrong `type`): when its file name carries the `NN-` number it is
   sent as a stub (`id` from the prefix, `nazwa: null`), rejected by the server
-  and logged, and its row stays. Files without the prefix (README, template)
-  are ignored. An empty valid set
+  and logged, and its row stays. **The number in the file name is the `id`**:
+  a note whose frontmatter `id` disagrees (`8a`, `0`, another note's number)
+  is sent as a stub too, so the row of its number stays and no other row is
+  overwritten; likewise a `type: miejsce` file renamed without the prefix.
+  Other files without the prefix (README, template) are ignored. An empty valid set
   is refused (400) so a broken clone cannot wipe the table.
 - **Statuses are enums enforced twice** (TS validator + CHECK constraints):
   `porzadek` ok / do-poprawy / problem / niesprawdzone; `backup` the same plus
