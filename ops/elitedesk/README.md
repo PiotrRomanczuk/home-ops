@@ -213,8 +213,8 @@ logfile        ~/.msmtp.log
 account        gmail
 host           smtp.gmail.com
 port           587
-from           p.romanczuk@gmail.com
-user           p.romanczuk@gmail.com
+from           owner@example.com
+user           owner@example.com
 password       <16-char-app-password>
 
 account default : gmail

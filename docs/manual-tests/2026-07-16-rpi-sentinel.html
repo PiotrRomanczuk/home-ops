@@ -143,8 +143,8 @@ host_logs rows written by the sentinel:
     <li>Create <code>~/.config/rpi-sentinel.env</code> on the Pi:
       <pre><code>INGEST_URL=http://192.168.1.75:64421/api/ingest
 INGEST_TOKEN=&lt;shared token, same as rpi-watcher.env&gt;
-ALERT_TO=p.romanczuk@gmail.com
-ALERT_FROM=p.romanczuk@gmail.com</code></pre></li>
+ALERT_TO=owner@example.com
+ALERT_FROM=owner@example.com</code></pre></li>
     <li>Deploy + enable (the script's <code>rpi</code> branch already existed — no changes needed):
       <pre><code>scripts/deploy-agent.sh rpi rpi-sentinel
 ssh rpi "systemctl --user enable rpi-sentinel"</code></pre></li>

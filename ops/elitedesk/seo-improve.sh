@@ -13,11 +13,12 @@
 # nothing is pushed unless lint + typecheck + tests are green.
 #
 # Env (seo-collect.env): SEO_SITE_REPO (default ~/code/gitara-lekcje),
-# SEO_SITE_GIT (clone URL, used once), CLAUDE_MODEL, CLAUDE_BIN, CLAUDE_TIMEOUT.
+# SEO_GIT_EMAIL (required: e-mail for the commit author, no default), SEO_SITE_GIT (clone URL, used once), CLAUDE_MODEL, CLAUDE_BIN, CLAUDE_TIMEOUT.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="${SEO_SITE_REPO:-$HOME/code/gitara-lekcje}"
+SEO_GIT_EMAIL="${SEO_GIT_EMAIL:?set SEO_GIT_EMAIL (commit author e-mail)}"
 GIT_URL="${SEO_SITE_GIT:-git@github.com:PiotrRomanczuk/gitara-lekcje.git}"
 SITE="${SEO_SITE:-gitarawarszawa.pl}"
 CONTAINER="${CONTAINER:-home-ops-postgres-1}"; DB="${DB:-home_ops}"; DB_USER="${DB_USER:-postgres}"
@@ -116,7 +117,7 @@ fi
 
 # ── 4. commit, push, PR (never merge) ─────────────────────────────────────
 git add -A
-git -c user.name="seo-improve (elitedesk)" -c user.email="p.romanczuk@gmail.com" \
+git -c user.name="seo-improve (elitedesk)" -c user.email="${SEO_GIT_EMAIL}" \
   commit -q -m "feat(seo): propozycje z tygodniowej analizy ${TODAY}" \
   -m "Automatyczna propozycja z ops/elitedesk/seo-improve.sh (home-ops). Do przejrzenia, nie scalać bez czytania."
 git push -q -u origin "$BRANCH"

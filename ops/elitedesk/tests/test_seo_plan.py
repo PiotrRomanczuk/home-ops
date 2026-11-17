@@ -59,7 +59,7 @@ class PlanTest(unittest.TestCase):
 HTML = '''<html><head><title>Nauka gry na gitarze Praga-Północ — lekcje dla dorosłych</title>
 <meta name="description" content="Lekcje gitary na Pradze-Północ przy metrze Szwedzka. Indywidualna nauka dla dorosłych od zera, 120 zł za godzinę.">
 <link rel="canonical" href="https://gitarawarszawa.pl/"><script type="application/ld+json">{}</script></head>
-<body><h1>Nauka gry</h1><p>''' + ('słowo ' * 300) + '''</p><a href="/cennik">Cennik</a><a href="tel:+48513602768">tel</a>
+<body><h1>Nauka gry</h1><p>''' + ('słowo ' * 300) + '''</p><a href="/cennik">Cennik</a><a href="tel:+48 000 000 000">tel</a>
 <a href="/poradnik">poradnik</a><a href="https://olx.pl">olx</a></body></html>'''
 
 
