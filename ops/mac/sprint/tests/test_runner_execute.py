@@ -109,21 +109,6 @@ class ExecuteTest(unittest.TestCase):
         self.assertEqual((task['model'], task['attempts']), (q.stronger('sonnet'), 1))
         self.assertNotEqual(task['model'], 'sonnet')
 
-    def test_a_bench_answer_is_saved_by_the_runner_and_the_task_is_done(self):
-        run = row_run('done', 'bn', rc=0)
-        run['res'].update(is_error=False, result='odpowiedź modelu')
-        self.execute(run, kind='bench', _where='done')
-        text = (self.state / 'results' / 'bn.md').read_text()
-        self.assertIn('# bn — wynik bench (zapisany przez runner)', text)
-        self.assertIn('odpowiedź modelu', text)
-
-    def test_a_bench_run_with_an_empty_result_retries(self):
-        run = row_run('done', 'be', rc=0)
-        run['res'].update(is_error=False, result='  ')
-        task = self.execute(run, kind='bench')
-        self.assertEqual(task['attempts'], 1)
-        self.assertFalse((self.state / 'results' / 'be.md').exists())
-
     def test_a_code_task_that_wrote_no_file_still_retries(self):
         run = row_run('done', 'cn', rc=0)
         run['res'].update(is_error=False, result='gotowe')

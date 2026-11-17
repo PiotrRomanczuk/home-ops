@@ -48,3 +48,5 @@ Na końcu zapisz plik `~/.local/state/home-ops/sprint/results/<id>.md`:
 ```
 
 Ostatnia wiadomość sesji: jedno zdanie o wyniku.
+
+Zadanie `kind: bench`: odpowiedź w wiadomości, plik wyniku zapisze runner; nie próbuj zapisu.
