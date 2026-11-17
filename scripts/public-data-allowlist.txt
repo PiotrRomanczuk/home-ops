@@ -1,0 +1,14 @@
+# Exceptions for scripts/check-public-data.sh. One rule per line.
+#   file:<ERE>  skip files whose path matches
+#   <ERE>       skip a finding whose matched value (e-mail, phone, MAC) matches (case-insensitive)
+# Every rule needs a comment saying why it is safe.
+
+# Reserved example domains and no-reply senders.
+@example\.[a-z]+$
+@[a-z0-9.-]*\.example$
+noreply
+@users\.noreply\.github\.com$
+
+# Fictional senders used by the Gmail test fixtures (see the 2026-11-17 privacy audit).
+^ania@
+^jan\.kowalski@

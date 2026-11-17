@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
+    branches: [dev, test, main]
 
 jobs:
   # ── static checks ────────────────────────────────────────────────────
@@ -98,6 +98,21 @@ jobs:
             bash -n "$f" || exit 1
           done
           echo "✓ all shell scripts parse"
+
+  public-data:
+    name: public data gate (added lines of the PR)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: gate self-test
+        run: scripts/tests/test_check_public_data.sh
+      - name: check added lines
+        env:
+          BASE: origin/${{ github.base_ref }}
+        run: scripts/check-public-data.sh
 
   compose:
     name: docker compose build

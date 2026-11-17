@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Public data gate — manual test report</title>
+<style>body{font:15px/1.5 system-ui;max-width:820px;margin:2rem auto;padding:0 1rem}pre{background:#f4f4f4;padding:.7rem;overflow:auto}</style></head>
+<body data-demo="true">
+<h1>Public data gate (2026-11-17)</h1>
+<p><em>Created 2026-11-17. No screenshots: text and command output only.</em></p>
+<h2>What was done</h2>
+<ul>
+<li>Commit A: embedded screenshots removed from 7 reports in <code>docs/manual-tests/</code> (today-compact, daily-briefs-today, decisions-seo-ask, today-hygiene, decisions-inbox, server-tab, progress-tab), per the 2026-11-17 privacy audit (HP1, HP2, HP9). History is not rewritten.</li>
+<li>Commit B: <code>scripts/check-public-data.sh</code> checks lines added by a branch (<code>git diff --unified=0 $BASE...HEAD</code>) for e-mail addresses, PL phone numbers, MAC addresses and <code>data:image/</code> in reports without <code>data-demo="true"</code>. Output is <code>file:line: kind</code>, never the value. Exceptions: <code>scripts/public-data-allowlist.txt</code>. CI job <code>public-data</code> in <code>check.yml</code>, PRs to dev/test/main.</li>
+</ul>
+<h2>How to test manually</h2>
+<pre>scripts/tests/test_check_public_data.sh          # 9 cases, expect all "ok"
+BASE=origin/main scripts/check-public-data.sh    # expect no output, exit 0
+git diff origin/dev --stat -- docs/manual-tests  # 7 reports changed
+grep -c 'data:image' docs/manual-tests/2026-10-21-today-compact.html   # expect 0</pre>
+<h2>Results</h2>
+<pre>self-test: clean diff, e-mail, allowlisted e-mail, phone +48, phone with separators,
+           MAC address, data:image without marker, data:image with marker, output format — all ok
+BASE=origin/main gate: exit 0, no findings
+shellcheck (shellcheck-py) on both scripts: no warnings
+ingest: npm run check OK; npm test 83 passed (53 skipped, need Postgres)
+python unittest agents/tests: 88 OK; ops/elitedesk/tests: 93 OK</pre>
+</body></html>
