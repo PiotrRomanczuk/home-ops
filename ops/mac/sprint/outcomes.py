@@ -7,7 +7,8 @@
   or weekly limit pauses every Claude worker; a per-model week (Fable) holds just this task.
 - interrupted: the job's stop (SIGTERM/SIGKILL: rc 143/137, -15/-9) or a Claude model's timeout (rc 124) —
   back to queue/ in 10 min on the same model; the third one fails the task. A local model's timeout is that
-  model being too slow, so it stays a retry (→ sonnet).
+  model being too slow, so it stays a retry (→ sonnet). A resumed run whose session is gone ("No conversation
+  found") is interrupted too, with `resume` dropped: the next run starts afresh.
 - done: rc 0, no error and results/<id>.md written during this run.
 - retry: anything else. It escalates the model, except `pr-fix` / `ci` / `code` on a Claude model: those fail
   on CI, lint or hooks rather than on the model, so the second try stays on it with the first try's ending.
@@ -29,6 +30,7 @@ RESET_RE = re.compile(r'resets\s+(?:on\s+)?(?:([A-Za-z]{3})[a-z]*\.?\s+(\d{1,2})
 MONTHS = ('jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec')
 SIGNALS = {143, 137, -15, -9}
 TIMEOUT = 124
+NO_SESSION = 'No conversation found'  # `--resume <id>` of a session that no longer exists
 NO_ESCALATION = {'pr-fix', 'ci', 'code'}
 BACKOFF, REQUEUE_IN, GRACE = timedelta(minutes=15), timedelta(minutes=10), timedelta(minutes=30)
 GLOBAL = ('session', 'weekly')
@@ -112,6 +114,8 @@ def classify(run: dict[str, Any], now: datetime, *, kind: str | None = None, res
         until, scope = hit
         return 'limit', {'set': {'not_before': until.isoformat(timespec='seconds'), 'resume': session}, 'scope': scope,
                          'pause_until': until if scope in GLOBAL else None}
+    if run.get('resumed') and NO_SESSION in text_of(run):  # the session to continue is gone: start afresh, same model
+        return 'interrupted', {'set': {'not_before': None, 'resume': None}}
     if rc in SIGNALS or (rc == TIMEOUT and not local):
         return 'interrupted', {'set': {'not_before': (now + REQUEUE_IN).isoformat(timespec='seconds'), 'resume': session}}
     cleared = {'not_before': None, 'resume': None}

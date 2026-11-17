@@ -86,6 +86,13 @@ jobs:
             ops/mac/sprint/journal.py \
             ops/mac/sprint/idea.py \
             ops/mac/sprint/outcomes.py \
+            ops/mac/sprint/task_files.py \
+            ops/mac/sprint/lifecycle.py \
+            ops/mac/sprint/run_groups.py \
+            ops/mac/sprint/feed.py \
+            ops/mac/sprint/deny_rules.py \
+            ops/mac/sprint/status_auth.py \
+            ops/mac/gpu/gpu_pause.py \
             ops/mac/gpu/gpu_worker.py \
             ops/mac/gpu/gpu_jobs.py \
             ops/mac/gpu/gpu_report.py \
