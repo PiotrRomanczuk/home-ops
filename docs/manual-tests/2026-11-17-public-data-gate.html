@@ -3,19 +3,21 @@
 <style>body{font:15px/1.5 system-ui;max-width:820px;margin:2rem auto;padding:0 1rem}pre{background:#f4f4f4;padding:.7rem;overflow:auto}</style></head>
 <body data-demo="true">
 <h1>Public data gate (2026-11-17)</h1>
-<p><em>Created 2026-11-17. No screenshots: text and command output only.</em></p>
+<p><em>Created 2026-11-17, updated 2026-11-18. No screenshots: text and command output only.</em></p>
 <h2>What was done</h2>
 <ul>
 <li>Commit A: embedded screenshots removed from 7 reports in <code>docs/manual-tests/</code> (today-compact, daily-briefs-today, decisions-seo-ask, today-hygiene, decisions-inbox, server-tab, progress-tab), per the 2026-11-17 privacy audit (HP1, HP2, HP9). History is not rewritten.</li>
 <li>Commit B: <code>scripts/check-public-data.sh</code> checks lines added by a branch (<code>git diff --unified=0 $BASE...HEAD</code>) for e-mail addresses, PL phone numbers, MAC addresses and <code>data:image/</code> in reports without <code>data-demo="true"</code>. Output is <code>file:line: kind</code>, never the value. Exceptions: <code>scripts/public-data-allowlist.txt</code>. CI job <code>public-data</code> in <code>check.yml</code>, PRs to dev/test/main.</li>
+<li>2026-11-18 review fixes: the <code>+++ </code> header is recognised only inside a diff header block (an added line <code>++ x</code> no longer hides the following lines); <code>core.quotePath=false</code> (non-ASCII paths); image files (.png/.jpg/.jpeg/.webp/.gif) added under <code>docs/</code> are blocked as <code>image file</code> unless a <code>file:</code> allowlist rule permits them; e-mail regex needs a letter TLD (no more <code>user@127.0.0.1</code>); allowlist: <code>git@github.com</code>, <code>*.service|timer|socket</code>, Gmail fixtures limited to two test files by a <code>file:</code> rule; mutant-killing tests. Commit C replaces the owner's own e-mail/phone in 5 files with dummies (HP8); <code>seo-improve.sh</code> now needs <code>SEO_GIT_EMAIL</code>.</li>
 </ul>
 <h2>How to test manually</h2>
-<pre>scripts/tests/test_check_public_data.sh          # 9 cases, expect all "ok"
+<pre>scripts/tests/test_check_public_data.sh          # 29 cases, expect all "ok"
 BASE=origin/main scripts/check-public-data.sh    # expect no output, exit 0
 git diff origin/dev --stat -- docs/manual-tests  # 7 reports changed
 grep -c 'data:image' docs/manual-tests/2026-10-21-today-compact.html   # expect 0</pre>
 <h2>Results</h2>
-<pre>self-test: clean diff, e-mail, allowlisted e-mail, phone +48, phone with separators,
+<pre>2026-11-18: 29 cases ok (new: <code>++ x</code> line, non-ASCII path, image file blocked/allowed, postgres URL, ssh user@IP, git remote, systemd unit, fixture name elsewhere, fixture in allowed file, +48 without separators, upper-case e-mail, marker image with e-mail-like base64). Gate on the branch diff vs origin/dev: exit 0. shellcheck: clean.
+self-test: clean diff, e-mail, allowlisted e-mail, phone +48, phone with separators,
            MAC address, data:image without marker, data:image with marker, output format — all ok
 BASE=origin/main gate: exit 0, no findings
 shellcheck (shellcheck-py) on both scripts: no warnings

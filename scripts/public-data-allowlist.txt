@@ -9,6 +9,11 @@
 noreply
 @users\.noreply\.github\.com$
 
+# SSH user of git remotes (git@github.com:owner/repo.git) is not an address.
+^git@github\.com$
+
+# systemd unit names such as backup@nightly.service are not addresses.
+\.(service|timer|socket)$
+
 # Fictional senders used by the Gmail test fixtures (see the 2026-11-17 privacy audit).
-^ania@
-^jan\.kowalski@
+file:^ops/elitedesk/tests/test_gmail_(classify|llm)\.py$

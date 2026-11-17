@@ -38,6 +38,37 @@ run_case "MAC address" 1 notes.txt "device aa:bb:cc:dd:ee:ff"
 run_case "data:image without marker" 1 docs/manual-tests/r.html '<img src="data:image/png;base64,AAAA">'
 run_case "data:image with marker" 0 docs/manual-tests/r.html '<!-- data-demo="true" --><img src="data:image/png;base64,AAAA">'
 
+run_case "added line ++ x does not hide the next file lines" 1 docs/manual-tests/r.html "++ x
+<img src=\"data:image/png;base64,AAAA\">
+mail someone${at}company.pl"
+run_case "added line ++ x, image only" 1 docs/manual-tests/r.html "++ x
+<img src=\"data:image/png;base64,AAAA\">"
+run_case "non-ASCII path with image" 1 "docs/manual-tests/zrzut-ź.html" '<img src="data:image/png;base64,AAAA">'
+run_case "postgres URL is not an e-mail" 0 notes.txt "postgres://user${at}127.0.0.1:5432/x"
+run_case "ssh user at IP is not an e-mail" 0 notes.txt "ssh user${at}192.168.1.25"
+run_case "git remote" 0 notes.txt "git${at}github.com:a/b.git"
+run_case "systemd unit" 0 notes.txt "backup${at}nightly.service"
+run_case "gmail fixture name outside the fixture files" 1 notes.txt "ania${at}gmail.com"
+run_case "gmail fixture in allowed test file" 0 ops/elitedesk/tests/test_gmail_llm.py "ania${at}gmail.com"
+run_case "phone +48 without separators" 1 notes.txt "call +48600100200"
+run_case "upper-case e-mail vs lower-case rule" 0 notes.txt "contact: ME${at}EXAMPLE.COM"
+run_case "image with marker, e-mail-like text in base64" 0 docs/manual-tests/r.html "<!-- data-demo=\"true\" --><img src=\"data:image/png;base64,QQ${at}abc.de\">"
+
+# Image files under docs/ (binary content, not scanned line by line).
+git -C "$repo" checkout -q -B work base
+mkdir -p "$repo/docs/manual-tests"
+printf '\211PNG\r\n\032\n\000\000' > "$repo/docs/manual-tests/shot.png"
+git -C "$repo" add -A && git -C "$repo" commit -q -m png
+rc=0; (cd "$repo" && BASE=base ALLOWLIST="$allowlist" "$gate" > "$tmp/out" 2>&1) || rc=$?
+if [[ "$rc" -eq 1 ]] && grep -q '^docs/manual-tests/shot.png:0: image file$' "$tmp/out"; then
+  echo "ok   image file blocked"
+else
+  echo "FAIL image file blocked (rc=$rc)"; cat "$tmp/out"; fails=$((fails + 1))
+fi
+printf 'file:^docs/manual-tests/shot\\.png$\n' > "$tmp/allow"
+rc=0; (cd "$repo" && BASE=base ALLOWLIST="$tmp/allow" "$gate" > "$tmp/out" 2>&1) || rc=$?
+if [[ "$rc" -eq 0 ]]; then echo "ok   image file allowed by file: rule"; else echo "FAIL image file allowed (rc=$rc)"; cat "$tmp/out"; fails=$((fails + 1)); fi
+
 # Output names file and kind, never the value.
 git -C "$repo" checkout -q -B work base
 printf 'x someone%scompany.pl\n' "$at" > "$repo/leak.txt"
