@@ -1,6 +1,6 @@
 ---
 created: 2026-11-16
-updated: 2026-11-17
+updated: 2026-11-18
 domain: all
 tables: host_logs, host_metrics, gpu_jobs, projects, task_toggles, board_tasks, eval_runs, eval_scores, eval_tasks, digest_cards, decisions, daily_briefs, queue_state, unit_runs, activity_now, project_signals, pr_reviews, seo_gsc_daily, seo_ga4_daily, seo_places_daily, seo_analysis_daily, seo_plan, seo_page_snapshot, seo_findings, schema_migrations
 maturity: mounted
@@ -8,7 +8,7 @@ maturity: mounted
 
 # home-ops — blueprint
 
-Stan opisany: gałąź `dev` (migracje 001–028). To, co czeka w otwartych PR-ach, jest wymienione tylko jako luka albo kierunek (sekcja „Luki”). Stan w toku (zrobione / czeka na scalenie / wdrożone) żyje w vaulcie (`2-Obszary/homelab/home-ops.md`), nie tutaj. Szczegóły techniczne: `docs/ARCHITECTURE.md`, `CONTEXT.md`, `RUNBOOK.md`, `docs/adr/`.
+Stan opisany: gałąź `dev` (migracje 001–028). Stan w toku (zrobione / czeka na scalenie / wdrożone) żyje w vaulcie (`2-Obszary/homelab/home-ops.md`), nie tutaj. Szczegóły techniczne: `docs/ARCHITECTURE.md`, `CONTEXT.md`, `RUNBOOK.md`, `docs/adr/`.
 
 ## Overview
 
@@ -51,7 +51,7 @@ flowchart LR
   UI -- "decyzja / przełącznik" --> API
 ```
 
-**Legenda maturity** (jedna na cały dokument): `mounted` (działa i jest podpięte) · `nav-hidden` · `built-unmounted` · `unbuilt` (kod tylko w otwartym PR-ze) · `dormant` · `aspirational`.
+**Legenda maturity** (jedna na cały dokument): `mounted` (działa i jest podpięte) · `nav-hidden` · `built-unmounted` · `unbuilt` (nie zbudowane) · `dormant` · `aspirational`.
 
 ## Moduły i przepływy danych
 
@@ -70,18 +70,18 @@ flowchart LR
 | Synchronizacja GitHub (`github-repo-sync`) | `ops/elitedesk/github-repo-sync.py`, `github_signals.py`, `repo_projects.py` | `projects.repo_meta`, `project_signals` | mounted (wymaga PAT na `uwh`) |
 | Postęp | `routes/progress.ts`, `progress-model.ts` | `project_signals` | mounted |
 | Rutyna SEO | `ops/elitedesk/seo-*.py`, `seo_*.py`, timery 06:00–06:50, pon. 06:45 | `seo_*` | mounted |
-| Kolejka GPU | `routes/jobs.ts`, `scheduler/`, `mcp/server.py` | `gpu_jobs` | dormant (włączona 2026-10-19, brak potwierdzenia połączenia z bazą) |
-| Ewaluacja LLM | `ops/llm-eval/`, `routes/{evals,eval-scores}.ts` | `eval_runs`, `eval_scores`, `eval_tasks` | dormant (timer wyłączony od 2026-07-16) |
+| Kolejka GPU | `routes/jobs.ts`, `scheduler/`, `mcp/server.py` | `gpu_jobs` | dormant |
+| Ewaluacja LLM | `ops/llm-eval/`, `routes/{evals,eval-scores}.ts` | `eval_runs`, `eval_scores`, `eval_tasks` | dormant |
 | Kopie i retencja | `ops/elitedesk/pg-backup.sh`, `pg_cron` w obrazie `postgres/` | zrzut `pg_dump -Fc` na `nas` | mounted |
 | MCP | `mcp/server.py`, `mcp/decisions_tools.py` | narzędzia: logi, joby, karty, decyzje | mounted |
-| Mapa ekosystemu, BPMN, presja | PR #74–#77, #81 | `/api/map`, `/mapa/` | unbuilt |
-| Rejestr miejsc (`storage_places`) | PR #78 | lustro `STORAGE.md` | unbuilt |
-| Dziennik Maca i sesji Claude | PR #80 | `claude_sessions`, `day_journal` | unbuilt |
-| Gmail → Postgres | PR #68, #79 | schemat `gmail` | unbuilt |
-| Worker Maca (agenci Claude w oknach, nadzorca GPU) | PR #83 | stan w `~/.local/state` | unbuilt |
-| Przepływ `dev` → `test` → `main` | PR #84 | `check.yml`, `flow.yml` | unbuilt |
-| Issues → Now/Next/Later | PR #85 | blok `github-issues` w notatkach | unbuilt |
-| Strona przeglądu `/review/:id` | PR #87 | `decisions.requires_review` | unbuilt |
+| Mapa ekosystemu, BPMN, presja | — | `/api/map`, `/mapa/` | unbuilt |
+| Rejestr miejsc (`storage_places`) | — | lustro `STORAGE.md` | unbuilt |
+| Dziennik Maca i sesji Claude | — | `claude_sessions`, `day_journal` | unbuilt |
+| Gmail → Postgres | — | schemat `gmail` | unbuilt |
+| Worker Maca (agenci Claude w oknach, nadzorca GPU) | — | stan w `~/.local/state` | unbuilt |
+| Przepływ `dev` → `test` → `main` | `.github/workflows/` | `check.yml`, `flow.yml` | unbuilt |
+| Issues → Now/Next/Later | — | blok `github-issues` w notatkach | unbuilt |
+| Strona przeglądu `/review/:id` | — | `decisions.requires_review` | unbuilt |
 
 ### Przepływy
 
@@ -89,7 +89,7 @@ flowchart LR
 2. **Brief → „Dziś”.** Cloud routine commituje `briefs/YYYY-MM-DD-<slot>.md` do repo `daily-brief` → `brief-pull` (timer 15 min, deploy key tylko do odczytu) → `POST /api/briefs` → `daily_briefs` (120 dni) → `GET /api/today`.
 3. **Vault → konsola → vault.** `obsidian-git` pushuje vault do repo bare na `uwh` → `planner-sync` ciągnie (`--ff-only`), parsuje frontmatter i sekcje, `POST /api/projects/sync` (upsert + delete-others) → zakładki. Odhaczenie zadania w konsoli kolejkuje wiersz w `task_toggles`; `planner-sync` co 2 s odbiera, zmienia plik, commituje i pushuje. `QUEUE.md` jest lustrzanie kopiowany do `queue_state` (jeden wiersz, `source_hash`).
 4. **Rutyna → karta → decyzja.** Rutyna kończy przebieg kartą (`digest_cards`); przed czymś publicznym lub nieodwracalnym zakłada decyzję i kończy. Odpowiedź przychodzi z linku w mailu (GET potwierdza, POST zapisuje), z konsoli albo z API; następny przebieg odbiera ją przez `answers` i oznacza jako `consume`.
-5. **PR → scalenie.** `pr-review.timer` (co godzinę 07–23) bierze każdy otwarty PR, którego głowa nie ma wiersza w `pr_reviews`; świeży `claude -p` w trybie tylko do odczytu, dwa przebiegi (znajdź → zweryfikuj), komentarz + etykieta `review:ok|zmiany`. `pr_decide.py` pyta o PR dopiero po przeglądzie jego aktualnego SHA; scalenie z `--match-head-commit`. Autor zmiany nie scala (reguła `branch-hygiene.md`).
+5. **PR → scalenie.** `pr-review.timer` (co godzinę 07–23) bierze każdy PR w stanie `OPEN`, którego głowa nie ma wiersza w `pr_reviews`; świeży `claude -p` w trybie tylko do odczytu, dwa przebiegi (znajdź → zweryfikuj), komentarz + etykieta `review:ok|zmiany`. `pr_decide.py` pyta o PR dopiero po przeglądzie jego aktualnego SHA; scalenie z `--match-head-commit`. Autor zmiany nie scala (reguła `branch-hygiene.md`).
 6. **Kopia.** `pg-backup.timer` 04:30 → `pg_dump -Fc` → `nas` przez `scp`, 14 dni.
 
 ## Kontrakty
@@ -121,14 +121,14 @@ Docelowy model (reguła „trzy gałęzie”, `branch-hygiene.md`): `dev` → `t
 
 | Gałąź | Baza `home-ops` | Stan w repo na `dev` |
 | --- | --- | --- |
-| `main` | `home_ops` — produkcja, `uwh`, kontener `home-ops-postgres-1` | jedyna istniejąca baza |
+| `main` | `home_ops` — produkcja, `uwh`, kontener Postgresa na serwerze | jedyna istniejąca baza |
 | `test` | `home_ops_test` (zanonimizowana kopia) | brak: nie ma jeszcze reguł anonimizacji ani odświeżania (HO-G37) |
 | `dev` | `home_ops_dev` (dane testowe) | brak; testy integracyjne CI używają jednorazowego `postgres:17-alpine` |
 
-- Wdrożenie: `git pull` w katalogu repo na `uwh` (`~/code/logs-stack`), `scripts/apply-migrations.sh`, `docker compose up -d --build ingest`, odświeżenie agentów `deploy-agent.sh`. Jednostki uruchamiają kod prosto z checkoutu, więc gałąź checkoutu na `uwh` musi być `main` (HO-G14).
+- Wdrożenie: `git pull` w katalogu repo na serwerze, `scripts/apply-migrations.sh`, `docker compose up -d --build ingest`, odświeżenie agentów `deploy-agent.sh`. Jednostki uruchamiają kod prosto z checkoutu, więc gałąź checkoutu na `uwh` musi być `main` (HO-G14).
 - Agenci hostów działają z kopii w `~/bin/` (Linux) albo jako usługi WinSW (`wfh`); `git pull` ich nie aktualizuje.
 - CI (`.github/workflows/check.yml`): typecheck + biome, kompilacja Pythona z ręcznej listy plików, shellcheck, `docker compose build`, Vitest, unittest, testy integracyjne na prawdziwym Postgresie, skan sekretów. Na `dev` uruchamia się tylko dla PR-ów do `main` (HO-G02).
-- Produkcja Strummy współdzieli `uwh`: nic w tym repo nie zatrzymuje ani nie restartuje kontenerów `StudentProduction`.
+- Produkcja Strummy współdzieli `uwh`: nic w tym repo nie zatrzymuje ani nie restartuje kontenerów produkcji Strummy.
 
 ## Luki
 
@@ -136,27 +136,29 @@ ID są stałe i nie są renumerowane; krótki opis, kierunek i kryterium akcepta
 
 ### Bezpieczeństwo i scalanie
 
-| ID | Luka → kierunek | Akceptacja | Źródło |
-| --- | --- | --- | --- |
-| HO-G01 | `pr-review` uruchamia `claude -p` w checkoucie PR-a bez `--setting-sources user`; hook z forka wykona się na `uwh`. Dodać flagę i recenzować tylko PR-y właściciela i botów z listy (`isCrossRepository == false`); docelowo recenzent w kontenerze bez sekretów (PR #88 otwarty) | test flagi w `cmd`; checkout z hookiem `touch` nie tworzy pliku; PR z forka pominięty i niesklonowany | BEZP S1 |
-| HO-G02 | `pr_gate.state` uznaje brak checków i checki w toku za `ok`; CI nie działa dla PR-ów do `dev` ani w stosach. `ok` tylko przy `MERGEABLE` i niepustym, zielonym rollupie; `check.yml` bez filtra `branches` | testy: pusty rollup, `PENDING`, `IN_PROGRESS`, `UNKNOWN` → `ok == False` z opisem; PR do `dev` ma check `check` | BEZP S2 |
-| HO-G03 | `seo_decide` scala bez SHA w `ref` i bez przeglądu; `seo-auto` pomijane przez `pr_review`. SHA w `ref`, `merge_reviewed`, objąć `seo-auto` przeglądem | przesunięty head nie jest scalany; `pr_review.pick` zwraca PR `seo-auto` | BEZP S3 |
-| HO-G04 | `POST /api/decisions/:id/answer` przyjmuje `X-Ingest-Token`, a `DECISION_SECRET` jest pochodną tokenu. Odpowiedzi tylko z cookie lub podpisanego linku, osobny `DECISION_SECRET` | sam token → 403, cookie → 200 | BEZP S4 |
-| HO-G05 | Kolejka GPU nie waliduje `kind` (API ani `load_handler`): ładowanie dowolnego `.py` na `wfh`. Regex + lista dozwolonych w API, `path.resolve().parent == JOBS_DIR` w schedulerze | `kind: "../x"` → 400; `kind` absolutny/UNC → `None` bez `exists()` | BEZP S5 |
-| HO-G06 | Logowanie do konsoli: brak limitu prób, porównania `!==`, cookie = stały hash hasła, HTTP bez TLS, brak `bodyLimit`. Limit prób, `timingSafeEqual`, cookie sesyjne z wygasaniem, `bodyLimit`, nasłuch zawężony lub za `tailscale serve` | 6. błędna próba/min → 429; stare cookie po zmianie sekretu → 401; ciało 2 MB → 413 | BEZP S6, S14, S17 |
-| HO-G07 | `AUTH_PUBLIC=1` otwiera trasy zapisujące bez logowania, a `c.req.json()` przyjmuje `text/plain` (CSRF). Tryb publiczny tylko dla GET, POST wymaga `application/json` i `Origin` z listy | POST bez cookie → 401, `text/plain` → 415 | BEZP S7 |
-| HO-G08 | `hono` 4.12/4.13.14 w zakresie GHSA-h7mg-cq63-vhpq. Podnieść do ≥ 4.13.16, rozstrzygnąć `@hono/node-server` (PR #69 niewystarczający) | `npm audit --omit=dev` = 0 high | BEZP S8 |
-| HO-G09 | Jedna rola `postgres` (superuser) dla `ingest`, skryptów i `pg_cron`. Rola `ingest_app` z DML, `seo_rw` dla skryptów SEO | `rolsuper = false`; `COPY TO PROGRAM` → `permission denied` | BEZP S9 |
-| HO-G10 | Po odrzuconym pushu klon vaulta zostaje rozjechany, a po nieudanym `add`/`commit` plik zostaje zmieniony (`_write_commit_push`, `_apply_one_toggle`): wszystkie zapisy do vaulta stoją. Wzorzec z `process_git.py` (`reset --hard @{u}`, `GIT_LOCK`, przywracanie pliku) | test z repo zdalnym wyprzedzającym lokalne; następny tick kończy `applied` | BEZP S10; PODZ B2/B3 |
-| HO-G11 | `pr-decide` obejmuje każdą bazę każdego repo właściciela, także `main`. Lista dozwolonych baz per repo (domyślnie `dev`; `main` tylko dla repo bez `dev` i dla wydania `test → main`) — decyzja Piotra | pytanie o PR do niedozwolonej bazy dostaje ostrzeżenie albo jest pomijane | BEZP S11 |
-| HO-G12 | Brak ochrony gałęzi `dev`/`test`/`main` w repo (wymagany check, zakaz force-push i usuwania). Ruleset GitHuba; `dev` jest bazą PR-ów | ruleset istnieje; force-push odrzucony | BEZP S12 |
-| HO-G13 | `elitedesk-watcher` może wysyłać logi produkcji Strummy do `host_logs` (dostęp „viewer”), a wartość `WATCH_CONTAINERS` na `uwh` nie jest opisana. Dla produkcji poziom `warn+` i maskowanie `apikey`/`Authorization`; retencja 30 dni (`pg_cron`, migracja 002) już jest | wartość `WATCH_CONTAINERS` opisana w RUNBOOK; produkcja tylko `warn+` z maskowaniem | BEZP S13 |
-| HO-G14 | Jednostki uruchamiają kod z checkoutu; `RUNBOOK` klonuje bez `-b main`, a domyślna gałąź to `dev`. `-b main` w RUNBOOK i strażnik gałęzi w skryptach startowych | unit na innej gałęzi niż `main` kończy się czytelnym błędem i kartą | BEZP S15 |
-| HO-G15 | Zrzut `home_ops` jest niezaszyfrowany i trafia na `nas` przez konto administracyjne; pętla retencji w `pg-backup.sh` usuwa jeden stary zrzut na przebieg (brak `ssh -n`). Konto tylko do zapisu, szyfrowanie `age`/`gpg` z escrow w `STORAGE.md`, poprawka pętli | przywrócenie testowe z zaszyfrowanego zrzutu; na `nas` ≤ 14 zrzutów | BEZP S16; VAULT |
-| HO-G16 | `LIMIT ${limit}` z `Number(query)`: `?limit=abc` → 500; cztery kopie parsowania. Jeden helper `parseLimit` | `?limit=abc` → 400 | BEZP S18; DŁUG D3 |
-| HO-G17 | Jednostki bez hardeningu (`NoNewPrivileges`, `PrivateTmp`), wspólny plik env dla ról, które potrzebują tylko `INGEST_*`. Osobne env per rola | unity mają `PrivateTmp=yes`, `NoNewPrivileges=yes` | BEZP S19 |
-| HO-G18 | Publiczne repo zawiera adresy LAN, login konta NAS i nazwy kontenerów produkcji (28 plików). Zamieniać na aliasy i `<ip>` przy okazji zmian; historii nie przepisywać | `grep` po `192.168.` w świeżych plikach pusty | BEZP S20 |
-| HO-G19 | Polityka tokenów: jeden `INGEST_TOKEN` na wszystkie hosty. Tokeny per host z zakresem (agent: logi/metryki; rutyna: decyzje/karty; konsola: odpowiedzi) i rotacja po wdrożeniu HO-G01 | decyzja Piotra; token agenta nie zapisze odpowiedzi | BEZP „Czeka na Piotra” |
+Szczegóły luk bezpieczeństwa (opis, kierunek, akceptacja) są w prywatnym vaulcie (`BEZP`); tu zostają tylko ID i tytuły.
+
+| ID | Temat | Brief |
+| --- | --- | --- |
+| HO-G01 | izolacja recenzenta PR-ów | brief: vault BEZP S1 |
+| HO-G02 | bramka scalania PR-ów i zakres CI | brief: vault BEZP S2 |
+| HO-G03 | przegląd automatycznych PR-ów SEO | brief: vault BEZP S3 |
+| HO-G04 | autoryzacja odpowiedzi na decyzje | brief: vault BEZP S4 |
+| HO-G05 | walidacja zadań w kolejce GPU | brief: vault BEZP S5 |
+| HO-G06 | logowanie do konsoli i sesje | brief: vault BEZP S6, S14, S17 |
+| HO-G07 | tryb publiczny konsoli | brief: vault BEZP S7 |
+| HO-G08 | aktualizacja zależności serwera HTTP | brief: vault BEZP S8 |
+| HO-G09 | podział ról bazy danych | brief: vault BEZP S9 |
+| HO-G10 | odporność zapisów do vaulta | brief: vault BEZP S10; PODZ B2/B3 |
+| HO-G11 | zakres baz objętych `pr-decide` | brief: vault BEZP S11 |
+| HO-G12 | ochrona gałęzi `dev`/`test`/`main` | brief: vault BEZP S12 |
+| HO-G13 | zakres logów zbieranych z kontenerów | brief: vault BEZP S13 |
+| HO-G14 | gałąź checkoutu na serwerze | brief: vault BEZP S15 |
+| HO-G15 | kopie zapasowe bazy | brief: vault BEZP S16 |
+| HO-G16 | parsowanie parametru `limit` | brief: vault BEZP S18; DŁUG D3 |
+| HO-G17 | hardening jednostek systemd | brief: vault BEZP S19 |
+| HO-G18 | porządek w danych środowiska w publicznym repo | brief: vault BEZP S20 |
+| HO-G19 | polityka tokenów | brief: vault BEZP, sekcja „Czeka na Piotra” |
 
 ### Testy i dług
 
@@ -166,10 +168,10 @@ ID są stałe i nie są renumerowane; krótki opis, kierunek i kryterium akcepta
 | HO-G21 | `IngestClient` (`agents/_common.py`) bez testów; pięć własnych klientów HTTP z tokenem. Testy z atrapami `urlopen`/`sleep`, potem jeden klient | ≥ 9 testów | DŁUG D2, zad.2 |
 | HO-G22 | `level_from_priority` skopiowane w watcherach `uwh` i `rpi` i już się rozjechało (priorytet 2: `error` vs `fatal`); wspólny kod watcherów (`shipper`, `follow_docker_container`). Jedna funkcja w `_common.py` | `grep "def level_from_priority"` zwraca tylko `_common.py` | DŁUG D1, zad.3 |
 | HO-G23 | Brak testu spójności jednostek: `.timer` bez `.service`, `ExecStart` na nieistniejący plik, `OnFailure` na nieistniejący unit | test czerwony po zmianie nazwy `pr_decide.py` | DŁUG P10, P11, zad.4 |
-| HO-G24 | Runner workera Maca (`claude_run.py`, `runner.accept_for`, `LIMIT_RE`) bez testów (kod w PR #83) | ≥ 7 testów | DŁUG P14, zad.5 |
+| HO-G24 | Runner workera Maca (`claude_run.py`, `runner.accept_for`, `LIMIT_RE`) bez testów | ≥ 7 testów | DŁUG P14, zad.5 |
 | HO-G25 | Trasy przełączników zadań (`task_toggles`, `/mark`) bez testów | ≥ 10 przypadków, plik w jobie `tests-state-machine` | DŁUG P5, zad.6 |
 | HO-G26 | Trasy tablicy (`board.ts`, 233 linie) bez testów | ≥ 12 przypadków | DŁUG P5, zad.7 |
-| HO-G27 | `planner-sync.py` (732 linie, 4 role w jednym pliku). Test charakteryzujący całego ticka, potem podział na moduły < 150 linii (`vault_write`, `toggles_sync`, `board_md`, `board_sync`, …) po scaleniu PR-ów #74–#78, #85 | testy bez zmian; każdy moduł < 150 linii | PODZ; DŁUG zad.8 |
+| HO-G27 | `planner-sync.py` (732 linie, 4 role w jednym pliku). Test charakteryzujący całego ticka, potem podział na moduły < 150 linii (`vault_write`, `toggles_sync`, `board_md`, `board_sync`, …) po dodaniu modułów oznaczonych `unbuilt` | testy bez zmian; każdy moduł < 150 linii | PODZ; DŁUG zad.8 |
 | HO-G28 | `mcp/server.py` (521 linii): narzędzia eval do `eval_tools.py` jak `decisions_tools.py` | `server.py` < 380 linii; ta sama liczba `@mcp.tool` | DŁUG zad.9 |
 | HO-G29 | CI kompiluje Pythona z ręcznej listy 33 plików (18 poza nią). `compileall` na `agents scheduler clients ops mcp` | job `python` zielony | DŁUG D6, zad.10 |
 | HO-G30 | CI stosuje tylko 14 z 26 migracji (brak `pg_cron`). Job z obrazem z `postgres/Dockerfile` i `apply-migrations.sh` dwa razy na pustej bazie; test samego runnera | wszystkie migracje przechodzą dwa razy | DŁUG P12 |
@@ -193,20 +195,16 @@ ID są stałe i nie są renumerowane; krótki opis, kierunek i kryterium akcepta
 | HO-G43 | Wdrożenie przez `ssh` + `docker compose` i ręczne kopiowanie agentów; brak roli Ansible (compose, agent per host, unity, timer kopii) | świeży host odtworzony jednym poleceniem | VAULT Later; `README.md` |
 | HO-G44 | Frontend konsoli: dokończyć albo porzucić migrację zakładek na Preact (6 pozostałych) i widok Hosts (401 przy `/login`, stopka z danych-atrap) | decyzja + usunięcie wariantu A/B | VAULT Later; DŁUG D7 |
 
-### Kierunki w toku (otwarte PR-y, nie stan)
-
-Mapa ekosystemu, BPMN i presja (#74–#77, #81) · rejestr miejsc (#78) · Gmail (#68, #79) · dziennik Maca (#80) · worker Maca (#83) · przepływ `dev` → `test` → `main` (#84) · Issues → Now/Next/Later (#85) · strona przeglądu (#87) · CI: shellcheck/hadolint (#89), `pr-review` z `--setting-sources user` (#88), szablon `dataset-db` (#82), poprawki testów i README (#86). Po scaleniu każdy z nich dostaje własny moduł w tabeli „Moduły” i własne luki; do tego czasu nie wchodzi do kontraktów powyżej.
-
 ## Test plan
 
 - **Bramki lokalne** (`ingest/`): `npm ci && npm run check` (tsc + biome), `npx vitest run`; Python: `python3 -m unittest discover -s agents/tests -p 'test_*.py'` i `-s ops/elitedesk/tests`. Testy integracyjne wymagają `DATABASE_URL` (bez niej są pomijane): jednorazowy kontener `postgres:17-alpine` z migracjami, jak w CI.
 - **Warstwy.** Czyste funkcje (`*-pure.js`, `*-model.ts`, parsery) — testy jednostkowe; trasy ze stanem — integracyjne na prawdziwym Postgresie; ręczne raporty HTML w `docs/manual-tests/` dla większych zmian; E2E nie ma i nie jest potrzebne (jeden użytkownik).
-- **Luki w pokryciu** są w sekcji „Testy i dług” (HO-G20…G35). Testy bezpieczeństwa dla HO-G01…G07 mają kryteria akceptacji w tabeli.
-- **Smoke po wdrożeniu na `uwh`:** `/api/health` → `ok`, `docker compose ps` — `ingest` i `postgres` zdrowe, brak zmian w kontenerach `StudentProduction`.
+- **Luki w pokryciu** są w sekcji „Testy i dług” (HO-G20…G35). Kryteria akceptacji testów bezpieczeństwa (HO-G01…G07) są w vaulcie.
+- **Smoke po wdrożeniu na `uwh`:** `/api/health` → `ok`, `docker compose ps` — `ingest` i `postgres` zdrowe, brak zmian w kontenerach produkcji Strummy.
 
 ## Open questions
 
-- Polityka tokenów (jeden vs per host; HO-G19) i zakres obsługiwanych autorów PR-ów (rekomendacja: właściciel i `dependabot`; HO-G01).
+- Polityka tokenów (jeden vs per host; HO-G19) i zakres obsługiwanych autorów PR-ów (HO-G01; brief w vaulcie).
 - Które bazy wolno scalać z „Dziś” (HO-G11).
 - Czy logi produkcji Strummy mają w ogóle trafiać do `host_logs` (HO-G13).
 - Czy `AUTH_PUBLIC` jest włączony na `uwh` (nie da się sprawdzić z repo; zmienia wagę HO-G05 i HO-G07).
