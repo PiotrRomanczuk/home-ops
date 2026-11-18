@@ -7,6 +7,10 @@
 set -euo pipefail
 
 base="${BASE:-origin/dev}"
+if ! { git rev-parse --verify -q "${base}^{commit}" >/dev/null && git merge-base "$base" HEAD >/dev/null; }; then
+  echo "check-public-data: base ${base} not found or no merge base (fetch-depth 0?)" >&2
+  exit 2
+fi
 allowlist="${ALLOWLIST:-$(dirname "$0")/public-data-allowlist.txt}"
 marker='data-demo="true"'
 
@@ -15,7 +19,7 @@ self_paths='^scripts/(check-public-data\.sh|public-data-allowlist\.txt|tests/tes
 
 email_re='[A-Za-z0-9._%+-]+@([A-Za-z0-9-]+\.)+[A-Za-z]{2,}'
 phone_re='(\+48[ -]?[0-9]{3}[ -]?[0-9]{3}[ -]?[0-9]{3}|(^|[^0-9])[0-9]{3}[ -][0-9]{3}[ -][0-9]{3}([^0-9]|$))'
-mac_re='(^|[^0-9A-Fa-f:])([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}([^0-9A-Fa-f:]|$)'
+mac_re='(^|[^0-9A-Fa-f:-])([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}([^0-9A-Fa-f:-]|$)'
 
 # Allowlist lines: `file:<ERE>` skips files whose path matches; anything else is an
 # ERE tested against the matched value. Blank lines and `#` comments are ignored.
@@ -84,12 +88,15 @@ while IFS=$'\t' read -r path line text; do
   fi
 done < <(added_lines)
 
+image_pathspecs=()
+for ext in png jpg jpeg webp gif svg heic avif bmp tif tiff; do image_pathspecs+=(":(icase)docs/*.${ext}"); done
+
 # Screenshots committed as files under docs/ (binary, so the line scan cannot see them).
 while IFS= read -r path; do
   [[ -z "$path" ]] && continue
   is_allowed_file "$path" && continue
   report "$path" 0 "image file"
-done < <(git -c core.quotePath=false diff --name-only --diff-filter=AM "${base}...HEAD" -- 'docs/*.png' 'docs/*.jpg' 'docs/*.jpeg' 'docs/*.webp' 'docs/*.gif')
+done < <(git -c core.quotePath=false diff --name-only --diff-filter=AM "${base}...HEAD" -- "${image_pathspecs[@]}")
 
 if [[ "$status" -ne 0 ]]; then
   echo "check-public-data: this repo is public. Remove the data, use demo data, or add a justified rule to scripts/public-data-allowlist.txt" >&2

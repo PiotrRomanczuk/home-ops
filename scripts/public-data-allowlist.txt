@@ -6,7 +6,7 @@
 # Reserved example domains and no-reply senders.
 @example\.[a-z]+$
 @[a-z0-9.-]*\.example$
-noreply
+^no-?reply[^@]*@
 @users\.noreply\.github\.com$
 
 # SSH user of git remotes (git@github.com:owner/repo.git) is not an address.

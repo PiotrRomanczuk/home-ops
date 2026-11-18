@@ -55,6 +55,17 @@ run_case "dummy phone" 0 notes.txt "call +48 000 000 000"
 run_case "upper-case e-mail vs lower-case rule" 0 notes.txt "contact: ME${at}EXAMPLE.COM"
 run_case "image with marker, e-mail-like text in base64" 0 docs/manual-tests/r.html "<!-- data-demo=\"true\" --><img src=\"data:image/png;base64,QQ${at}abc.de\">"
 
+run_case "no-reply with prefix is not allowlisted" 1 notes.txt "jan.noreply${at}gmail.com"
+run_case "no-reply sender allowed" 0 notes.txt "no-reply${at}x.pl"
+run_case "MAC with dashes" 1 notes.txt "device aa-bb-cc-dd-ee-ff"
+run_case "svg image file" 1 docs/diagram.svg "<svg/>"
+run_case "upper-case PNG extension" 1 docs/manual-tests/S.PNG "x"
+run_case "tiff image file" 1 docs/a.tiff "x"
+
+# Missing base: the gate must stop, not pass silently.
+rc=0; (cd "$repo" && BASE=nie-ma-takiej ALLOWLIST="$allowlist" "$gate" > "$tmp/out" 2>&1) || rc=$?
+if [[ "$rc" -eq 2 ]]; then echo "ok   missing base stops the gate"; else echo "FAIL missing base (rc=$rc)"; cat "$tmp/out"; fails=$((fails + 1)); fi
+
 # Image files under docs/ (binary content, not scanned line by line).
 git -C "$repo" checkout -q -B work base
 mkdir -p "$repo/docs/manual-tests"
@@ -69,6 +80,17 @@ fi
 printf 'file:^docs/manual-tests/shot\\.png$\n' > "$tmp/allow"
 rc=0; (cd "$repo" && BASE=base ALLOWLIST="$tmp/allow" "$gate" > "$tmp/out" 2>&1) || rc=$?
 if [[ "$rc" -eq 0 ]]; then echo "ok   image file allowed by file: rule"; else echo "FAIL image file allowed (rc=$rc)"; cat "$tmp/out"; fails=$((fails + 1)); fi
+
+# file: rule with a Polish file name.
+git -C "$repo" checkout -q -B work base
+mkdir -p "$repo/docs/manual-tests"
+printf '\211PNG' > "$repo/docs/manual-tests/zrzut-żółć.png"
+git -C "$repo" add -A && git -C "$repo" commit -q -m pl
+printf 'file:^docs/manual-tests/zrzut-żółć\\.png$\n' > "$tmp/allow"
+rc=0; (cd "$repo" && BASE=base ALLOWLIST="$tmp/allow" "$gate" > "$tmp/out" 2>&1) || rc=$?
+if [[ "$rc" -eq 0 ]]; then echo "ok   file: rule matches a Polish file name"; else echo "FAIL Polish file rule (rc=$rc)"; cat "$tmp/out"; fails=$((fails + 1)); fi
+rc=0; (cd "$repo" && BASE=base ALLOWLIST="$allowlist" "$gate" > "$tmp/out" 2>&1) || rc=$?
+if [[ "$rc" -eq 1 ]] && grep -q 'zrzut-żółć.png:0: image file' "$tmp/out"; then echo "ok   Polish image name blocked"; else echo "FAIL Polish image name (rc=$rc)"; cat "$tmp/out"; fails=$((fails + 1)); fi
 
 # Output names file and kind, never the value.
 git -C "$repo" checkout -q -B work base
