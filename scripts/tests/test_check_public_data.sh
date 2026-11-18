@@ -45,7 +45,7 @@ run_case "added line ++ x, image only" 1 docs/manual-tests/r.html "++ x
 <img src=\"data:image/png;base64,AAAA\">"
 run_case "non-ASCII path with image" 1 "docs/manual-tests/zrzut-ź.html" '<img src="data:image/png;base64,AAAA">'
 run_case "postgres URL is not an e-mail" 0 notes.txt "postgres://user${at}127.0.0.1:5432/x"
-run_case "ssh user at IP is not an e-mail" 0 notes.txt "ssh user${at}192.168.1.25"
+run_case "ssh user at IP is not an e-mail" 0 notes.txt "ssh user${at}192.0.2.10"
 run_case "git remote" 0 notes.txt "git${at}github.com:a/b.git"
 run_case "systemd unit" 0 notes.txt "backup${at}nightly.service"
 run_case "gmail fixture name outside the fixture files" 1 notes.txt "ania${at}gmail.com"
