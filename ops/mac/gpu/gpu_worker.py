@@ -39,22 +39,16 @@ def log(event: str, **data: Any) -> None:
     gpu_report.log(GPU, event, **data)
 
 
-def hold_reason(s: dict[str, Any]) -> str | None:
-    if not machine.away(s, IDLE_MIN):
-        return 'Piotr przy Macu'
-    if gpu_pause.borrowed(GPU):
-        return 'lokalny LLM używa GPU'
-    if s['foreign']:
-        return 'song2logic uruchomiony poza nadzorcą'
-    return None if s['graphics'] else 'dark wake'
-
-
-def reap(job: dict[str, Any], progress: gj.Progress) -> None:
+def collect(by_name: dict[str, dict[str, Any]], progress: gj.Progress) -> set[str]:
+    """Record the shards that exited (each against the job it belongs to); return those jobs' names."""
+    ended = set()
     for n, sh in list(shards.items()):
         rc = sh['proc'].poll()
         if rc is None:
             continue
+        job = by_name[sh['job']]
         del shards[n]
+        ended.add(job['name'])
         (GPU / 'pids' / f'{job["name"]}.{n}.json').unlink(missing_ok=True)
         if rc == 0:
             progress.mark_done(job, n)
@@ -63,18 +57,30 @@ def reap(job: dict[str, Any], progress: gj.Progress) -> None:
             fails = progress.fail(job, n)
             retry_at[f'{job["name"]}.{n}'] = time.time() + RETRY_S
             log('shard-failed', job=job['name'], shard=n, rc=rc, fails=fails)
-    if not shards and progress.job_finished(job):
-        log('job-done', job=job['name'])
-        if job.get('unload_ollama'):
-            log('ollama-unloaded', models=gj.unload_ollama())
+    return ended
 
 
-def stop_shards(reason: str) -> None:
-    for sh in shards.values():
+def reap(by_name: dict[str, dict[str, Any]], progress: gj.Progress) -> None:
+    ended = collect(by_name, progress)
+    for name in {sh['job'] for sh in shards.values()}:
+        if progress.job_finished(by_name[name]):  # given up (a shard hit MAX_FAILS): its other shards go too
+            stop_shards('zadanie porzucone', name)
+            ended |= collect(by_name, progress)
+    for name in sorted(ended):
+        job = by_name[name]
+        if progress.job_finished(job) and all(sh['job'] != name for sh in shards.values()):
+            log('job-done', job=name)
+            if job.get('unload_ollama'):
+                log('ollama-unloaded', models=gj.unload_ollama())
+
+
+def stop_shards(reason: str, job: str | None = None) -> None:
+    chosen = {n: sh for n, sh in shards.items() if job in (None, sh['job'])}
+    for sh in chosen.values():
         sh['stopping'] = True
-    procs.stop_all([sh['proc'].pid for sh in shards.values()], [sh['proc'] for sh in shards.values()])
-    if shards:
-        log('stopped', reason=reason, shards=sorted(shards))
+    procs.stop_all([sh['proc'].pid for sh in chosen.values()], [sh['proc'] for sh in chosen.values()])
+    if chosen:
+        log('stopped', reason=reason, shards=sorted(chosen))
 
 
 def start_missing(job: dict[str, Any], progress: gj.Progress) -> None:
@@ -89,12 +95,12 @@ def start_missing(job: dict[str, Any], progress: gj.Progress) -> None:
 
 
 def tick(jobs: list[dict[str, Any]], progress: gj.Progress) -> None:
+    reap({j['name']: j for j in jobs}, progress)  # before current(): a finished job's shards must be gone first
     job = progress.current(jobs)
     if job is None:
         return write_status(None, 'wszystko zrobione', None, jobs, progress)
-    reap(job, progress)
     s = machine.snapshot(own_pgids=[sh['proc'].pid for sh in shards.values()])
-    stop, hold = machine.must_stop(s), hold_reason(s)
+    stop, hold = machine.must_stop(s), gpu_pause.hold_reason(s, GPU, IDLE_MIN)
     if stop:
         stop_shards(stop)
     elif hold:

@@ -6,6 +6,7 @@ import signal
 from pathlib import Path
 from typing import Any, Callable
 
+import machine
 import procs
 
 
@@ -18,6 +19,17 @@ def borrowed(gpu: Path) -> bool:
         return False
     except PermissionError:
         return True
+
+
+def hold_reason(s: dict[str, Any], gpu: Path, idle_min: float) -> str | None:
+    """Why the shards should be paused right now (None = they may run)."""
+    if not machine.away(s, idle_min):
+        return 'Piotr przy Macu'
+    if borrowed(gpu):
+        return 'lokalny LLM używa GPU'
+    if s['foreign']:
+        return 'song2logic uruchomiony poza nadzorcą'
+    return None if s['graphics'] else 'dark wake'
 
 
 def pause(shards: dict[int, dict[str, Any]], on: bool, log: Callable[..., None]) -> None:

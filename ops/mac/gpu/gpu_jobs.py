@@ -1,6 +1,7 @@
 """gpu_jobs.py — the fixed GPU job list and how far it got.
 
-The list (gpu-jobs.json, root-owned, so no agent running as the user can add a command):
+The list (gpu-jobs.json, root-owned: an agent running as the user cannot edit it, but the commands it
+names may still run code from directories the user can write to, e.g. worktrees):
 
     [{"name": "s2l-strummy",
       "argv": ["/opt/homebrew/bin/uv", "run", "--project", "~/code/…", "song2logic", "study", "…",
