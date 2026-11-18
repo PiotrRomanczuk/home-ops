@@ -81,7 +81,7 @@ QUEUE_MD = """# Kolejka
 """
 
 IGNORED_DATED_MD = '---\nstatus: hot\n---\n\n# dated snapshot\n\n## Now\n- [ ] x\n'
-IGNORED_NO_STATUS_MD = '# reference page\n\n## Now\n- [ ] y\n'
+IGNORED_NO_STATUS_MD = '---\ntype: reference\n---\n\n# reference page\n\n## Now\n- [ ] y\n'
 
 
 def _git(cwd: Path, *args: str) -> str:
@@ -352,6 +352,8 @@ class PlannerSyncGolden(unittest.TestCase):
         imports = self.ingest.calls('POST', '/api/board/import')
         self.assertEqual(len(imports), 2)  # seed + Obsidian edit imported into the board
         self.assertIn('added in obsidian', [t['text'] for t in imports[-1]['body']['tasks']])
+        state = json.loads(self.state_file.read_text(encoding='utf-8'))
+        self.assertEqual(state['home-ops']['watermark'], self.ingest.boards['home-ops']['updatedAt'])
         signals = self.ingest.calls('POST', '/api/progress/signals')
         self.assertEqual(len(signals), 1)
         self.assertEqual(signals[0]['body'], {'rows': [
