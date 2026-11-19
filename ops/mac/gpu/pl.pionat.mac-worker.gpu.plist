@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<!-- Mac worker GPU supervisor. Its code and job list are root-owned (install-gpu.sh, sudo); it runs as the
-     user. ExitTimeOut leaves time to stop the shards' process groups. Installed by ../sprint/install.sh. -->
+<!-- Mac worker GPU supervisor. Its code and job list are root-owned (install-gpu.sh, sudo), so the user cannot edit
+     them; it runs as the user, and the job commands may still run code from user-writable directories. ExitTimeOut leaves time to stop the shards' process groups. Installed by ../sprint/install.sh. -->
 <plist version="1.0">
 <dict>
   <key>Label</key><string>pl.pionat.mac-worker.gpu</string>

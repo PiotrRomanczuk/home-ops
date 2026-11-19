@@ -72,7 +72,13 @@ def main() -> None:
     for name in q.DIRS:  # not q.setup(): it would move the tasks of a live runner back to queue/
         (STATE / name).mkdir(parents=True, exist_ok=True)
     notes = active_notes()
-    pilot = next((n for n in notes if n.stem == PILOT), notes[0])
+    pilot = next((n for n in notes if n.stem == PILOT), notes[0] if notes else None)
+    if pilot is not None:  # no active hot/warm note → no vault tasks, only the PR reviews below
+        seed_vault(notes, pilot)
+    seed_reviews(len(notes), pilot)
+
+
+def seed_vault(notes: list[Path], pilot: Path) -> None:
     task(f'vault-pilot-{pilot.stem}', vault_body(pilot, 'To pilotaż: w wyniku opisz też, co w metodzie było niejasne.\n'),
          project=pilot.stem, cwd=str(VAULT), model='sonnet', effort='high', kind='vault', priority=10,
          max_minutes=60, lock='vault')
@@ -93,6 +99,8 @@ def main() -> None:
             task(f'vault-{note.stem.lower()}', vault_body(note), project=note.stem, cwd=str(VAULT), model='sonnet',
                  effort='medium', kind='vault', priority=20, max_minutes=45, lock='vault', after='vault-pilot-review')
 
+
+def seed_reviews(note_count: int, pilot: Path | None) -> None:
     dirs = repo_dirs()
     prs = json.loads(subprocess.run(
         ['gh', 'search', 'prs', '--owner', 'PiotrRomanczuk', '--state', 'open', '--limit', '100',
@@ -110,7 +118,7 @@ def main() -> None:
             '(plik:linia, scenariusz awarii), stan CI i konfliktów, zależność od innych PR-ów (stos), oraz dokładną listę '
             'poprawek, jeśli werdykt to „popraw” (tak, żeby inny worker mógł je wykonać).'),
              project=name, cwd=str(cwd), model='opus', effort='high', kind='pr-review', priority=30, max_minutes=30)
-    print(f'{len(notes)} notatek (pilot: {pilot.stem}), {len(prs)} PR-ów → {len(list((STATE / "queue").glob("*.md")))} zadań w kolejce')
+    print(f'{note_count} notatek (pilot: {pilot.stem if pilot else "brak"}), {len(prs)} PR-ów → {len(list((STATE / "queue").glob("*.md")))} zadań w kolejce')
 
 
 if __name__ == '__main__':
