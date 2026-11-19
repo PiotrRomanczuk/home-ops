@@ -61,7 +61,7 @@ class ExecuteTest(unittest.TestCase):
 
     def test_a_session_limit_requeues_on_the_same_model_and_pauses_every_worker(self):
         before = time.time()
-        real, noon = runner.outcomes.classify, datetime(2026, 11, 19, 11, 0, tzinfo=timezone.utc)  # not within 30 min of 4:50
+        real, noon = runner.outcomes.classify, datetime.now(timezone.utc).replace(hour=11, minute=0, second=0, microsecond=0)  # not within 30 min of 4:50
         with mock.patch.object(runner.outcomes, 'classify', side_effect=lambda run, now, **kw: real(run, noon, **kw)):
             task = self.execute(row_run('limit-450am', 'lim'), kind='code')
         self.assertEqual((task['model'], task['attempts']), ('sonnet', 0))
