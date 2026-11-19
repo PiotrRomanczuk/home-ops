@@ -13,7 +13,7 @@ export interface ReviewPageModel {
   pr: PrRef;
   sections: ReviewSection[];
   review: PrReviewRow | null;
-  token: string;
+  token: string | null;
   error?: string;
 }
 
@@ -88,16 +88,20 @@ export function reviewPage(m: ReviewPageModel): string {
     : '';
   const error = m.error ? `<p class="err">${esc(m.error)}</p>` : '';
   const total = requiredKeys(m.sections).length;
+  const answer =
+    m.token === null
+      ? '<div class="card answer"><p>Żeby podjąć decyzję, zaloguj się do konsoli i otwórz tę stronę ponownie.</p><p><a href="/login">Zaloguj →</a></p></div>'
+      : `<form id="answer" class="card answer" method="post">${error}
+<p>Przejrzane sekcje: <b id="seen">0/${total}</b> — przyciski odblokują się po rozwinięciu każdej.</p>
+<input type="hidden" name="token" value="${esc(m.token)}"><input type="hidden" name="opened" value="">
+<input name="reason" maxlength="200" placeholder="powód / notatka (wymagany przy odrzuceniu)" autocomplete="off">
+<div class="btns">${options}</div></form>`;
   return `<!doctype html><html lang="pl"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Przegląd: ${esc(d.question)}</title>
 <style>${REVIEW_CSS}</style><script src="/static/md-lite.js"></script></head><body><div class="wrap">
 <div class="card"><div class="eyebrow">${esc(d.routine)} · ${esc(pr.repo)} #${pr.number} · commit ${esc(pr.sha.slice(0, 7))}</div>
 <h1>${esc(d.question)}</h1>${detail}${ctx}</div>
 <div class="card">${reviewSection(m.review)}${m.sections.map(filedSection).join('')}</div>
-<form id="answer" class="card answer" method="post">${error}
-<p>Przejrzane sekcje: <b id="seen">0/${total}</b> — przyciski odblokują się po rozwinięciu każdej.</p>
-<input type="hidden" name="token" value="${esc(m.token)}"><input type="hidden" name="opened" value="">
-<input name="reason" maxlength="200" placeholder="powód / notatka (wymagany przy odrzuceniu)" autocomplete="off">
-<div class="btns">${options}</div></form>
+${answer}
 </div><script>${REVIEW_JS}</script></body></html>`;
 }

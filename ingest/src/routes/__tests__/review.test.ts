@@ -6,6 +6,7 @@
  * answer accepted only with the page's token, for the same commit, after
  * every section was opened.
  */
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import type { Hono } from 'hono';
 import type pg from 'pg';
@@ -17,7 +18,8 @@ const token = process.env.INGEST_TOKEN || 'ci-token';
 const skip = !dbUrl;
 const SHA = 'a1b2c3d'.padEnd(40, '0');
 const tokenHdr = { 'X-Ingest-Token': token, 'Content-Type': 'application/json' };
-const formHdr = { 'Content-Type': 'application/x-www-form-urlencoded' };
+const sessionCookie = `logs_auth=${createHash('sha256').update('ci-password').digest('hex')}`;
+const formHdr = { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: sessionCookie };
 // biome-ignore lint/suspicious/noExplicitAny: test fixtures read loosely-typed JSON bodies
 type Json = Record<string, any>;
 
@@ -62,6 +64,7 @@ beforeEach(async () => {
 });
 
 const req = (path: string, init: RequestInit = {}) => app.fetch(new Request(`http://x${path}`, init));
+const signedIn = { headers: { Cookie: sessionCookie } };
 const postJson = (path: string, body: unknown, headers: Record<string, string> = tokenHdr) =>
   req(path, { method: 'POST', headers, body: JSON.stringify(body) });
 const postForm = (path: string, fields: Record<string, string>) =>
@@ -152,6 +155,19 @@ describe.skipIf(skip)('review gate', () => {
     expect((await postJson(`/api/decisions/${other.id}/answer`, { option: 'no', reason: 'x' })).status).toBe(200);
   });
 
+  it('rejects requires_review without a repo#N@sha ref', async () => {
+    const r = await postJson('/api/decisions', {
+      routine: 'x-routine',
+      question: 'q',
+      requires_review: true,
+      ref: 'nope',
+    });
+    expect(r.status).toBe(400);
+    expect(((await r.json()) as Json).error).toContain('repo#N@sha');
+    const none = await postJson('/api/decisions', { routine: 'x-routine', question: 'q', requires_review: true });
+    expect(none.status).toBe(400);
+  });
+
   it('forces requires_review for pr-decide even when the caller omits the flag', async () => {
     const ask = (routine: string) =>
       postJson('/api/decisions', { routine, question: 'q', options: ['yes', 'no'], ref: `strummy#1@${SHA}` });
@@ -191,7 +207,7 @@ describe.skipIf(skip)('review gate', () => {
   it('rejects a page whose section was re-filed under the same key after it loaded', async () => {
     const d = await fileDecision();
     await fileSections('CI: pending');
-    const html = await (await req(`/review/${d.id}`)).text();
+    const html = await (await req(`/review/${d.id}`, signedIn)).text();
     const tok = /name="token" value="([^"]+)"/.exec(html)?.[1] ?? '';
     await fileSections('CI: failure');
     const stale = await postForm(`/review/${d.id}`, { option: 'yes', token: tok, opened: 'pr-review,summary' });
@@ -207,7 +223,7 @@ describe.skipIf(skip)('review gate', () => {
   it('shows the page, marks it opened, and accepts the answer only after every section was opened', async () => {
     const d = await fileDecision();
     await fileSections();
-    const page = await req(`/review/${d.id}`);
+    const page = await req(`/review/${d.id}`, signedIn);
     expect(page.status).toBe(200);
     const html = await page.text();
     expect(html).toContain('data-key="pr-review"');
@@ -249,6 +265,28 @@ describe.skipIf(skip)('review gate', () => {
     expect(r.status).toBe(409);
   });
 
+  it('with AUTH_PUBLIC and no session: no token in the page, and the answer is refused', async () => {
+    const d = await fileDecision();
+    await fileSections();
+    const html = await (await req(`/review/${d.id}`)).text();
+    expect(html).not.toContain('name="token"');
+    expect(html).toContain('zaloguj się');
+    const seen = await pool.query('SELECT reviewed_at FROM public.decisions WHERE id = $1', [d.id]);
+    expect(seen.rows[0].reviewed_at).toBeNull();
+    const signedHtml = await (await req(`/review/${d.id}`, signedIn)).text();
+    const tok = /name="token" value="([^"]+)"/.exec(signedHtml)?.[1] ?? '';
+    expect(tok).not.toBe('');
+    const r = await req(`/review/${d.id}`, {
+      method: 'POST',
+      headers: { 'Content-Type': formHdr['Content-Type'] },
+      body: new URLSearchParams({ option: 'yes', token: tok, opened: 'pr-review,summary' }).toString(),
+    });
+    expect(r.status).toBe(302);
+    expect(r.headers.get('location')).toBe('/login');
+    const row = await pool.query('SELECT answer FROM public.decisions WHERE id = $1', [d.id]);
+    expect(row.rows[0].answer).toBeNull();
+  });
+
   it('shows the pr-review verdict and findings for the same commit', async () => {
     const d = await fileDecision();
     await pool.query(
@@ -256,7 +294,7 @@ describe.skipIf(skip)('review gate', () => {
        VALUES ('strummy', 1079, $1, 'zmiany', 'Brak testu.', $2::jsonb)`,
       [SHA, JSON.stringify([{ severity: 'ważne', file: 'app/x.ts', line: 5, problem: 'Brak <testu>' }])],
     );
-    const html = await (await req(`/review/${d.id}`)).text();
+    const html = await (await req(`/review/${d.id}`, signedIn)).text();
     expect(html).toContain('verdict zmiany');
     expect(html).toContain('app/x.ts:5');
     expect(html).toContain('Brak &lt;testu&gt;');

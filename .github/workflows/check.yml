@@ -194,7 +194,6 @@ jobs:
             -f postgres/migrations/022_daily_briefs.sql \
             -f postgres/migrations/023_queue_state.sql \
             -f postgres/migrations/028_pr_reviews.sql \
-            -f postgres/migrations/033_review_gate.sql \
             -f postgres/migrations/033_review_gate.sql
           # /api/today reads host_metrics (003); its trailing cron.schedule
           # needs pg_cron, so apply the file without that last statement.

@@ -25,7 +25,8 @@
       .replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_, target, alias) => (alias || target).trim())
       .replace(/`([^`]+)`/g, '<code>$1</code>')
       .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (m, text, url) =>
-        /^https?:\/\//i.test(url) ? `<a href="${url}" target="_blank" rel="noopener noreferrer">${text}</a>` : text)
+        /^https?:\/\//i.test(url) ? `<a href="${url}" target="_blank" rel="noopener noreferrer">${text}</a>` : text,
+      )
       .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
   }
 
@@ -45,29 +46,50 @@
     const out = [];
     let list = null; // 'ul' | 'ol' | null
     let para = [];
-    const flushPara = () => { if (para.length) out.push(`<p>${para.join(' ')}</p>`); para = []; };
-    const closeList = () => { if (list) out.push(`</${list}>`); list = null; };
-    for (const raw of String(md || '').replace(/\r\n?/g, '\n').split('\n')) {
+    const flushPara = () => {
+      if (para.length) out.push(`<p>${para.join(' ')}</p>`);
+      para = [];
+    };
+    const closeList = () => {
+      if (list) out.push(`</${list}>`);
+      list = null;
+    };
+    for (const raw of String(md || '')
+      .replace(/\r\n?/g, '\n')
+      .split('\n')) {
       const line = raw.replace(/\s+$/, '');
       const head = /^(#{1,4})\s+(.*)$/.exec(line);
       const item = LIST_RE.exec(line);
-      if (!line.trim()) { flushPara(); closeList(); continue; }
+      if (!line.trim()) {
+        flushPara();
+        closeList();
+        continue;
+      }
       if (head) {
-        flushPara(); closeList();
+        flushPara();
+        closeList();
         const lvl = Math.min(head[1].length + 2, 6); // # → h3: the brief sits inside a page section
         out.push(`<h${lvl}>${inline(escapeHtml(head[2]))}</h${lvl}>`);
       } else if (/^\s*(-{3,}|\*{3,})\s*$/.test(line)) {
-        flushPara(); closeList(); out.push('<hr>');
+        flushPara();
+        closeList();
+        out.push('<hr>');
       } else if (item) {
         flushPara();
         const kind = /\d/.test(item[2]) ? 'ol' : 'ul';
-        if (list !== kind) { closeList(); out.push(`<${kind}>`); list = kind; }
+        if (list !== kind) {
+          closeList();
+          out.push(`<${kind}>`);
+          list = kind;
+        }
         out.push(listItem(item[1], item[3]));
       } else {
-        closeList(); para.push(inline(escapeHtml(line.trim())));
+        closeList();
+        para.push(inline(escapeHtml(line.trim())));
       }
     }
-    flushPara(); closeList();
+    flushPara();
+    closeList();
     return out.join('\n');
   }
 

@@ -25,11 +25,11 @@ import { checkReviewToken, issueReviewToken } from '../review-token.ts';
 
 const MAX_SECTIONS = 20;
 
-const isViewer = (c: Context) => env.AUTH_PUBLIC || hasViewerAuth(c);
-
 async function render(c: Context, d: DecisionRow, pr: PrRef, error?: string, status: 200 | 400 | 409 = 200) {
   const [sections, review] = await Promise.all([getSections(pr), getPrReview(pr)]);
-  const token = issueReviewToken(env.DECISION_SECRET, Number(d.id), pr.sha, sectionsVersion(sections));
+  const token = hasViewerAuth(c)
+    ? issueReviewToken(env.DECISION_SECRET, Number(d.id), pr.sha, sectionsVersion(sections))
+    : null;
   return c.html(reviewPage({ d, pr, sections, review, token, error }), status);
 }
 
@@ -71,15 +71,15 @@ export function registerReviewRoutes(app: Hono): void {
   });
 
   app.get('/review/:id', async (c) => {
-    if (!isViewer(c)) return c.redirect('/login');
+    if (!env.AUTH_PUBLIC && !hasViewerAuth(c)) return c.redirect('/login');
     const loaded = await loadOpen(c);
     if (loaded instanceof Response) return loaded;
-    await markReviewed(Number(loaded.d.id));
+    if (hasViewerAuth(c)) await markReviewed(Number(loaded.d.id));
     return render(c, loaded.d, loaded.pr);
   });
 
   app.post('/review/:id', async (c) => {
-    if (!isViewer(c)) return c.redirect('/login');
+    if (!hasViewerAuth(c)) return c.redirect('/login');
     const loaded = await loadOpen(c);
     if (loaded instanceof Response) return loaded;
     const { d, pr } = loaded;

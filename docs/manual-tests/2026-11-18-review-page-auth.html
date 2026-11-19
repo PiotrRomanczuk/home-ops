@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Strona przeglądu: sesja przy AUTH_PUBLIC</title>
+<style>body{font:16px/1.5 system-ui;max-width:760px;margin:2rem auto;padding:0 1rem}code{background:#eee;padding:0 .25em}td,th{border:1px solid #ccc;padding:.3em .6em;text-align:left}</style>
+</head>
+<body>
+<h1>Strona przeglądu: odpowiedź wymaga sesji</h1>
+<p><em>2026-11-18 · PR #87 · poprawki po recenzji 2026-11-16</em></p>
+<h2>Co zrobiono</h2>
+<ul>
+<li><code>POST /review/:id</code> wymaga sesji widza niezależnie od <code>AUTH_PUBLIC</code>; bez sesji przekierowanie na <code>/login</code>, decyzja bez zmian.</li>
+<li><code>GET /review/:id</code> bez sesji (przy <code>AUTH_PUBLIC</code>) pokazuje stronę bez formularza i bez tokenu, z informacją o zalogowaniu; nie oznacza decyzji jako obejrzanej.</li>
+<li><code>POST /api/decisions</code> z <code>requires_review: true</code> bez <code>ref</code> w formacie <code>repo#N@sha</code> zwraca 400.</li>
+<li><code>check.yml</code>: usunięty zdublowany wiersz migracji 033.</li>
+</ul>
+<h2>Jak sprawdzić ręcznie</h2>
+<table>
+<tr><th>Krok</th><th>Oczekiwany wynik</th></tr>
+<tr><td>Uruchom konsolę z <code>AUTH_PUBLIC=1</code>, otwórz <code>/review/&lt;id&gt;</code> w oknie bez sesji</td><td>Karta z komunikatem „zaloguj się”, brak przycisków i pola <code>token</code> w źródle</td></tr>
+<tr><td>Zaloguj się, odśwież stronę</td><td>Formularz z tokenem, odblokowanie po rozwinięciu sekcji</td></tr>
+<tr><td><code>curl -X POST</code> na <code>/review/&lt;id&gt;</code> bez ciasteczka</td><td>302 → <code>/login</code>, decyzja nadal otwarta</td></tr>
+<tr><td><code>POST /api/decisions</code> z <code>requires_review:true</code>, <code>ref:"x"</code></td><td>400, komunikat o formacie <code>repo#N@sha</code></td></tr>
+</table>
+<h2>Testy automatyczne</h2>
+<p>vitest z prawdziwym Postgresem 17: <code>review.test.ts</code> 12 testów (było 10), <code>decisions.test.ts</code> 7, <code>decision-links.test.ts</code> 6 — wszystkie zielone. <code>npm run check</code> (typecheck + biome) czysto. Zrzutów ekranu brak: sprawdzenie przez testy HTTP, bez przeglądarki.</p>
+</body>
+</html>

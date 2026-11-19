@@ -21,8 +21,7 @@
 
 // Flat path + .js extension: the server serves only /static/:name (single
 // segment, no subdirs) and its MIME map has .js but not .mjs.
-import { html, render } from '/static/htm-preact-standalone.js';
-import { useState, useEffect } from '/static/htm-preact-standalone.js';
+import { html, render, useEffect, useState } from '/static/htm-preact-standalone.js';
 
 const REFRESH_MS = 15_000;
 
@@ -41,7 +40,8 @@ function alarmCount(snap) {
   const lv = snap?.levels_1h || {};
   return (lv.error || 0) + (lv.fatal || 0);
 }
-const fmtLag = (v) => (v == null ? 'never' : v < 90 ? v + 's' : v < 5400 ? Math.round(v / 60) + 'm' : Math.round(v / 3600) + 'h');
+const fmtLag = (v) =>
+  v == null ? 'never' : v < 90 ? v + 's' : v < 5400 ? Math.round(v / 60) + 'm' : Math.round(v / 3600) + 'h';
 
 /* ---------- presentational components ---------- */
 function Banner({ snap }) {
@@ -50,9 +50,12 @@ function Banner({ snap }) {
   const deadHosts = (snap.hosts || []).filter((r) => hostHealth(snap, r) === 'stale');
   const bad = alarms > 0 || deadHosts.length > 0;
   const label = bad
-    ? [alarms ? `${alarms} error${alarms > 1 ? 's' : ''} /1h` : null,
-       deadHosts.length ? `${deadHosts.map((r) => r.host).join(', ')} silent` : null]
-        .filter(Boolean).join(' · ')
+    ? [
+        alarms ? `${alarms} error${alarms > 1 ? 's' : ''} /1h` : null,
+        deadHosts.length ? `${deadHosts.map((r) => r.host).join(', ')} silent` : null,
+      ]
+        .filter(Boolean)
+        .join(' · ')
     : 'all clear';
   const onClick = () => bad && setState({ tab: 'logs', level_min: 'error' });
   return html`
@@ -81,9 +84,11 @@ function HostRow({ snap, row }) {
       <div class="st-host-hd">
         <span class=${'hd ' + hd}></span>
         <span class="st-hn">${row.host}</span>
-        ${row.data && row.data.is_gaming
-          ? html`<span class="st-gaming" title="a game is running — GPU jobs pause">🎮 ${row.data.game || 'gaming'}</span>`
-          : null}
+        ${
+          row.data && row.data.is_gaming
+            ? html`<span class="st-gaming" title="a game is running — GPU jobs pause">🎮 ${row.data.game || 'gaming'}</span>`
+            : null
+        }
         <span class="grow"></span>
         <span class="st-lag num" title="last log event / last metric sample">ev ${fmtLag(evLag)} · m ${fmtLag(mLag)}</span>
       </div>
@@ -103,10 +108,14 @@ function Queue({ snap }) {
   return html`
     <div class="st-sec">
       <div class="st-sec-hd">queue</div>
-      ${chips.length
-        ? html`<div class="st-chips">${chips.map((k) => html`
-            <span class=${'st-chip q-' + k}><b class="num">${String(q[k])}</b> ${k}</span>`)}</div>`
-        : html`<div class="st-empty">queue empty</div>`}
+      ${
+        chips.length
+          ? html`<div class="st-chips">${chips.map(
+              (k) => html`
+            <span class=${'st-chip q-' + k}><b class="num">${String(q[k])}</b> ${k}</span>`,
+            )}</div>`
+          : html`<div class="st-empty">queue empty</div>`
+      }
     </div>`;
 }
 
@@ -115,14 +124,18 @@ function Errors({ snap }) {
   return html`
     <div class="st-sec">
       <div class="st-sec-hd">recent errors <span class="faint">24h</span></div>
-      ${rows.length
-        ? html`<div>${rows.map((l) => html`
+      ${
+        rows.length
+          ? html`<div>${rows.map(
+              (l) => html`
             <div class="st-err" onClick=${() => setState({ tab: 'logs', level_min: 'error', host: l.host })}>
               <span class="st-et num">${relShort(l.ts)}</span>
               <span class="st-eh">${l.host}</span>
               <span class="st-em">${l.message}</span>
-            </div>`)}</div>`
-        : html`<div class="st-empty">✓ no errors in 24h</div>`}
+            </div>`,
+            )}</div>`
+          : html`<div class="st-empty">✓ no errors in 24h</div>`
+      }
     </div>`;
 }
 
@@ -136,14 +149,20 @@ export function StatusView() {
     const load = async () => {
       try {
         const s = await window.api('GET', '/api/status');
-        if (alive) { setSnap(s); setErr(null); }
+        if (alive) {
+          setSnap(s);
+          setErr(null);
+        }
       } catch (e) {
         if (alive) setErr(e.message);
       }
     };
     load();
     const timer = setInterval(load, REFRESH_MS);
-    return () => { alive = false; clearInterval(timer); }; // real cleanup on unmount
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    }; // real cleanup on unmount
   }, []);
 
   if (!snap) {
@@ -172,7 +191,7 @@ export function StatusView() {
 // the previous container and unmount it (render(null, ...)) before re-mounting.
 let prevMain = null;
 const legacyStatus = VIEWS.status;
-VIEWS.status = function (st, main) {
+VIEWS.status = (st, main) => {
   if (prevMain && prevMain !== main) render(null, prevMain); // unmount → runs cleanup
   prevMain = null;
   if (st.legacy) return legacyStatus(st, main); // #tab=status&legacy=1 → vanilla

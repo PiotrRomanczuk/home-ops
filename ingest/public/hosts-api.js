@@ -67,7 +67,8 @@ const Hosts = {
   async loadAll(rangeMin) {
     if (this.loading) return;
     if (rangeMin) this.rangeMin = rangeMin;
-    this.loading = true; this.err = null;
+    this.loading = true;
+    this.err = null;
     try {
       const latest = await window.api('GET', '/api/metrics?latest=1');
       const latestRows = latest.rows || [];

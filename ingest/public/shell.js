@@ -21,8 +21,14 @@
    Load this INSTEAD of the vanilla boot by using index-shell.html.
    ============================================================ */
 
-import { html, render as mount } from '/static/htm-preact-standalone.js';
-import { useReducer, useEffect, useRef, useLayoutEffect } from '/static/htm-preact-standalone.js';
+import {
+  html,
+  render as mount,
+  useEffect,
+  useLayoutEffect,
+  useReducer,
+  useRef,
+} from '/static/htm-preact-standalone.js';
 import { StatusView } from '/static/status-preact.js';
 
 window.__SHELL = true;
@@ -44,18 +50,22 @@ function useHashRoute() {
 /* ---------- chrome (top tab strip) — ported from app.js renderChrome ---------- */
 function Chrome({ state }) {
   const counts = {
-    chat: (window.Chat?.conversations || DB.CONVERSATIONS).filter((c) => c.status === 'running' || c.status === 'queued' || c.status === 'paused').length,
+    chat: (window.Chat?.conversations || DB.CONVERSATIONS).filter(
+      (c) => c.status === 'running' || c.status === 'queued' || c.status === 'paused',
+    ).length,
     projects: (window.Projects?.items || DB.PROJECTS).filter((p) => p.status === 'hot').length,
     logs: (window.Logs?.rows || DB.LOGS).filter((l) => LV_ORDER[l.level] >= 4).length,
     hosts: DB.HOSTS.filter((x) => x.hd !== 'good').length,
-    evals: (window.Evals?.items || []).filter((t) => (t.stage === 'testing' || t.stage === 'active') && !t.has_files).length,
+    evals: (window.Evals?.items || []).filter((t) => (t.stage === 'testing' || t.stage === 'active') && !t.has_files)
+      .length,
     board: (window.Board?.items || []).filter((t) => t.column_key === 'now' && !t.done).length,
   };
   return html`
     <header class="chrome">
       <div class="brand"><span class="dot"></span>home-ops<span class="ver">elitedesk</span></div>
       <nav class="tabs">
-        ${TABS.map((t) => html`
+        ${TABS.map(
+          (t) => html`
           <button
             class=${'tab' + (state.tab === t.id ? ' on' : '')}
             title=${`${t.label}  (press ${t.key})`}
@@ -63,7 +73,8 @@ function Chrome({ state }) {
             <span class="ico" dangerouslySetInnerHTML=${{ __html: t.ico() }}></span>
             <span class="label-hide">${t.label}</span>
             ${counts[t.id] ? html`<span class="ct num">${String(counts[t.id])}</span>` : null}
-          </button>`)}
+          </button>`,
+        )}
       </nav>
       <div class="right">
         <button class="chrome-btn" title="toggle absolute / relative time  (t)" onClick=${toggleTimeMode}>
@@ -82,13 +93,15 @@ function Footer() {
   const totVram = DB.MODELS_LOADED.reduce((a, m) => a + m.vram, 0).toFixed(1);
   return html`
     <footer class="foot">
-      ${DB.HOSTS.map((host) => html`
+      ${DB.HOSTS.map(
+        (host) => html`
         <div class="seg" style="cursor:pointer" title=${`${host.id} · ${host.role} · up ${host.up} · last event ${host.lag}s ago`}
              onClick=${() => setState({ tab: 'hosts', focus: host.id })}>
           <span class=${'hd ' + lagClass(host.lag)}></span>
           <span class="hn">${host.id}</span>
           <span class="lag num">${host.lag + 's'}</span>
-        </div>`)}
+        </div>`,
+      )}
       <div class="seg" style="cursor:pointer" title="ingest health — probes /api/health"
            onClick=${() => setState({ tab: 'logs', source: 'app:home-ops' })}>
         <span class=${'hd ' + (q.ingest === 'ok' ? 'good' : 'stale')}></span>
@@ -120,7 +133,10 @@ function LegacyTab({ tab, state }) {
     el.replaceChildren();
     const view = window.VIEWS[tab];
     if (view) view(state, el);
-    else el.append(Object.assign(document.createElement('div'), { className: 'empty', textContent: 'unknown tab: ' + tab }));
+    else
+      el.append(
+        Object.assign(document.createElement('div'), { className: 'empty', textContent: 'unknown tab: ' + tab }),
+      );
   }); // no deps: re-invoke on every shell render, mirroring the vanilla loop
   return html`<div ref=${ref} class="legacy-host"></div>`;
 }

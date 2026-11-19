@@ -23,13 +23,19 @@ function tqChips(t) {
 }
 
 function tqRow(t, cls) {
-  return h('li', { class: `tq-row ${cls || ''}`, title: t.brief || '' },
+  return h(
+    'li',
+    { class: `tq-row ${cls || ''}`, title: t.brief || '' },
     ...tqChips(t),
-    h('span', { class: 'tq-text' },
+    h(
+      'span',
+      { class: 'tq-text' },
       t.project ? h('span', { class: 'tq-proj' }, `${t.project} `) : null,
       t.id ? h('b', {}, `${t.id} `) : null,
-      t.text.replace(/`/g, '')),
-    t.model ? h('span', { class: 'tq-meta' }, t.model) : null);
+      t.text.replace(/`/g, ''),
+    ),
+    t.model ? h('span', { class: 'tq-meta' }, t.model) : null,
+  );
 }
 
 /* Hours come only from retro lines ("~1 h", "30 min") in Zrobione — the label
@@ -43,13 +49,26 @@ function tqBar(q, inProgress, done) {
   if (!cap) return null;
   const pct = (n) => `${Math.min(100, Math.round((n / cap) * 100))}%`;
   const usedLabel = done.length ? `zrobione ${tqHours(used)} (czas w ${timed}/${done.length})` : 'zrobione 0 h';
-  return h('div', { class: 'tq-cap' },
-    h('div', { class: 'tq-bar' },
+  return h(
+    'div',
+    { class: 'tq-cap' },
+    h(
+      'div',
+      { class: 'tq-bar' },
       h('i', { class: 'used', style: { width: pct(used) } }),
-      h('i', { class: 'budget', style: { width: pct(budget) } })),
-    h('div', { class: 'tq-cap-l' },
-      h('span', { class: timed < done.length ? 'tq-partial' : '' }, `${usedLabel}${budget ? ` · w toku do ${tqHours(budget)}` : ''}`),
-      h('span', {}, `pojemność ${tqHours(cap)} · napełniaj do ${tqHours(cap * 0.7)}`)));
+      h('i', { class: 'budget', style: { width: pct(budget) } }),
+    ),
+    h(
+      'div',
+      { class: 'tq-cap-l' },
+      h(
+        'span',
+        { class: timed < done.length ? 'tq-partial' : '' },
+        `${usedLabel}${budget ? ` · w toku do ${tqHours(budget)}` : ''}`,
+      ),
+      h('span', {}, `pojemność ${tqHours(cap)} · napełniaj do ${tqHours(cap * 0.7)}`),
+    ),
+  );
 }
 
 /* Section for the right column of "Dziś"; null until planner-sync has synced once. */
@@ -68,13 +87,24 @@ function tdQueue(q) {
     inProgress.length ? null : h('li', { class: 'tq-row tq-empty' }, 'nic w toku — następny bilet z kolejki:'),
     ...next.map((t) => tqRow(t)),
   ].filter(Boolean);
-  return h('section', { class: 'td-sec tq' },
-    h('h2', { class: 'td-h' }, 'Kolejka',
+  return h(
+    'section',
+    { class: 'td-sec tq' },
+    h(
+      'h2',
+      { class: 'td-h' },
+      'Kolejka',
       h('span', { class: 'td-ct num' }, `${inProgress.length} w toku`),
       h('span', { class: 'spacer' }),
-      h('span', { class: 'td-meta' }, `okno ${tqDay(q.window_from)} → ${tqDay(q.window_to)}${q.focus ? ` · fokus ${q.focus}` : ''}`)),
+      h(
+        'span',
+        { class: 'td-meta' },
+        `okno ${tqDay(q.window_from)} → ${tqDay(q.window_to)}${q.focus ? ` · fokus ${q.focus}` : ''}`,
+      ),
+    ),
     tqBar(q, inProgress, s.done || []),
     rows.length ? h('ul', { class: 'tq-list' }, ...rows) : h('div', { class: 'td-empty' }, 'Kolejka pusta.'),
-    h('div', { class: 'td-meta' }, counts));
+    h('div', { class: 'td-meta' }, counts),
+  );
 }
 window.tdQueue = tdQueue;

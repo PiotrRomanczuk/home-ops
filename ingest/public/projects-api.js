@@ -84,15 +84,15 @@ function parseProject(row) {
     get errors_today() {
       const rows = window.Logs?.rows || [];
       const cutoff = Date.now() - 24 * 60 * 60 * 1000;
-      return rows.filter((l) =>
-        l.source === 'app:' + slug &&
-        (LV_ORDER[l.level] || 0) >= 3 &&
-        new Date(l.ts).getTime() >= cutoff,
+      return rows.filter(
+        (l) => l.source === 'app:' + slug && (LV_ORDER[l.level] || 0) >= 3 && new Date(l.ts).getTime() >= cutoff,
       ).length;
     },
     get jobs_q() {
       const convs = window.Chat?.conversations || [];
-      return convs.filter((c) => c.project === slug && (c.status === 'queued' || c.status === 'running' || c.status === 'paused')).length;
+      return convs.filter(
+        (c) => c.project === slug && (c.status === 'queued' || c.status === 'running' || c.status === 'paused'),
+      ).length;
     },
   };
 }
@@ -107,7 +107,8 @@ const Projects = {
 
   async loadAll() {
     if (this.loading) return;
-    this.loading = true; this.err = null;
+    this.loading = true;
+    this.err = null;
     try {
       const j = await window.api('GET', '/api/projects');
       this.items = (j.projects || []).map(parseProject);
@@ -123,8 +124,11 @@ const Projects = {
         (acc, p) => (p.repo_synced_at && (!acc || p.repo_synced_at > acc) ? p.repo_synced_at : acc),
         null,
       );
-    } catch (e) { this.err = e.message; }
-    finally { this.loading = false; }
+    } catch (e) {
+      this.err = e.message;
+    } finally {
+      this.loading = false;
+    }
     if (window.render) window.render();
   },
 
@@ -142,7 +146,9 @@ const Projects = {
         else this.items.unshift(parsed);
         if (window.render) window.render();
       }
-    } catch { /* swallow */ }
+    } catch {
+      /* swallow */
+    }
   },
 };
 

@@ -4,7 +4,7 @@
    Exposed as globalThis.ServerPure (tested in __tests__).
    ============================================================ */
 
-(function () {
+(() => {
   const unitShort = (u) => String(u || '').replace(/\.service$/, '');
 
   /** 512 ms → "0,5 s", 420 s → "7 min", 4300 s → "1 h 12 min". */
@@ -15,7 +15,8 @@
     if (s < 90) return Math.round(s) + ' s';
     const m = Math.round(s / 60);
     if (m < 60) return m + ' min';
-    const hr = Math.floor(m / 60), rest = m % 60;
+    const hr = Math.floor(m / 60),
+      rest = m % 60;
     return rest ? `${hr} h ${rest} min` : `${hr} h`;
   }
 
@@ -31,14 +32,23 @@
     if (!snap) return { tone: 'idle', text: 'Brak migawki — activity-watcher jeszcze nic nie wysłał.' };
     const gha = (snap.gha_running || [])[0];
     if (gha) {
-      return { tone: 'busy', project: gha.project_slug, text: `${gha.unit} · ${fmtDur(runMs(gha, now))}`, url: gha.url };
+      return {
+        tone: 'busy',
+        project: gha.project_slug,
+        text: `${gha.unit} · ${fmtDur(runMs(gha, now))}`,
+        url: gha.url,
+      };
     }
     const busy = (snap.runners || []).find((r) => r.busy);
     if (busy) return { tone: 'busy', project: busy.repo.split('/').pop(), text: `runner ${busy.name} pracuje` };
     const run = (snap.running || [])[0];
     if (run) {
       const more = snap.running.length > 1 ? ` (+${snap.running.length - 1})` : '';
-      return { tone: 'busy', project: run.project_slug, text: `${unitShort(run.unit)} · ${fmtDur(runMs(run, now))}${more}` };
+      return {
+        tone: 'busy',
+        project: run.project_slug,
+        text: `${unitShort(run.unit)} · ${fmtDur(runMs(run, now))}${more}`,
+      };
     }
     return { tone: 'idle', text: 'Spokój — nic nie biegnie.' };
   }
@@ -79,8 +89,12 @@
   }
 
   function filterRuns(runs, { project, onlyFailed, unit } = {}) {
-    return runs.filter((r) => (!project || (r.project_slug || 'inne') === project)
-      && (!onlyFailed || r.result === 'failed') && (!unit || r.unit === unit));
+    return runs.filter(
+      (r) =>
+        (!project || (r.project_slug || 'inne') === project) &&
+        (!onlyFailed || r.result === 'failed') &&
+        (!unit || r.unit === unit),
+    );
   }
 
   const api = { unitShort, fmtDur, runMs, headline, lanes, failing, filterRuns };

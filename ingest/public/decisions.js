@@ -18,11 +18,19 @@ function decUntil(t) {
 }
 
 function decFilterBar() {
-  return h('div', { class: 'dec-filters' },
-    ...DEC_STATES.map((s) => h('button', {
-      class: 'dec-filter' + (Decisions.state === s ? ' on' : ''),
-      onclick: () => Decisions.setState(s),
-    }, s)),
+  return h(
+    'div',
+    { class: 'dec-filters' },
+    ...DEC_STATES.map((s) =>
+      h(
+        'button',
+        {
+          class: 'dec-filter' + (Decisions.state === s ? ' on' : ''),
+          onclick: () => Decisions.setState(s),
+        },
+        s,
+      ),
+    ),
     h('span', { class: 'spacer' }),
     h('span', { class: 'dec-hint' }, 'Routines pick answers up on their next run.'),
   );
@@ -34,19 +42,39 @@ function decAnswerForm(d) {
   const submit = () => {
     if (!chosen) return;
     const r = reason.value.trim();
-    if (DEC_NO_RE.test(chosen) && !r) { reason.classList.add('bad'); reason.focus(); return; }
+    if (DEC_NO_RE.test(chosen) && !r) {
+      reason.classList.add('bad');
+      reason.focus();
+      return;
+    }
     Decisions.answer(d, chosen, r);
   };
-  const buttons = (d.options || []).map((o) => h('button', {
-    class: 'dec-opt' + (DEC_NO_RE.test(o.key) ? ' no' : ''),
-    title: o.consequence || '',
-    onclick: () => {
-      chosen = o.key;
-      if (DEC_NO_RE.test(o.key) && !reason.value.trim()) { reason.classList.add('bad'); reason.focus(); return; }
+  const buttons = (d.options || []).map((o) =>
+    h(
+      'button',
+      {
+        class: 'dec-opt' + (DEC_NO_RE.test(o.key) ? ' no' : ''),
+        title: o.consequence || '',
+        onclick: () => {
+          chosen = o.key;
+          if (DEC_NO_RE.test(o.key) && !reason.value.trim()) {
+            reason.classList.add('bad');
+            reason.focus();
+            return;
+          }
+          submit();
+        },
+      },
+      o.label,
+    ),
+  );
+  reason.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (!chosen) chosen = 'no';
       submit();
-    },
-  }, o.label));
-  reason.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); if (!chosen) chosen = 'no'; submit(); } });
+    }
+  });
   reason.addEventListener('input', () => reason.classList.remove('bad'));
   return h('div', { class: 'dec-answer' }, ...buttons, reason);
 }
@@ -55,29 +83,49 @@ function decAnswerForm(d) {
    (migration 033): the card links there instead of offering buttons. */
 function decReviewLink(d) {
   const seen = d.reviewed_at ? ` · otwarte ${rel(d.reviewed_at)}` : '';
-  return h('div', { class: 'dec-answer' },
+  return h(
+    'div',
+    { class: 'dec-answer' },
     h('a', { class: 'dec-opt dec-review', href: d.review_url || `/review/${d.id}` }, 'Przejrzyj i zdecyduj →'),
-    h('span', { class: 'dec-hint' }, `scalenie tylko ze strony przeglądu${seen}`));
+    h('span', { class: 'dec-hint' }, `scalenie tylko ze strony przeglądu${seen}`),
+  );
 }
 
 function decCard(d) {
   const isOpen = d.state === 'open';
-  const when = isOpen ? `expires ${decUntil(d.expires_at)}` : d.answered_at ? `answered ${rel(d.answered_at)}` : `expired ${rel(d.expires_at)}`;
-  const meta = h('div', { class: 'dec-meta' },
+  const when = isOpen
+    ? `expires ${decUntil(d.expires_at)}`
+    : d.answered_at
+      ? `answered ${rel(d.answered_at)}`
+      : `expired ${rel(d.expires_at)}`;
+  const meta = h(
+    'div',
+    { class: 'dec-meta' },
     h('span', { class: 'dec-routine' }, d.routine),
     d.slug ? h('span', { class: 'dec-slug' }, d.slug) : null,
     h('span', { class: 'dec-when' }, when),
     d.answered_via ? h('span', { class: 'dec-via' }, `via ${d.answered_via}`) : null,
   );
-  const outcome = !isOpen && d.answer
-    ? h('div', { class: 'dec-outcome ' + (DEC_NO_RE.test(d.answer) ? 'no' : 'yes') },
-        (d.options || []).find((o) => o.key === d.answer)?.label || d.answer, d.reason ? h('span', { class: 'dec-why' }, ` · ${d.reason}`) : null)
-    : !isOpen ? h('div', { class: 'dec-outcome expired' }, 'expired, no answer') : null;
-  return h('article', { class: 'dec-card' + (d._pending ? ' pending' : '') + (isOpen ? '' : ' closed') },
+  const outcome =
+    !isOpen && d.answer
+      ? h(
+          'div',
+          { class: 'dec-outcome ' + (DEC_NO_RE.test(d.answer) ? 'no' : 'yes') },
+          (d.options || []).find((o) => o.key === d.answer)?.label || d.answer,
+          d.reason ? h('span', { class: 'dec-why' }, ` · ${d.reason}`) : null,
+        )
+      : !isOpen
+        ? h('div', { class: 'dec-outcome expired' }, 'expired, no answer')
+        : null;
+  return h(
+    'article',
+    { class: 'dec-card' + (d._pending ? ' pending' : '') + (isOpen ? '' : ' closed') },
     meta,
     h('div', { class: 'dec-q' }, d.question),
     d.detail ? h('pre', { class: 'dec-detail' }, d.detail) : null,
-    d.context_url ? h('a', { class: 'dec-ctx', href: d.context_url, target: '_blank', rel: 'noopener' }, 'open context →') : null,
+    d.context_url
+      ? h('a', { class: 'dec-ctx', href: d.context_url, target: '_blank', rel: 'noopener' }, 'open context →')
+      : null,
     d._err ? h('div', { class: 'dec-err' }, d._err) : null,
     isOpen ? (d.requires_review ? decReviewLink(d) : decAnswerForm(d)) : outcome,
   );
@@ -87,11 +135,19 @@ VIEWS.decisions = (st, main) => {
   if (!Decisions.loaded && !Decisions.loading) Decisions.loadAll();
   Decisions.startPolling();
   const list = Decisions.items;
-  main.append(h('div', { class: 'dec-view' },
-    decFilterBar(),
-    Decisions.err ? h('div', { class: 'dec-err' }, Decisions.err) : null,
-    list.length
-      ? h('div', { class: 'dec-list' }, ...list.map(decCard))
-      : h('div', { class: 'empty' }, Decisions.loaded ? `no ${Decisions.state === 'all' ? '' : Decisions.state + ' '}decisions` : 'loading…'),
-  ));
+  main.append(
+    h(
+      'div',
+      { class: 'dec-view' },
+      decFilterBar(),
+      Decisions.err ? h('div', { class: 'dec-err' }, Decisions.err) : null,
+      list.length
+        ? h('div', { class: 'dec-list' }, ...list.map(decCard))
+        : h(
+            'div',
+            { class: 'empty' },
+            Decisions.loaded ? `no ${Decisions.state === 'all' ? '' : Decisions.state + ' '}decisions` : 'loading…',
+          ),
+    ),
+  );
 };

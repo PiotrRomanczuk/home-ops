@@ -377,8 +377,8 @@
         <script>
           // Generate 35 filler rows
           for(let i=0; i<35; i++) {
-            let s = 54 - i;
-            let sec = s < 10 ? '0'+s : s;
+            const s = 54 - i;
+            const sec = s < 10 ? '0'+s : s;
             document.write(`
             <tr>
               <td class="col-ts">21:02:${sec}</td>

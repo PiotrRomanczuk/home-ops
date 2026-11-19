@@ -1,4 +1,5 @@
 import { normalizeOptions, REVIEW_ROUTINES } from './decisions-store.ts';
+import { parseRef } from './review-store.ts';
 
 // Validation of the body of POST /api/decisions, kept out of the route so the
 // route stays a thin handler.
@@ -36,6 +37,10 @@ export function parseDecisionBody(b: Record<string, unknown>): { error: string }
   if (!Number.isFinite(expiresHours) || expiresHours < 1 || expiresHours > 24 * 30) {
     return { error: 'expires_hours must be 1..720' };
   }
+  const ref = b.ref == null ? null : String(b.ref).slice(0, 120);
+  const requiresReview = b.requires_review === true || REVIEW_ROUTINES.has(routine);
+  if (b.requires_review === true && !parseRef(ref))
+    return { error: 'requires_review needs ref in the form repo#N@sha' };
   return {
     value: {
       routine,
@@ -44,12 +49,12 @@ export function parseDecisionBody(b: Record<string, unknown>): { error: string }
       detail: typeof b.detail === 'string' ? b.detail.slice(0, 4000) : null,
       contextUrl,
       options,
-      ref: b.ref == null ? null : String(b.ref).slice(0, 120),
+      ref,
       parentId,
       expiresHours,
       // Merging code is answered from the review page only (migration 033);
       // the server decides for the known routines, not the caller's flag.
-      requiresReview: b.requires_review === true || REVIEW_ROUTINES.has(routine),
+      requiresReview,
     },
   };
 }

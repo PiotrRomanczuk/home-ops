@@ -14,7 +14,11 @@ const boardReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
 function boardTeardown() {
   while (_boardSortables.length) {
     const s = _boardSortables.pop();
-    try { s.destroy(); } catch { /* detached */ }
+    try {
+      s.destroy();
+    } catch {
+      /* detached */
+    }
   }
 }
 
@@ -29,22 +33,40 @@ function boardCard(t) {
 
   const moveTo = (col) => {
     if (!col || col === t.column_key) return;
-    const toOrder = Board.column(col).map((x) => x.id).concat(t.id);
-    const fromOrder = Board.column(t.column_key).map((x) => x.id).filter((id) => id !== t.id);
+    const toOrder = Board.column(col)
+      .map((x) => x.id)
+      .concat(t.id);
+    const fromOrder = Board.column(t.column_key)
+      .map((x) => x.id)
+      .filter((id) => id !== t.id);
     Board.move(t, col, toOrder, t.column_key, fromOrder);
   };
 
-  const star = h('button', {
-    class: 'bstar no-drag' + (t.is_focus ? ' on' : ''),
-    title: t.is_focus ? 'today’s focus (click to unpin)' : 'pin as today’s focus',
-    onclick: (e) => { e.stopPropagation(); Board.update(t, { is_focus: !t.is_focus }); },
-  }, t.is_focus ? '★' : '☆');
+  const star = h(
+    'button',
+    {
+      class: 'bstar no-drag' + (t.is_focus ? ' on' : ''),
+      title: t.is_focus ? 'today’s focus (click to unpin)' : 'pin as today’s focus',
+      onclick: (e) => {
+        e.stopPropagation();
+        Board.update(t, { is_focus: !t.is_focus });
+      },
+    },
+    t.is_focus ? '★' : '☆',
+  );
 
-  const check = h('button', {
-    class: 'bcheck no-drag' + (t.done ? ' on' : ''),
-    title: t.done ? 'done' : 'mark done',
-    onclick: (e) => { e.stopPropagation(); Board.update(t, { done: !t.done }); },
-  }, t.done ? '✓' : '');
+  const check = h(
+    'button',
+    {
+      class: 'bcheck no-drag' + (t.done ? ' on' : ''),
+      title: t.done ? 'done' : 'mark done',
+      onclick: (e) => {
+        e.stopPropagation();
+        Board.update(t, { done: !t.done });
+      },
+    },
+    t.done ? '✓' : '',
+  );
 
   let body;
   if (t._editing) {
@@ -67,35 +89,92 @@ function boardCard(t) {
       render();
     };
     const ta = h('textarea', {
-      class: 'bedit no-drag', rows: 2, value: t.text,
+      class: 'bedit no-drag',
+      rows: 2,
+      value: t.text,
       onkeydown: (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commit(); }
-        else if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          commit();
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          cancel();
+        }
       },
       onblur: commit,
     });
     body = ta;
-    requestAnimationFrame(() => { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); });
+    requestAnimationFrame(() => {
+      ta.focus();
+      ta.setSelectionRange(ta.value.length, ta.value.length);
+    });
   } else {
-    body = h('div', {
-      class: 'btext' + (t.done ? ' done' : ''),
-      title: 'click to edit',
-      onclick: () => { t._editing = true; render(); },
-    }, t.text);
+    body = h(
+      'div',
+      {
+        class: 'btext' + (t.done ? ' done' : ''),
+        title: 'click to edit',
+        onclick: () => {
+          t._editing = true;
+          render();
+        },
+      },
+      t.text,
+    );
   }
 
-  return h('div', {
-    class: 'bcard' + (t._pending ? ' pending' : '') + (t._error ? ' err' : '') + (t.is_focus ? ' focus' : ''),
-    dataset: { id: String(t.id) },
-    title: t._error || undefined,
-  },
-    h('div', { class: 'bcard-top' }, star, check, h('span', { class: 'grow' }),
-      h('button', { class: 'bdel no-drag', title: 'delete', onclick: (e) => { e.stopPropagation(); Board.remove(t); } }, '×')),
-    body,
-    h('div', { class: 'bcard-foot no-drag' },
-      h('button', { class: 'bmove', disabled: colIdx === 0, title: 'move left', onclick: () => moveTo(BOARD_COLUMNS[colIdx - 1]) }, '‹'),
+  return h(
+    'div',
+    {
+      class: 'bcard' + (t._pending ? ' pending' : '') + (t._error ? ' err' : '') + (t.is_focus ? ' focus' : ''),
+      dataset: { id: String(t.id) },
+      title: t._error || undefined,
+    },
+    h(
+      'div',
+      { class: 'bcard-top' },
+      star,
+      check,
       h('span', { class: 'grow' }),
-      h('button', { class: 'bmove', disabled: colIdx === BOARD_COLUMNS.length - 1, title: 'move right', onclick: () => moveTo(BOARD_COLUMNS[colIdx + 1]) }, '›')),
+      h(
+        'button',
+        {
+          class: 'bdel no-drag',
+          title: 'delete',
+          onclick: (e) => {
+            e.stopPropagation();
+            Board.remove(t);
+          },
+        },
+        '×',
+      ),
+    ),
+    body,
+    h(
+      'div',
+      { class: 'bcard-foot no-drag' },
+      h(
+        'button',
+        {
+          class: 'bmove',
+          disabled: colIdx === 0,
+          title: 'move left',
+          onclick: () => moveTo(BOARD_COLUMNS[colIdx - 1]),
+        },
+        '‹',
+      ),
+      h('span', { class: 'grow' }),
+      h(
+        'button',
+        {
+          class: 'bmove',
+          disabled: colIdx === BOARD_COLUMNS.length - 1,
+          title: 'move right',
+          onclick: () => moveTo(BOARD_COLUMNS[colIdx + 1]),
+        },
+        '›',
+      ),
+    ),
   );
 }
 
@@ -103,15 +182,27 @@ function boardCard(t) {
 function boardAddForm(col, listEl) {
   if (listEl.querySelector('.bnew')) return;
   const input = h('input', { class: 'bnew-in', placeholder: 'new task…', maxLength: 2000 });
-  const form = h('form', {
-    class: 'bnew',
-    onsubmit: async (e) => {
-      e.preventDefault();
-      const v = input.value.trim();
-      if (!v) { form.remove(); return; }
-      try { await Board.create(col, v); } catch (err) { input.classList.add('err'); input.title = err.message; }
+  const form = h(
+    'form',
+    {
+      class: 'bnew',
+      onsubmit: async (e) => {
+        e.preventDefault();
+        const v = input.value.trim();
+        if (!v) {
+          form.remove();
+          return;
+        }
+        try {
+          await Board.create(col, v);
+        } catch (err) {
+          input.classList.add('err');
+          input.title = err.message;
+        }
+      },
     },
-  }, input);
+    input,
+  );
   listEl.prepend(form);
   requestAnimationFrame(() => input.focus());
 }
@@ -122,15 +213,19 @@ function boardSlugPicker() {
   if (!Projects.loaded && !Projects.loading) Projects.loadAll();
   const known = Projects.items.map((p) => p.slug).sort();
   const opts = known.includes(Board.slug) ? known : [Board.slug, ...known];
-  return h('select', {
-    class: 'board-slug-pick',
-    title: 'switch project board',
-    onchange: (e) => setState({ board_slug: e.target.value === BOARD_SLUG ? null : e.target.value }),
-  }, ...opts.map((s) => h('option', { value: s, selected: s === Board.slug }, s)));
+  return h(
+    'select',
+    {
+      class: 'board-slug-pick',
+      title: 'switch project board',
+      onchange: (e) => setState({ board_slug: e.target.value === BOARD_SLUG ? null : e.target.value }),
+    },
+    ...opts.map((s) => h('option', { value: s, selected: s === Board.slug }, s)),
+  );
 }
 
 /* ---------- board view ---------- */
-VIEWS.board = function (st, main) {
+VIEWS.board = (st, main) => {
   boardTeardown();
   Board.setSlug(st.board_slug);
   if (!Board.loaded && !Board.loading) Board.loadAll();
@@ -138,15 +233,19 @@ VIEWS.board = function (st, main) {
 
   const focus = Board.items.find((t) => t.is_focus);
   const wrap = h('div', { class: 'board-view' });
-  wrap.append(h('div', { class: 'sec-bar' },
-    h('span', { class: 'lbl' }, 'board '),
-    boardSlugPicker(),
-    h('span', { class: 'faint num', style: { fontWeight: 400 } }, Board.items.length),
-    focus ? h('span', { class: 'bfocus-chip', title: 'morning digest Today’s focus' }, '★ ' + focus.text) : null,
-    Board.err ? h('span', { class: 'lv error', style: { fontSize: '11px' } }, '✕ ' + Board.err) : null,
-    h('span', { class: 'grow' }),
-    h('button', { class: 'toolbtn', title: 'refresh', onclick: () => Board.loadAll() }, '↻'),
-  ));
+  wrap.append(
+    h(
+      'div',
+      { class: 'sec-bar' },
+      h('span', { class: 'lbl' }, 'board '),
+      boardSlugPicker(),
+      h('span', { class: 'faint num', style: { fontWeight: 400 } }, Board.items.length),
+      focus ? h('span', { class: 'bfocus-chip', title: 'morning digest Today’s focus' }, '★ ' + focus.text) : null,
+      Board.err ? h('span', { class: 'lv error', style: { fontSize: '11px' } }, '✕ ' + Board.err) : null,
+      h('span', { class: 'grow' }),
+      h('button', { class: 'toolbtn', title: 'refresh', onclick: () => Board.loadAll() }, '↻'),
+    ),
+  );
 
   const board = h('div', { class: 'bboard' });
   const lists = [];
@@ -154,13 +253,19 @@ VIEWS.board = function (st, main) {
     const items = Board.column(col);
     const listEl = h('div', { class: 'bcol-list', dataset: { column: col } }, ...items.map(boardCard));
     if (!items.length) listEl.append(h('div', { class: 'bcol-empty' }, 'drop here'));
-    const colEl = h('div', { class: 'bcol bcol-' + col },
-      h('div', { class: 'bcol-hd' },
+    const colEl = h(
+      'div',
+      { class: 'bcol bcol-' + col },
+      h(
+        'div',
+        { class: 'bcol-hd' },
         h('span', { class: 'lbl' }, BOARD_LABELS[col]),
         h('span', { class: 'faint num' }, String(items.length)),
         h('span', { class: 'grow' }),
-        h('button', { class: 'toolbtn', title: 'add task', onclick: () => boardAddForm(col, listEl) }, '+')),
-      listEl);
+        h('button', { class: 'toolbtn', title: 'add task', onclick: () => boardAddForm(col, listEl) }, '+'),
+      ),
+      listEl,
+    );
     board.append(colEl);
     lists.push(listEl);
   }
@@ -170,34 +275,36 @@ VIEWS.board = function (st, main) {
   // Init drag-and-drop after the lists are in the document.
   if (window.Sortable) {
     for (const listEl of lists) {
-      _boardSortables.push(window.Sortable.create(listEl, {
-        group: 'board',
-        animation: boardReducedMotion ? 0 : 150,
-        draggable: '.bcard',
-        filter: '.no-drag',
-        preventOnFilter: false,
-        // Pointer-based dragging (not native HTML5 DnD): reliable on touch
-        // for morning phone use, and consistent across browsers.
-        forceFallback: true,
-        fallbackTolerance: 4,
-        ghostClass: 'bcard-ghost',
-        chosenClass: 'bcard-chosen',
-        emptyInsertThreshold: 10,
-        onEnd: (evt) => {
-          // Capture the drop result synchronously, then defer the move: our
-          // move() calls render(), which tears down this very Sortable — doing
-          // that inside onEnd makes SortableJS revert the drop.
-          const toCol = evt.to.dataset.column;
-          const fromCol = evt.from.dataset.column;
-          const id = evt.item.dataset.id;
-          const order = boardOrderOf(evt.to);
-          const fromOrder = fromCol !== toCol ? boardOrderOf(evt.from) : null;
-          setTimeout(() => {
-            const item = Board.byId(id);
-            if (item) Board.move(item, toCol, order, fromCol, fromOrder);
-          }, 0);
-        },
-      }));
+      _boardSortables.push(
+        window.Sortable.create(listEl, {
+          group: 'board',
+          animation: boardReducedMotion ? 0 : 150,
+          draggable: '.bcard',
+          filter: '.no-drag',
+          preventOnFilter: false,
+          // Pointer-based dragging (not native HTML5 DnD): reliable on touch
+          // for morning phone use, and consistent across browsers.
+          forceFallback: true,
+          fallbackTolerance: 4,
+          ghostClass: 'bcard-ghost',
+          chosenClass: 'bcard-chosen',
+          emptyInsertThreshold: 10,
+          onEnd: (evt) => {
+            // Capture the drop result synchronously, then defer the move: our
+            // move() calls render(), which tears down this very Sortable — doing
+            // that inside onEnd makes SortableJS revert the drop.
+            const toCol = evt.to.dataset.column;
+            const fromCol = evt.from.dataset.column;
+            const id = evt.item.dataset.id;
+            const order = boardOrderOf(evt.to);
+            const fromOrder = fromCol !== toCol ? boardOrderOf(evt.from) : null;
+            setTimeout(() => {
+              const item = Board.byId(id);
+              if (item) Board.move(item, toCol, order, fromCol, fromOrder);
+            }, 0);
+          },
+        }),
+      );
     }
   }
 };
