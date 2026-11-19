@@ -14,8 +14,7 @@ const Status = {
 
   async load() {
     if (this.loading) return;
-    this.loading = true;
-    this.err = null;
+    this.loading = true; this.err = null;
     try {
       this.snap = await window.api('GET', '/api/status');
       this.loaded = true;

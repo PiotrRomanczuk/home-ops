@@ -4,7 +4,7 @@
    Exposed as globalThis.ProgressPure (tested in __tests__).
    ============================================================ */
 
-(() => {
+(function () {
   /* What one heatmap cell counts in each view. "all" weights finished work:
      a merged PR or a ticked task says more than a single commit. */
   const VIEWS = {
@@ -14,11 +14,8 @@
     runs: { label: 'Rutyny', parts: { runs_ok: 1, runs_failed: 1 } },
   };
   const TILES = [
-    ['commits', 'commity'],
-    ['pr_merged', 'PR zmergowane'],
-    ['tasks_done', 'zadania odhaczone'],
-    ['deploys', 'deploye'],
-    ['runs_failed', 'porażki rutyn'],
+    ['commits', 'commity'], ['pr_merged', 'PR zmergowane'], ['tasks_done', 'zadania odhaczone'],
+    ['deploys', 'deploye'], ['runs_failed', 'porażki rutyn'],
   ];
 
   function cell(series, view, i) {
@@ -56,20 +53,11 @@
   /** Tooltip text for one cell: every non-zero signal that week. */
   function breakdown(series, i) {
     const names = {
-      commits: 'commity',
-      pr_opened: 'PR otwarte',
-      pr_merged: 'PR zmergowane',
-      deploys: 'deploye',
-      ci_ok: 'CI ok',
-      ci_failed: 'CI błąd',
-      tasks_done: 'zadania odhaczone',
-      tasks_added: 'zadania dodane',
-      runs_ok: 'rutyny ok',
-      runs_failed: 'rutyny błąd',
+      commits: 'commity', pr_opened: 'PR otwarte', pr_merged: 'PR zmergowane', deploys: 'deploye',
+      ci_ok: 'CI ok', ci_failed: 'CI błąd', tasks_done: 'zadania odhaczone', tasks_added: 'zadania dodane',
+      runs_ok: 'rutyny ok', runs_failed: 'rutyny błąd',
     };
-    const parts = Object.keys(names)
-      .filter((k) => (series[k] || [])[i])
-      .map((k) => `${names[k]} ${series[k][i]}`);
+    const parts = Object.keys(names).filter((k) => (series[k] || [])[i]).map((k) => `${names[k]} ${series[k][i]}`);
     return parts.length ? parts.join(' · ') : 'bez ruchu';
   }
 

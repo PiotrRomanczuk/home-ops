@@ -44,7 +44,13 @@ const Logs = {
   },
 
   filterKey(st) {
-    return [st.host || '', st.source || '', st.level_min || '', st.grep || '', st.since_min || ''].join('|');
+    return [
+      st.host || '',
+      st.source || '',
+      st.level_min || '',
+      st.grep || '',
+      st.since_min || '',
+    ].join('|');
   },
 
   async loadFor(st) {
@@ -71,9 +77,7 @@ const Logs = {
     try {
       const r = await window.api('GET', '/api/sources');
       this.hosts = r.hosts || [];
-    } catch {
-      /* swallow — table still works without the source picker */
-    }
+    } catch { /* swallow — table still works without the source picker */ }
   },
 
   startTail(st) {
@@ -91,7 +95,10 @@ const Logs = {
   async _tailTick(st) {
     if (!this.latestId) return;
     try {
-      const r = await window.api('GET', '/api/logs?' + this._buildParams(st, { after: this.latestId, limit: 500 }));
+      const r = await window.api(
+        'GET',
+        '/api/logs?' + this._buildParams(st, { after: this.latestId, limit: 500 }),
+      );
       const incoming = (r.rows || []).map(mapLogRow);
       if (!incoming.length) return;
       // Server returns ASC when after>0. Unshift each so newest ends up at
@@ -102,9 +109,7 @@ const Logs = {
       }
       if (this.rows.length > LOG_BUFFER_CAP) this.rows.length = LOG_BUFFER_CAP;
       if (window.render) window.render();
-    } catch {
-      /* swallow; next tick retries */
-    }
+    } catch { /* swallow; next tick retries */ }
   },
 };
 

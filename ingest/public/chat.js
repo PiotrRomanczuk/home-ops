@@ -6,7 +6,7 @@
 /* tiny markdown: code fences, inline code, **bold**. Escapes HTML. */
 function md(s) {
   if (!s) return '';
-  const esc = (t) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const esc = t => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   const blocks = s.split(/```/);
   let out = '';
   blocks.forEach((b, i) => {
@@ -25,30 +25,16 @@ function md(s) {
 }
 window.md = md;
 
-function statusOf(c) {
-  return c.turns[c.turns.length - 1]?.status || c.status;
-}
+function statusOf(c) { return c.turns[c.turns.length - 1]?.status || c.status; }
 
 function convRow(c, active) {
   const st = statusOf(c);
-  return h(
-    'button',
-    {
-      class: 'crow' + (active ? ' on' : ''),
-      onclick: () => {
-        setState({ conv: c.id });
-        closeSheet();
-      },
-    },
-    h(
-      'div',
-      { class: 'crow-top' },
+  return h('button', { class: 'crow' + (active ? ' on' : ''), onclick: () => { setState({ conv: c.id }); closeSheet(); } },
+    h('div', { class: 'crow-top' },
       h('span', { class: 'cd', style: { background: `var(--s-${st})` } }),
       h('span', { class: 'crow-title' }, c.title),
     ),
-    h(
-      'div',
-      { class: 'crow-meta' },
+    h('div', { class: 'crow-meta' },
       h('span', { class: 'm-model' }, c.model),
       h('span', { class: 'grow', style: { flex: '1' } }),
       c.project ? h('span', { class: 'crow-proj' }, c.project) : null,
@@ -60,9 +46,7 @@ function convRow(c, active) {
 function thinkBlock(turn, streaming) {
   const wrap = h('div', { class: 'think' });
   const chars = turn.thinking ? turn.thinking.length : 0;
-  const hd = h(
-    'button',
-    { class: 'think-hd', onclick: () => wrap.classList.toggle('open') },
+  const hd = h('button', { class: 'think-hd', onclick: () => wrap.classList.toggle('open') },
     h('span', { class: 'caret' }, '▶'),
     'thinking',
     h('span', { class: 'tw num' }, `${chars} chars${streaming ? ' · streaming' : ''}`),
@@ -76,10 +60,11 @@ function thinkBlock(turn, streaming) {
 function turnEl(c, turn, idx) {
   const isUser = turn.role === 'user';
   const el = h('div', { class: 'turn ' + (isUser ? 'user' : 'assistant') });
-  const hd = h(
-    'div',
-    { class: 'turn-hd' },
-    h('span', { class: 'turn-who' }, h('span', { class: 'glyph' }, isUser ? '›' : '◆'), isUser ? 'you' : turn.model),
+  const hd = h('div', { class: 'turn-hd' },
+    h('span', { class: 'turn-who' },
+      h('span', { class: 'glyph' }, isUser ? '›' : '◆'),
+      isUser ? 'you' : turn.model,
+    ),
     h('span', { class: 'grow' }),
   );
 
@@ -93,28 +78,12 @@ function turnEl(c, turn, idx) {
       hd.append(stat);
     }
     if (st === 'running' || st === 'cancelling') {
-      hd.append(
-        h(
-          'button',
-          { class: 'cancel-btn', onclick: () => cancelTurn(c, turn) },
-          st === 'cancelling' ? '◴ cancelling' : '■ cancel',
-        ),
-      );
+      hd.append(h('button', { class: 'cancel-btn', onclick: () => cancelTurn(c, turn) },
+        st === 'cancelling' ? '◴ cancelling' : '■ cancel'));
     }
   } else {
     // fork affordance on user turns
-    hd.append(
-      h(
-        'button',
-        {
-          class: 'iconbtn',
-          title: 'fork conversation from here',
-          style: { padding: '1px 6px', fontSize: '10px' },
-          onclick: () => forkFrom(c, idx),
-        },
-        '⑂ fork',
-      ),
-    );
+    hd.append(h('button', { class: 'iconbtn', title: 'fork conversation from here', style: { padding: '1px 6px', fontSize: '10px' }, onclick: () => forkFrom(c, idx) }, '⑂ fork'));
   }
   el.append(hd);
 
@@ -122,7 +91,8 @@ function turnEl(c, turn, idx) {
 
   if (turn.status === 'paused' && turn.paused_reason)
     el.append(h('div', { class: 'paused-note' }, '⏸ ', turn.paused_reason));
-  if (turn.status === 'failed' && turn.fail_reason) el.append(h('div', { class: 'fail-note' }, '✕ ', turn.fail_reason));
+  if (turn.status === 'failed' && turn.fail_reason)
+    el.append(h('div', { class: 'fail-note' }, '✕ ', turn.fail_reason));
 
   if (turn.text || turn.status === 'running') {
     const body = h('div', { class: 'turn-body' });
@@ -154,36 +124,17 @@ function forkFrom(c, idx) {
 }
 
 /* ---------- composer ---------- */
-const DRAFT = { model: 'qwen3:8b', project: null };
+let DRAFT = { model: 'qwen3:8b', project: null };
 function composer(c) {
-  const ta = h('textarea', {
-    class: 'comp-ta',
-    placeholder: 'message qwen3 · / for commands · ⏎ to send, ⇧⏎ newline',
+  const ta = h('textarea', { class: 'comp-ta', placeholder: 'message qwen3 · / for commands · ⏎ to send, ⇧⏎ newline',
     rows: 1,
-    oninput: (e) => {
-      e.target.style.height = 'auto';
-      e.target.style.height = Math.min(180, e.target.scrollHeight) + 'px';
-      updateSend();
-    },
-    onkeydown: (e) => {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        doSend();
-      }
-    },
+    oninput: (e) => { e.target.style.height = 'auto'; e.target.style.height = Math.min(180, e.target.scrollHeight) + 'px'; updateSend(); },
+    onkeydown: (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); doSend(); } },
   });
-  const sendBtn = h(
-    'button',
-    { class: 'send-btn', disabled: true, onclick: doSend },
-    'send ',
-    h('kbd', { style: { borderColor: 'rgba(0,0,0,0.3)', color: '#06101f' } }, '↵'),
-  );
-  function updateSend() {
-    sendBtn.disabled = !ta.value.trim();
-  }
+  const sendBtn = h('button', { class: 'send-btn', disabled: true, onclick: doSend }, 'send ', h('kbd', { style: { borderColor: 'rgba(0,0,0,0.3)', color: '#06101f' } }, '↵'));
+  function updateSend() { sendBtn.disabled = !ta.value.trim(); }
   function doSend() {
-    const v = ta.value.trim();
-    if (!v) return;
+    const v = ta.value.trim(); if (!v) return;
     // v1: route everything through kind=generate. /summarise and /embed have
     // different payload/result shapes; their handlers are wired separately.
     Chat.submit({
@@ -201,28 +152,15 @@ function composer(c) {
   const modelBtn = pickerModel();
   const projBtn = pickerProject();
 
-  const box = h(
-    'div',
-    { class: 'comp-box' },
-    ta,
-    h(
-      'div',
-      { class: 'comp-bar' },
-      modelBtn,
-      projBtn,
+  const box = h('div', { class: 'comp-box' }, ta,
+    h('div', { class: 'comp-bar' },
+      modelBtn, projBtn,
       h('span', { class: 'grow' }),
-      h(
-        'span',
-        { class: 'comp-hint' },
-        h('span', { class: 'cmd' }, '/summarise'),
-        h('span', { class: 'cmd' }, '/embed'),
-      ),
+      h('span', { class: 'comp-hint' }, h('span', { class: 'cmd' }, '/summarise'), h('span', { class: 'cmd' }, '/embed')),
       sendBtn,
     ),
   );
-  setTimeout(() => {
-    if (getState().focusComposer) ta.focus();
-  }, 30);
+  setTimeout(() => { if (getState().focusComposer) ta.focus(); }, 30);
   return h('div', { class: 'composer' }, box);
 }
 
@@ -233,75 +171,29 @@ function liveModelsLoaded() {
 
 function pickerModel() {
   const loaded = liveModelsLoaded();
-  const cur = loaded.find((m) => m.name === DRAFT.model) || { name: DRAFT.model, vram: 0 };
+  const cur = loaded.find(m => m.name === DRAFT.model) || { name: DRAFT.model, vram: 0 };
   const pct = Math.min(100, (cur.vram / 8) * 100);
-  const isResident = loaded.some((m) => m.name === DRAFT.model);
-  const btn = h(
-    'button',
-    { class: 'picker-btn' },
-    h('span', {
-      class: 'resident',
-      style: {
-        width: '6px',
-        height: '6px',
-        borderRadius: '50%',
-        background: isResident ? 'var(--good)' : 'var(--fg-faint)',
-      },
-    }),
+  const isResident = loaded.some(m => m.name === DRAFT.model);
+  const btn = h('button', { class: 'picker-btn' },
+    h('span', { class: 'resident', style: { width: '6px', height: '6px', borderRadius: '50%', background: isResident ? 'var(--good)' : 'var(--fg-faint)' } }),
     DRAFT.model,
     h('span', { class: 'vbar' }, h('i', { style: { width: pct + '%' } })),
     h('span', { class: 'caret' }, '▲'),
   );
   const wrap = h('div', { class: 'picker' }, btn);
   btn.onclick = () => {
-    if ($('.menu', wrap)) {
-      $('.menu', wrap).remove();
-      return;
-    }
+    if ($('.menu', wrap)) { $('.menu', wrap).remove(); return; }
     // Kick a hosts refresh so the menu reflects what's *currently* in VRAM,
     // not a stale 30s-old snapshot. The poller updates on its own cadence.
     if (window.Hosts && !Hosts.loading) Hosts.loadAll();
     const totalVram = loaded.reduce((a, x) => a + x.vram, 0).toFixed(1);
-    const m = h(
-      'div',
-      { class: 'menu' },
+    const m = h('div', { class: 'menu' },
       h('div', { class: 'menu-sec' }, 'resident in vram', h('span', {}, totalVram + 'GB')),
-      ...loaded.map((mm) =>
-        h(
-          'button',
-          {
-            class: 'menu-item' + (mm.name === DRAFT.model ? ' on' : ''),
-            onclick: () => {
-              DRAFT.model = mm.name;
-              render();
-            },
-          },
-          h('span', { class: 'resident' }),
-          mm.name,
-          h(
-            'span',
-            { class: 'ld' },
-            h('span', { class: 'vbar' }, h('i', { style: { width: (mm.vram / 8) * 100 + '%' } })),
-            mm.vram + 'GB',
-          ),
-        ),
-      ),
+      ...loaded.map(mm => h('button', { class: 'menu-item' + (mm.name === DRAFT.model ? ' on' : ''), onclick: () => { DRAFT.model = mm.name; render(); } },
+        h('span', { class: 'resident' }), mm.name, h('span', { class: 'ld' }, h('span', { class: 'vbar' }, h('i', { style: { width: (mm.vram / 8 * 100) + '%' } })), mm.vram + 'GB'))),
       h('div', { class: 'menu-sec' }, 'load other…'),
-      ...DB.MODEL_LIBRARY.filter((n) => !loaded.some((r) => r.name === n)).map((n) =>
-        h(
-          'button',
-          {
-            class: 'menu-item',
-            onclick: () => {
-              DRAFT.model = n;
-              render();
-            },
-          },
-          h('span', { class: 'ghost' }),
-          n,
-          h('span', { class: 'ld' }, 'load'),
-        ),
-      ),
+      ...DB.MODEL_LIBRARY.filter(n => !loaded.some(r => r.name === n)).map(n =>
+        h('button', { class: 'menu-item', onclick: () => { DRAFT.model = n; render(); } }, h('span', { class: 'ghost' }), n, h('span', { class: 'ld' }, 'load'))),
     );
     wrap.append(m);
     closeOnOutside(m, wrap);
@@ -310,52 +202,19 @@ function pickerModel() {
 }
 
 function pickerProject() {
-  const btn = h(
-    'button',
-    { class: 'picker-btn', title: 'tag conversation with project → writes payload.project' },
+  const btn = h('button', { class: 'picker-btn', title: 'tag conversation with project → writes payload.project' },
     h('span', { style: { color: DRAFT.project ? 'var(--accent)' : 'var(--fg-faint)' } }, '#'),
     DRAFT.project || 'no project',
     h('span', { class: 'caret' }, '▲'),
   );
   const wrap = h('div', { class: 'picker' }, btn);
   btn.onclick = () => {
-    if ($('.menu', wrap)) {
-      $('.menu', wrap).remove();
-      return;
-    }
-    const m = h(
-      'div',
-      { class: 'menu' },
+    if ($('.menu', wrap)) { $('.menu', wrap).remove(); return; }
+    const m = h('div', { class: 'menu' },
       h('div', { class: 'menu-sec' }, 'tag → project'),
-      h(
-        'button',
-        {
-          class: 'menu-item' + (!DRAFT.project ? ' on' : ''),
-          onclick: () => {
-            DRAFT.project = null;
-            render();
-          },
-        },
-        h('span', { class: 'ghost' }),
-        'no project',
-      ),
-      ...(window.Projects?.items || DB.PROJECTS).map((p) =>
-        h(
-          'button',
-          {
-            class: 'menu-item' + (DRAFT.project === p.slug ? ' on' : ''),
-            onclick: () => {
-              DRAFT.project = p.slug;
-              render();
-            },
-          },
-          h('span', {
-            class: 'pd',
-            style: { width: '6px', height: '6px', borderRadius: '50%', background: `var(--p-${p.status})` },
-          }),
-          p.slug,
-        ),
-      ),
+      h('button', { class: 'menu-item' + (!DRAFT.project ? ' on' : ''), onclick: () => { DRAFT.project = null; render(); } }, h('span', { class: 'ghost' }), 'no project'),
+      ...(window.Projects?.items || DB.PROJECTS).map(p => h('button', { class: 'menu-item' + (DRAFT.project === p.slug ? ' on' : ''), onclick: () => { DRAFT.project = p.slug; render(); } },
+        h('span', { class: 'pd', style: { width: '6px', height: '6px', borderRadius: '50%', background: `var(--p-${p.status})` } }), p.slug)),
     );
     wrap.append(m);
     closeOnOutside(m, wrap);
@@ -364,18 +223,11 @@ function pickerProject() {
 }
 
 function closeOnOutside(menu, wrap) {
-  const f = (e) => {
-    if (!wrap.contains(e.target)) {
-      menu.remove();
-      document.removeEventListener('mousedown', f);
-    }
-  };
+  const f = (e) => { if (!wrap.contains(e.target)) { menu.remove(); document.removeEventListener('mousedown', f); } };
   setTimeout(() => document.addEventListener('mousedown', f), 0);
 }
 
-function closeSheet() {
-  $('.crail')?.classList.remove('sheet-open');
-}
+function closeSheet() { $('.crail')?.classList.remove('sheet-open'); }
 
 /* ---------- empty state ---------- */
 const EX = [
@@ -385,144 +237,61 @@ const EX = [
   ['ask', 'exponential backoff with full jitter, vanilla JS'],
 ];
 function emptyState() {
-  const wrap = h(
-    'div',
-    { class: 'chat-empty' },
+  const wrap = h('div', { class: 'chat-empty' },
     h('div', { class: 'ascii' }, '  ◆ ◆ ◆\n ──┼──┼──\n  qwen3 · local · gaming-aware'),
     h('div', { class: 'heading' }, 'New conversation — runs on win10, pauses when you game.'),
-    h(
-      'div',
-      { class: 'examples' },
-      ...EX.map(([k, t]) =>
-        h(
-          'button',
-          {
-            class: 'ex-chip',
-            onclick: () => {
-              const ta = $('.comp-ta');
-              if (ta) {
-                ta.value = (k.startsWith('/') ? k + ' ' : '') + t;
-                ta.dispatchEvent(new Event('input'));
-                ta.focus();
-              }
-            },
-          },
-          h('span', { class: 'k' }, k),
-          t,
-        ),
-      ),
-    ),
+    h('div', { class: 'examples' }, ...EX.map(([k, t]) =>
+      h('button', { class: 'ex-chip', onclick: () => { const ta = $('.comp-ta'); if (ta) { ta.value = (k.startsWith('/') ? k + ' ' : '') + t; ta.dispatchEvent(new Event('input')); ta.focus(); } } },
+        h('span', { class: 'k' }, k), t))),
   );
   return wrap;
 }
 
 /* ---------- view ---------- */
-VIEWS.chat = (st, main) => {
+VIEWS.chat = function (st, main) {
   if (!Chat.loaded && !Chat.loading && !Chat.err) Chat.loadAll();
   const focus = st.chat === 'focus';
   const wrap = h('div', { class: 'chat' + (focus ? ' focus' : '') });
 
   // rail
-  const listKids = Chat.conversations.map((c) => convRow(c, String(c.id) === st.conv));
+  const listKids = Chat.conversations.map(c => convRow(c, String(c.id) === st.conv));
   if (!listKids.length) {
-    listKids.push(
-      h(
-        'div',
-        { class: 'crail-empty mut', style: { padding: '14px 16px', fontSize: '11.5px' } },
-        Chat.loading ? 'loading…' : Chat.err ? '✕ ' + Chat.err : 'no conversations yet',
-      ),
-    );
+    listKids.push(h('div', { class: 'crail-empty mut', style: { padding: '14px 16px', fontSize: '11.5px' } },
+      Chat.loading ? 'loading…' : Chat.err ? '✕ ' + Chat.err : 'no conversations yet'));
   }
   const list = h('div', { class: 'crail-list' }, ...listKids);
-  const rail = h(
-    'aside',
-    { class: 'crail' },
-    h(
-      'div',
-      { class: 'crail-hd' },
-      h(
-        'span',
-        { class: 'lbl' },
-        'conversations ',
-        h('span', { class: 'faint num', style: { fontWeight: 400 } }, Chat.conversations.length),
-      ),
-      h(
-        'button',
-        {
-          class: 'crail-new',
-          onclick: () => {
-            setState({ conv: null, focusComposer: 1 });
-          },
-        },
-        '+ new',
-      ),
+  const rail = h('aside', { class: 'crail' },
+    h('div', { class: 'crail-hd' },
+      h('span', { class: 'lbl' }, 'conversations ', h('span', { class: 'faint num', style: { fontWeight: 400 } }, Chat.conversations.length)),
+      h('button', { class: 'crail-new', onclick: () => { setState({ conv: null, focusComposer: 1 }); } }, '+ new'),
     ),
     list,
   );
   wrap.append(rail);
 
   // conversation pane
-  const c = Chat.conversations.find((x) => String(x.id) === st.conv);
+  const c = Chat.conversations.find(x => String(x.id) === st.conv);
   const pane = h('section', { class: 'conv' });
 
   const hd = h('div', { class: 'conv-hd' });
   // mobile sheet toggle
-  hd.append(
-    h(
-      'button',
-      {
-        class: 'iconbtn mobile-only',
-        onclick: () => $('.crail').classList.toggle('sheet-open'),
-        title: 'conversations',
-      },
-      '☰',
-    ),
-  );
+  hd.append(h('button', { class: 'iconbtn mobile-only', onclick: () => $('.crail').classList.toggle('sheet-open'), title: 'conversations' }, '☰'));
   if (c) {
     hd.append(h('span', { class: 'ct-title' }, c.title));
     hd.append(h('span', { class: 'chip' }, c.model));
-    if (c.project)
-      hd.append(
-        h(
-          'button',
-          { class: 'chip src', onclick: () => setState({ tab: 'projects', slug: c.project, conv: null }) },
-          '#' + c.project,
-        ),
-      );
+    if (c.project) hd.append(h('button', { class: 'chip src', onclick: () => setState({ tab: 'projects', slug: c.project, conv: null }) }, '#' + c.project));
   } else {
     hd.append(h('span', { class: 'ct-title' }, 'new conversation'));
   }
   hd.append(h('span', { class: 'grow' }));
-  hd.append(
-    h(
-      'button',
-      {
-        class: 'iconbtn' + (!focus ? ' on' : ''),
-        onclick: () => setState({ chat: focus ? null : 'split' }),
-        title: 'split view (rail + conversation)',
-      },
-      '◫ split',
-    ),
-  );
-  hd.append(
-    h(
-      'button',
-      {
-        class: 'iconbtn' + (focus ? ' on' : ''),
-        onclick: () => setState({ chat: 'focus' }),
-        title: 'focus view (full-bleed conversation)',
-      },
-      '▭ focus',
-    ),
-  );
+  hd.append(h('button', { class: 'iconbtn' + (!focus ? ' on' : ''), onclick: () => setState({ chat: focus ? null : 'split' }), title: 'split view (rail + conversation)' }, '◫ split'));
+  hd.append(h('button', { class: 'iconbtn' + (focus ? ' on' : ''), onclick: () => setState({ chat: 'focus' }), title: 'focus view (full-bleed conversation)' }, '▭ focus'));
   pane.append(hd);
 
   if (c) {
     const turns = h('div', { class: 'turns' }, ...c.turns.map((t, i) => turnEl(c, t, i)));
     pane.append(turns);
-    setTimeout(() => {
-      turns.scrollTop = turns.scrollHeight;
-    }, 0);
+    setTimeout(() => { turns.scrollTop = turns.scrollHeight; }, 0);
   } else {
     pane.append(emptyState());
   }
@@ -533,6 +302,4 @@ VIEWS.chat = (st, main) => {
 
 /* chat-local keymap: n = new */
 window.VIEW_KEYS = window.VIEW_KEYS || {};
-window.VIEW_KEYS.chat = (e) => {
-  if (e.key === 'n') setState({ conv: null, focusComposer: 1 });
-};
+window.VIEW_KEYS.chat = (e) => { if (e.key === 'n') setState({ conv: null, focusComposer: 1 }); };

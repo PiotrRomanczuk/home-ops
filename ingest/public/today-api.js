@@ -19,17 +19,13 @@ const Today = {
 
   async load() {
     if (this.loading) return;
-    this.loading = true;
-    this.err = null;
+    this.loading = true; this.err = null;
     try {
       this.model = await window.api('GET', '/api/today');
       this.loaded = true;
       this.fetchedAt = new Date();
-    } catch (e) {
-      this.err = e.message;
-    } finally {
-      this.loading = false;
-    }
+    } catch (e) { this.err = e.message; }
+    finally { this.loading = false; }
     if (window.render && window.getState().tab === 'today') window.render();
   },
 
@@ -42,18 +38,10 @@ const Today = {
     if (this._poll) return;
     this._poll = setInterval(() => {
       if (document.visibilityState !== 'visible') return;
-      if (window.getState().tab !== 'today') {
-        this.stopPolling();
-        return;
-      }
+      if (window.getState().tab !== 'today') { this.stopPolling(); return; }
       this.load();
     }, TODAY_POLL_MS);
   },
-  stopPolling() {
-    if (this._poll) {
-      clearInterval(this._poll);
-      this._poll = null;
-    }
-  },
+  stopPolling() { if (this._poll) { clearInterval(this._poll); this._poll = null; } },
 };
 window.Today = Today;

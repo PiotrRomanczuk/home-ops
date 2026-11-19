@@ -18,12 +18,10 @@ describe('elapsedSec', () => {
   });
 
   it('counts seconds between started_at and finished_at', () => {
-    expect(
-      elapsedSec({
-        started_at: '2026-06-08T12:00:00Z',
-        finished_at: '2026-06-08T12:00:15Z',
-      }),
-    ).toBe(15);
+    expect(elapsedSec({
+      started_at: '2026-06-08T12:00:00Z',
+      finished_at: '2026-06-08T12:00:15Z',
+    })).toBe(15);
   });
 
   it('uses Date.now() for running jobs', () => {
@@ -119,14 +117,7 @@ describe('jobToTurns (summarise shape) — regression for item 6', () => {
       kind: 'summarise',
       status: 'running',
       payload: { chunks: ['a', 'b', 'c', 'd', 'e'], title: 'partial run' },
-      result: {
-        summary: 'so far so good',
-        sections: [
-          { chunk_idx: 0, partial: '…' },
-          { chunk_idx: 1, partial: '…' },
-        ],
-        partial: true,
-      },
+      result: { summary: 'so far so good', sections: [{ chunk_idx: 0, partial: '…' }, { chunk_idx: 1, partial: '…' }], partial: true },
     });
     expect(assistant.text).toBe('so far so good');
     expect(assistant.sections_hint).toBe('2/5 sections');
@@ -148,30 +139,9 @@ describe('jobToTurns (summarise shape) — regression for item 6', () => {
 describe('groupJobsToConversations', () => {
   it('groups by payload.conversation_id', () => {
     const jobs = [
-      {
-        id: 1,
-        status: 'done',
-        created_at: '2026-06-08T10:00:00Z',
-        finished_at: '2026-06-08T10:00:05Z',
-        payload: { conversation_id: 'A', prompt: 'first' },
-        result: { response: 'r1' },
-      },
-      {
-        id: 2,
-        status: 'done',
-        created_at: '2026-06-08T10:01:00Z',
-        finished_at: '2026-06-08T10:01:05Z',
-        payload: { conversation_id: 'A', prompt: 'follow up' },
-        result: { response: 'r2' },
-      },
-      {
-        id: 3,
-        status: 'done',
-        created_at: '2026-06-08T09:00:00Z',
-        finished_at: '2026-06-08T09:00:05Z',
-        payload: { conversation_id: 'B', prompt: 'unrelated' },
-        result: { response: 'r3' },
-      },
+      { id: 1, status: 'done', created_at: '2026-06-08T10:00:00Z', finished_at: '2026-06-08T10:00:05Z', payload: { conversation_id: 'A', prompt: 'first' }, result: { response: 'r1' } },
+      { id: 2, status: 'done', created_at: '2026-06-08T10:01:00Z', finished_at: '2026-06-08T10:01:05Z', payload: { conversation_id: 'A', prompt: 'follow up' }, result: { response: 'r2' } },
+      { id: 3, status: 'done', created_at: '2026-06-08T09:00:00Z', finished_at: '2026-06-08T09:00:05Z', payload: { conversation_id: 'B', prompt: 'unrelated' }, result: { response: 'r3' } },
     ];
     const convs = groupJobsToConversations(jobs);
     expect(convs).toHaveLength(2);
@@ -183,35 +153,15 @@ describe('groupJobsToConversations', () => {
 
   it('falls back to job-N key when conversation_id is missing', () => {
     const convs = groupJobsToConversations([
-      {
-        id: 7,
-        status: 'done',
-        created_at: '2026-06-08T08:00:00Z',
-        payload: { prompt: 'solo' },
-        result: { response: 'r' },
-      },
+      { id: 7, status: 'done', created_at: '2026-06-08T08:00:00Z', payload: { prompt: 'solo' }, result: { response: 'r' } },
     ]);
     expect(convs[0].id).toBe('job-7');
   });
 
   it('sorts conversations by updated DESC', () => {
     const convs = groupJobsToConversations([
-      {
-        id: 1,
-        status: 'done',
-        created_at: '2026-06-08T09:00:00Z',
-        finished_at: '2026-06-08T09:00:05Z',
-        payload: { conversation_id: 'old', prompt: 'p' },
-        result: {},
-      },
-      {
-        id: 2,
-        status: 'done',
-        created_at: '2026-06-08T11:00:00Z',
-        finished_at: '2026-06-08T11:00:05Z',
-        payload: { conversation_id: 'new', prompt: 'p' },
-        result: {},
-      },
+      { id: 1, status: 'done', created_at: '2026-06-08T09:00:00Z', finished_at: '2026-06-08T09:00:05Z', payload: { conversation_id: 'old', prompt: 'p' }, result: {} },
+      { id: 2, status: 'done', created_at: '2026-06-08T11:00:00Z', finished_at: '2026-06-08T11:00:05Z', payload: { conversation_id: 'new', prompt: 'p' }, result: {} },
     ]);
     expect(convs[0].id).toBe('new');
     expect(convs[1].id).toBe('old');

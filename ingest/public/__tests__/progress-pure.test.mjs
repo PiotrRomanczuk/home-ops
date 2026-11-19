@@ -8,13 +8,8 @@ import '../progress-pure.js';
 const { cell, level, gridMax, tiles, breakdown, stillLabel, weekLabel } = globalThis.ProgressPure;
 
 const series = (extra = {}) => ({
-  commits: [0, 4, 10],
-  pr_merged: [0, 1, 2],
-  deploys: [0, 0, 1],
-  tasks_done: [1, 0, 3],
-  runs_ok: [96, 96, 90],
-  runs_failed: [0, 2, 0],
-  ...extra,
+  commits: [0, 4, 10], pr_merged: [0, 1, 2], deploys: [0, 0, 1], tasks_done: [1, 0, 3],
+  runs_ok: [96, 96, 90], runs_failed: [0, 2, 0], ...extra,
 });
 
 describe('cell', () => {
@@ -39,13 +34,7 @@ describe('level + gridMax', () => {
 describe('tiles', () => {
   it('this week vs last week across projects', () => {
     const t = tiles([{ series: series() }, { series: series({ commits: [0, 1, 1] }) }], 3);
-    expect(t.find((x) => x.key === 'commits')).toEqual({
-      key: 'commits',
-      label: 'commity',
-      now: 11,
-      prev: 5,
-      delta: 6,
-    });
+    expect(t.find((x) => x.key === 'commits')).toEqual({ key: 'commits', label: 'commity', now: 11, prev: 5, delta: 6 });
     expect(t.find((x) => x.key === 'runs_failed')).toMatchObject({ now: 0, prev: 4, delta: -4 });
   });
 });

@@ -6,23 +6,17 @@
 /* ---------- hyperscript ---------- */
 function h(tag, props, ...kids) {
   const e = document.createElement(tag);
-  if (props)
-    for (const k in props) {
-      const v = props[k];
-      if (v == null || v === false) continue;
-      if (k === 'class') e.className = v;
-      else if (k === 'html') e.innerHTML = v;
-      else if (k === 'dataset') Object.assign(e.dataset, v);
-      else if (k === 'style' && typeof v === 'object') Object.assign(e.style, v);
-      else if (k.startsWith('on') && typeof v === 'function') e.addEventListener(k.slice(2).toLowerCase(), v);
-      else if (k in e && k !== 'list') {
-        try {
-          e[k] = v;
-        } catch {
-          e.setAttribute(k, v);
-        }
-      } else e.setAttribute(k, v);
-    }
+  if (props) for (const k in props) {
+    const v = props[k];
+    if (v == null || v === false) continue;
+    if (k === 'class') e.className = v;
+    else if (k === 'html') e.innerHTML = v;
+    else if (k === 'dataset') Object.assign(e.dataset, v);
+    else if (k === 'style' && typeof v === 'object') Object.assign(e.style, v);
+    else if (k.startsWith('on') && typeof v === 'function') e.addEventListener(k.slice(2).toLowerCase(), v);
+    else if (k in e && k !== 'list') { try { e[k] = v; } catch { e.setAttribute(k, v); } }
+    else e.setAttribute(k, v);
+  }
   for (const kid of kids.flat(3)) {
     if (kid == null || kid === false) continue;
     e.append(kid.nodeType ? kid : document.createTextNode(kid));
@@ -31,10 +25,7 @@ function h(tag, props, ...kids) {
 }
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
-const clear = (e) => {
-  while (e.firstChild) e.removeChild(e.firstChild);
-  return e;
-};
+const clear = (e) => { while (e.firstChild) e.removeChild(e.firstChild); return e; };
 
 /* ---------- hash state ---------- */
 function getState() {
@@ -43,10 +34,7 @@ function getState() {
   for (const pair of raw.split('&')) {
     if (!pair) continue;
     const i = pair.indexOf('=');
-    if (i < 0) {
-      s[pair] = true;
-      continue;
-    }
+    if (i < 0) { s[pair] = true; continue; }
     s[decodeURIComponent(pair.slice(0, i))] = decodeURIComponent(pair.slice(i + 1));
   }
   if (!s.tab) s.tab = 'today';
@@ -55,17 +43,14 @@ function getState() {
 function setState(patch, replace) {
   const s = { ...getState(), ...patch };
   for (const k in s) if (s[k] === null || s[k] === undefined || s[k] === '') delete s[k];
-  const str = Object.entries(s)
-    .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
-    .join('&');
+  const str = Object.entries(s).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&');
   if (replace) history.replaceState(null, '', '#' + str);
   else location.hash = str;
   // replaceState fires no hashchange, so re-render explicitly. window.render is
   // the vanilla render() by default, or the Preact shell's re-render if loaded.
   if (replace) window.render();
 }
-window.setState = setState;
-window.getState = getState;
+window.setState = setState; window.getState = getState;
 
 /* ---------- time helpers ---------- */
 function parseTs(t) {
@@ -74,48 +59,31 @@ function parseTs(t) {
   return new Date(t);
 }
 function rel(t) {
-  const d = parseTs(t),
-    s = Math.round((Date.now() - d) / 1000);
+  const d = parseTs(t), s = Math.round((Date.now() - d) / 1000);
   if (s < 0) return 'now';
   if (s < 60) return s + 's ago';
-  const m = Math.round(s / 60);
-  if (m < 60) return m + 'm ago';
-  const hr = Math.round(m / 60);
-  if (hr < 24) return hr + 'h ago';
+  const m = Math.round(s / 60); if (m < 60) return m + 'm ago';
+  const hr = Math.round(m / 60); if (hr < 24) return hr + 'h ago';
   return Math.round(hr / 24) + 'd ago';
 }
 function relShort(t) {
-  const d = parseTs(t),
-    s = Math.round((Date.now() - d) / 1000);
+  const d = parseTs(t), s = Math.round((Date.now() - d) / 1000);
   if (s < 60) return s + 's';
-  const m = Math.round(s / 60);
-  if (m < 60) return m + 'm';
-  const hr = Math.round(m / 60);
-  if (hr < 24) return hr + 'h';
+  const m = Math.round(s / 60); if (m < 60) return m + 'm';
+  const hr = Math.round(m / 60); if (hr < 24) return hr + 'h';
   return Math.round(hr / 24) + 'd';
 }
-function abs(t) {
-  const d = parseTs(t);
-  return d.toTimeString().slice(0, 8);
-}
-function lagClass(sec) {
-  return sec <= 30 ? 'good' : sec <= 120 ? 'warn' : 'stale';
-}
-window.rel = rel;
-window.relShort = relShort;
-window.abs = abs;
-window.parseTs = parseTs;
+function abs(t) { const d = parseTs(t); return d.toTimeString().slice(0, 8); }
+function lagClass(sec) { return sec <= 30 ? 'good' : sec <= 120 ? 'warn' : 'stale'; }
+window.rel = rel; window.relShort = relShort; window.abs = abs; window.parseTs = parseTs;
 
 /* ---------- sparkline ---------- */
 function sparkline(vals, opts = {}) {
-  const w = opts.w || 120,
-    ht = opts.h || 26,
-    pad = 1;
-  const max = opts.max ?? Math.max(...vals, 1),
-    min = opts.min ?? 0;
+  const w = opts.w || 120, ht = opts.h || 26, pad = 1;
+  const max = opts.max ?? Math.max(...vals, 1), min = opts.min ?? 0;
   const n = vals.length;
-  const x = (i) => pad + (i / (n - 1)) * (w - pad * 2);
-  const y = (v) => ht - pad - ((v - min) / (max - min || 1)) * (ht - pad * 2);
+  const x = i => pad + (i / (n - 1)) * (w - pad * 2);
+  const y = v => ht - pad - ((v - min) / (max - min || 1)) * (ht - pad * 2);
   const pts = vals.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
   const area = `${pad},${ht - pad} ${pts} ${w - pad},${ht - pad}`;
   const col = opts.color || 'var(--accent)';
@@ -134,12 +102,8 @@ window.sparkline = sparkline;
 /* mini commit-pulse bars for project cards */
 function pulseBars(vals, color) {
   const max = Math.max(...vals, 1);
-  return `<span class="pulse">${vals
-    .map(
-      (v) =>
-        `<i style="height:${Math.max(8, (v / max) * 100)}%;background:${v === 0 ? 'var(--border)' : color || 'var(--accent)'}"></i>`,
-    )
-    .join('')}</span>`;
+  return `<span class="pulse">${vals.map(v =>
+    `<i style="height:${Math.max(8, (v / max) * 100)}%;background:${v === 0 ? 'var(--border)' : (color || 'var(--accent)')}"></i>`).join('')}</span>`;
 }
 window.pulseBars = pulseBars;
 
@@ -151,17 +115,17 @@ window.LV_ORDER = LV_ORDER;
    CHROME (top tab strip)
    ============================================================ */
 const TABS = [
-  { id: 'today', label: 'Dziś', key: '1', ico: icoToday },
-  { id: 'status', label: 'Status', key: '2', ico: icoStatus },
-  { id: 'chat', label: 'Chat', key: '3', ico: icoChat, hidden: true },
+  { id: 'today',    label: 'Dziś',     key: '1', ico: icoToday },
+  { id: 'status',   label: 'Status',   key: '2', ico: icoStatus },
+  { id: 'chat',     label: 'Chat',     key: '3', ico: icoChat, hidden: true },
   { id: 'projects', label: 'Projects', key: '4', ico: icoProj },
-  { id: 'logs', label: 'Logs', key: '5', ico: icoLogs },
-  { id: 'hosts', label: 'Hosts', key: '6', ico: icoHosts },
-  { id: 'server', label: 'Serwer', key: '7', ico: icoServer },
-  { id: 'evals', label: 'Evals', key: '', ico: icoEvals, hidden: true },
-  { id: 'board', label: 'Board', key: '8', ico: icoBoard },
-  { id: 'progress', label: 'Postęp', key: '9', ico: icoProgress },
-  { id: 'scores', label: 'Scores', key: '', ico: icoScores, hidden: true },
+  { id: 'logs',     label: 'Logs',     key: '5', ico: icoLogs },
+  { id: 'hosts',    label: 'Hosts',    key: '6', ico: icoHosts },
+  { id: 'server',   label: 'Serwer',   key: '7', ico: icoServer },
+  { id: 'evals',    label: 'Evals',    key: '',  ico: icoEvals, hidden: true },
+  { id: 'board',    label: 'Board',    key: '8', ico: icoBoard },
+  { id: 'progress', label: 'Postęp',   key: '9', ico: icoProgress },
+  { id: 'scores',   label: 'Scores',   key: '',  ico: icoScores, hidden: true },
   { id: 'decisions', label: 'Decisions', key: '0', ico: icoDecisions, hidden: true },
 ];
 // hidden: dead since the local-LLM lane closed (2026-10-20 tab analysis, K6) —
@@ -171,72 +135,31 @@ function isTabShown(t, st) {
   if (st.tab === t.id) return true;
   return !t.hidden;
 }
-function icon(p) {
-  return `<svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
-}
-function icoToday() {
-  return icon(
-    '<rect x="2.5" y="3.5" width="11" height="10" rx="1.5"/><path d="M2.5 6.5h11M5.5 2v3M10.5 2v3"/><circle cx="8" cy="10" r="1" fill="currentColor"/>',
-  );
-}
-function icoStatus() {
-  return icon('<circle cx="8" cy="8" r="5.5"/><path d="M5 8.3l2 2 4-4.5"/>');
-}
-function icoChat() {
-  return icon('<path d="M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z"/>');
-}
-function icoProj() {
-  return icon(
-    '<rect x="2.5" y="2.5" width="4.5" height="4.5"/><rect x="9" y="2.5" width="4.5" height="4.5"/><rect x="2.5" y="9" width="4.5" height="4.5"/><rect x="9" y="9" width="4.5" height="4.5"/>',
-  );
-}
-function icoLogs() {
-  return icon('<path d="M3 4h10M3 7h10M3 10h7M3 13h4"/>');
-}
-function icoHosts() {
-  return icon(
-    '<rect x="2.5" y="3" width="11" height="3.2"/><rect x="2.5" y="8.5" width="11" height="3.2"/><circle cx="5" cy="4.6" r="0.4" fill="currentColor"/><circle cx="5" cy="10.1" r="0.4" fill="currentColor"/>',
-  );
-}
-function icoEvals() {
-  return icon(
-    '<rect x="2.5" y="2.5" width="3.4" height="7"/><rect x="6.4" y="2.5" width="3.4" height="10.5"/><rect x="10.3" y="2.5" width="3.4" height="5"/>',
-  );
-}
-function icoServer() {
-  return icon('<rect x="2.5" y="2.5" width="11" height="11" rx="1.5"/><path d="M4.5 10.5l2-3 2 2 3-4.5"/>');
-}
-function icoProgress() {
-  return icon(
-    '<rect x="2.5" y="9" width="2.6" height="4.5"/><rect x="6.7" y="6" width="2.6" height="7.5"/><rect x="10.9" y="2.5" width="2.6" height="11"/>',
-  );
-}
-function icoBoard() {
-  return icon(
-    '<rect x="2.5" y="2.5" width="3.2" height="11"/><rect x="6.4" y="2.5" width="3.2" height="7"/><rect x="10.3" y="2.5" width="3.2" height="9"/>',
-  );
-}
-function icoScores() {
-  return icon('<path d="M2.5 8.5l3 3 5-6.5"/><circle cx="12.5" cy="4" r="1.3"/>');
-}
-function icoDecisions() {
-  return icon('<rect x="2.5" y="3" width="11" height="10" rx="1.5"/><path d="M5 8.2l2 2 4-4"/>');
-}
+function icon(p) { return `<svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`; }
+function icoToday()  { return icon('<rect x="2.5" y="3.5" width="11" height="10" rx="1.5"/><path d="M2.5 6.5h11M5.5 2v3M10.5 2v3"/><circle cx="8" cy="10" r="1" fill="currentColor"/>'); }
+function icoStatus() { return icon('<circle cx="8" cy="8" r="5.5"/><path d="M5 8.3l2 2 4-4.5"/>'); }
+function icoChat()  { return icon('<path d="M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z"/>'); }
+function icoProj()  { return icon('<rect x="2.5" y="2.5" width="4.5" height="4.5"/><rect x="9" y="2.5" width="4.5" height="4.5"/><rect x="2.5" y="9" width="4.5" height="4.5"/><rect x="9" y="9" width="4.5" height="4.5"/>'); }
+function icoLogs()  { return icon('<path d="M3 4h10M3 7h10M3 10h7M3 13h4"/>'); }
+function icoHosts() { return icon('<rect x="2.5" y="3" width="11" height="3.2"/><rect x="2.5" y="8.5" width="11" height="3.2"/><circle cx="5" cy="4.6" r="0.4" fill="currentColor"/><circle cx="5" cy="10.1" r="0.4" fill="currentColor"/>'); }
+function icoEvals() { return icon('<rect x="2.5" y="2.5" width="3.4" height="7"/><rect x="6.4" y="2.5" width="3.4" height="10.5"/><rect x="10.3" y="2.5" width="3.4" height="5"/>'); }
+function icoServer() { return icon('<rect x="2.5" y="2.5" width="11" height="11" rx="1.5"/><path d="M4.5 10.5l2-3 2 2 3-4.5"/>'); }
+function icoProgress() { return icon('<rect x="2.5" y="9" width="2.6" height="4.5"/><rect x="6.7" y="6" width="2.6" height="7.5"/><rect x="10.9" y="2.5" width="2.6" height="11"/>'); }
+function icoBoard() { return icon('<rect x="2.5" y="2.5" width="3.2" height="11"/><rect x="6.4" y="2.5" width="3.2" height="7"/><rect x="10.3" y="2.5" width="3.2" height="9"/>'); }
+function icoScores() { return icon('<path d="M2.5 8.5l3 3 5-6.5"/><circle cx="12.5" cy="4" r="1.3"/>'); }
+function icoDecisions() { return icon('<rect x="2.5" y="3" width="11" height="10" rx="1.5"/><path d="M5 8.2l2 2 4-4"/>'); }
 
 function renderChrome() {
   const st = getState();
   const counts = {
-    chat: (window.Chat?.conversations || DB.CONVERSATIONS).filter(
-      (c) => c.status === 'running' || c.status === 'queued' || c.status === 'paused',
-    ).length,
-    projects: (window.Projects?.items || DB.PROJECTS).filter((p) => p.status === 'hot').length,
-    logs: (window.Logs?.rows || DB.LOGS).filter((l) => LV_ORDER[l.level] >= 4).length,
-    hosts: DB.HOSTS.filter((x) => x.hd !== 'good').length,
+    chat: (window.Chat?.conversations || DB.CONVERSATIONS).filter(c => c.status === 'running' || c.status === 'queued' || c.status === 'paused').length,
+    projects: (window.Projects?.items || DB.PROJECTS).filter(p => p.status === 'hot').length,
+    logs: (window.Logs?.rows || DB.LOGS).filter(l => LV_ORDER[l.level] >= 4).length,
+    hosts: DB.HOSTS.filter(x => x.hd !== 'good').length,
     // Attention badge: cards in rotation whose files eval-tick has not seen.
-    evals: (window.Evals?.items || []).filter((t) => (t.stage === 'testing' || t.stage === 'active') && !t.has_files)
-      .length,
+    evals: (window.Evals?.items || []).filter(t => (t.stage === 'testing' || t.stage === 'active') && !t.has_files).length,
     // Open (not-done) tasks in the Now column.
-    board: (window.Board?.items || []).filter((t) => t.column_key === 'now' && !t.done).length,
+    board: (window.Board?.items || []).filter(t => t.column_key === 'now' && !t.done).length,
     // Questions routines filed that still wait for an answer.
     decisions: Math.max(window.Decisions?.openCount?.() || 0, window.Today?.model?.decisions?.length || 0),
     // Units that failed in the last 24 h (activity-watcher).
@@ -246,139 +169,74 @@ function renderChrome() {
     // Open Now tasks across hot/warm projects + Board.
     today: window.Today?.openCount?.() || 0,
   };
-  const tabs = TABS.filter((t) => isTabShown(t, st)).map((t) =>
-    h(
-      'button',
-      {
-        class: 'tab' + (st.tab === t.id ? ' on' : ''),
-        onclick: () => setState({ tab: t.id, conv: null, slug: null, eval: null }),
-        title: t.key ? `${t.label}  (press ${t.key})` : t.label,
-      },
-      h('span', { class: 'ico', html: t.ico() }),
-      h('span', { class: 'label-hide' }, t.label),
-      counts[t.id] ? h('span', { class: 'ct num' }, String(counts[t.id])) : null,
-    ),
-  );
+  const tabs = TABS.filter(t => isTabShown(t, st)).map(t => h('button', {
+    class: 'tab' + (st.tab === t.id ? ' on' : ''),
+    onclick: () => setState({ tab: t.id, conv: null, slug: null, eval: null }),
+    title: t.key ? `${t.label}  (press ${t.key})` : t.label,
+  },
+    h('span', { class: 'ico', html: t.ico() }),
+    h('span', { class: 'label-hide' }, t.label),
+    counts[t.id] ? h('span', { class: 'ct num' }, String(counts[t.id])) : null,
+  ));
 
-  return h(
-    'header',
-    { class: 'chrome' },
-    h('div', { class: 'brand' }, h('span', { class: 'dot' }), 'home-ops', h('span', { class: 'ver' }, 'elitedesk')),
+  return h('header', { class: 'chrome' },
+    h('div', { class: 'brand' },
+      h('span', { class: 'dot' }),
+      'home-ops',
+      h('span', { class: 'ver' }, 'elitedesk'),
+    ),
     h('nav', { class: 'tabs' }, ...tabs),
-    h(
-      'div',
-      { class: 'right' },
-      h(
-        'button',
-        { class: 'chrome-btn', title: 'toggle absolute / relative time  (t)', onclick: toggleTimeMode },
+    h('div', { class: 'right' },
+      h('button', { class: 'chrome-btn', title: 'toggle absolute / relative time  (t)', onclick: toggleTimeMode },
         h('span', { html: icon('<circle cx="8" cy="8" r="5.5"/><path d="M8 5v3l2 1.5"/>') }),
-        h('span', { id: 'timeModeLbl' }, window.__abs ? 'abs' : 'rel'),
-      ),
-      h('button', { class: 'chrome-btn', title: 'keyboard map' }, h('kbd', {}, '?')),
+        h('span', { id: 'timeModeLbl' }, window.__abs ? 'abs' : 'rel')),
+      h('button', { class: 'chrome-btn', title: 'keyboard map' },
+        h('kbd', {}, '?')),
     ),
   );
 }
-function toggleTimeMode() {
-  window.__abs = !window.__abs;
-  window.render();
-}
+function toggleTimeMode() { window.__abs = !window.__abs; window.render(); }
 
 /* ============================================================
    AMBIENT FOOTER
    ============================================================ */
 function renderFooter() {
-  const segs = DB.HOSTS.map((host) =>
-    h(
-      'div',
-      {
-        class: 'seg',
-        title: `${host.id} · ${host.role} · up ${host.up} · last event ${host.lag}s ago`,
-        onclick: () => setState({ tab: 'hosts', focus: host.id }),
-        style: { cursor: 'pointer' },
-      },
-      h('span', { class: 'hd ' + lagClass(host.lag) }),
-      h('span', { class: 'hn' }, host.id),
-      h('span', { class: 'lag num' }, host.lag + 's'),
-    ),
-  );
+  const segs = DB.HOSTS.map(host => h('div', {
+    class: 'seg', title: `${host.id} · ${host.role} · up ${host.up} · last event ${host.lag}s ago`,
+    onclick: () => setState({ tab: 'hosts', focus: host.id }),
+    style: { cursor: 'pointer' },
+  },
+    h('span', { class: 'hd ' + lagClass(host.lag) }),
+    h('span', { class: 'hn' }, host.id),
+    h('span', { class: 'lag num' }, host.lag + 's'),
+  ));
 
   const q = DB.HEALTH;
-  const vram = DB.MODELS_LOADED.map((m) => m.name).join(', ');
+  const vram = DB.MODELS_LOADED.map(m => m.name).join(', ');
   const totVram = DB.MODELS_LOADED.reduce((a, m) => a + m.vram, 0).toFixed(1);
 
-  return h(
-    'footer',
-    { class: 'foot' },
+  return h('footer', { class: 'foot' },
     ...segs,
-    h(
-      'div',
-      {
-        class: 'seg',
-        title: 'ingest health — probes /api/health',
-        onclick: () => setState({ tab: 'logs', source: 'app:home-ops' }),
-        style: { cursor: 'pointer' },
-      },
+    h('div', { class: 'seg', title: 'ingest health — probes /api/health', onclick: () => setState({ tab: 'logs', source: 'app:home-ops' }), style: { cursor: 'pointer' } },
       h('span', { class: 'hd ' + (q.ingest === 'ok' ? 'good' : 'stale') }),
-      h('span', {}, 'ingest ' + q.ingest),
-    ),
-    h(
-      'div',
-      {
-        class: 'seg num',
-        title: 'gpu_jobs queue',
-        onclick: () => setState({ tab: 'chat' }),
-        style: { cursor: 'pointer' },
-      },
-      'queue ',
-      h(
-        'b',
-        { style: { color: q.q_running ? 'var(--s-running)' : 'var(--fg-muted)', fontWeight: 600 } },
-        q.q_running + 'r',
-      ),
-      '/',
-      h(
-        'b',
-        { style: { color: q.q_queued ? 'var(--s-queued)' : 'var(--fg-muted)', fontWeight: 600 } },
-        q.q_queued + 'q',
-      ),
-    ),
-    h(
-      'div',
-      { class: 'seg vram', title: 'models resident in win10 VRAM' },
-      'vram ',
-      h('b', {}, vram),
-      h('span', { class: 'faint' }, ' ' + totVram + 'GB'),
-    ),
+      h('span', {}, 'ingest ' + q.ingest)),
+    h('div', { class: 'seg num', title: 'gpu_jobs queue', onclick: () => setState({ tab: 'chat' }), style: { cursor: 'pointer' } },
+      'queue ', h('b', { style: { color: q.q_running ? 'var(--s-running)' : 'var(--fg-muted)', fontWeight: 600 } }, q.q_running + 'r'),
+      '/', h('b', { style: { color: q.q_queued ? 'var(--s-queued)' : 'var(--fg-muted)', fontWeight: 600 } }, q.q_queued + 'q')),
+    h('div', { class: 'seg vram', title: 'models resident in win10 VRAM' },
+      'vram ', h('b', {}, vram), h('span', { class: 'faint' }, ' ' + totVram + 'GB')),
     h('div', { class: 'spacer' }),
-    h(
-      'button',
-      { class: 'foot-add', title: 'quick-capture → inbox.md  (press c)', onclick: openCapture },
-      h('span', { class: 'plus' }, '+'),
-      h('span', { class: 'lbl', style: { color: 'inherit' } }, 'inbox'),
-    ),
+    h('button', { class: 'foot-add', title: 'quick-capture → inbox.md  (press c)', onclick: openCapture },
+      h('span', { class: 'plus' }, '+'), h('span', { class: 'lbl', style: { color: 'inherit' } }, 'inbox')),
   );
 }
 
 /* ---------- quick-capture (one field, posts to inbox.md) ---------- */
 function openCapture() {
   if ($('#capture')) return;
-  const input = h('input', {
-    class: 'cap-in foc',
-    placeholder: 'note → inbox.md … (e.g. look into win10 OllamaWatcher silence)',
-    autofocus: true,
-  });
-  const wrap = h(
-    'div',
-    { id: 'capture', class: 'cap-wrap' },
-    h(
-      'form',
-      {
-        class: 'cap-form',
-        onsubmit: (e) => {
-          e.preventDefault();
-          submitCapture(input.value);
-        },
-      },
+  const input = h('input', { class: 'cap-in foc', placeholder: 'note → inbox.md … (e.g. look into win10 OllamaWatcher silence)', autofocus: true });
+  const wrap = h('div', { id: 'capture', class: 'cap-wrap' },
+    h('form', { class: 'cap-form', onsubmit: (e) => { e.preventDefault(); submitCapture(input.value); } },
       h('span', { class: 'cap-pre' }, '+'),
       input,
       h('span', { class: 'cap-hint' }, h('kbd', {}, '↵'), ' send · ', h('kbd', {}, 'esc'), ' close'),
@@ -386,16 +244,9 @@ function openCapture() {
   );
   document.body.append(wrap);
   requestAnimationFrame(() => input.focus());
-  const esc = (e) => {
-    if (e.key === 'Escape') {
-      wrap.remove();
-      document.removeEventListener('keydown', esc);
-    }
-  };
+  const esc = (e) => { if (e.key === 'Escape') { wrap.remove(); document.removeEventListener('keydown', esc); } };
   document.addEventListener('keydown', esc);
-  wrap.addEventListener('click', (e) => {
-    if (e.target === wrap) wrap.remove();
-  });
+  wrap.addEventListener('click', (e) => { if (e.target === wrap) wrap.remove(); });
 }
 function submitCapture(text) {
   if (!text.trim()) return;
@@ -430,22 +281,15 @@ window.addEventListener('hashchange', () => window.render());
 
 /* ---------- global keymap ---------- */
 document.addEventListener('keydown', (e) => {
-  const typing =
-    /^(INPUT|TEXTAREA)$/.test(document.activeElement?.tagName) || document.activeElement?.isContentEditable;
+  const typing = /^(INPUT|TEXTAREA)$/.test(document.activeElement?.tagName) || document.activeElement?.isContentEditable;
   if (typing) return;
   const st = getState();
-  const keyTab = !e.metaKey && !e.ctrlKey && !e.altKey && TABS.find((t) => t.key && t.key === e.key);
-  if (keyTab) {
-    setState({ tab: keyTab.id, conv: null, slug: null, eval: null });
-    e.preventDefault();
-  } else if (e.key === 'c') {
-    openCapture();
-    e.preventDefault();
-  } else if (e.key === 't') {
-    toggleTimeMode();
-  } else if (e.key === 'Escape' && (st.conv || st.slug || st.eval)) {
-    setState({ conv: null, slug: null, eval: null });
-  } else if (window.VIEW_KEYS && window.VIEW_KEYS[st.tab]) window.VIEW_KEYS[st.tab](e, st);
+  const keyTab = !e.metaKey && !e.ctrlKey && !e.altKey && TABS.find(t => t.key && t.key === e.key);
+  if (keyTab) { setState({ tab: keyTab.id, conv: null, slug: null, eval: null }); e.preventDefault(); }
+  else if (e.key === 'c') { openCapture(); e.preventDefault(); }
+  else if (e.key === 't') { toggleTimeMode(); }
+  else if (e.key === 'Escape' && (st.conv || st.slug || st.eval)) { setState({ conv: null, slug: null, eval: null }); }
+  else if (window.VIEW_KEYS && window.VIEW_KEYS[st.tab]) window.VIEW_KEYS[st.tab](e, st);
 });
 
 /* boot */

@@ -8,7 +8,7 @@
 const PROGRESS_POLL_MS = 300_000;
 
 const Progress = {
-  model: null, // { weeks: [...], projects: [{ slug, series, stalled, ... }] }
+  model: null,      // { weeks: [...], projects: [{ slug, series, stalled, ... }] }
   loaded: false,
   loading: false,
   err: null,
@@ -17,41 +17,27 @@ const Progress = {
 
   async load() {
     if (this.loading) return;
-    this.loading = true;
-    this.err = null;
+    this.loading = true; this.err = null;
     try {
       this.model = await window.api('GET', '/api/progress?weeks=12');
       this.loaded = true;
       this.fetchedAt = new Date();
-    } catch (e) {
-      this.err = e.message;
-    } finally {
-      this.loading = false;
-    }
+    } catch (e) { this.err = e.message; }
+    finally { this.loading = false; }
     if (window.render && window.getState().tab === 'progress') window.render();
   },
 
   /* Badge: hot projects that have not moved for 14 days. */
-  stalledCount() {
-    return (this.model?.projects || []).filter((p) => p.stalled).length;
-  },
+  stalledCount() { return (this.model?.projects || []).filter((p) => p.stalled).length; },
 
   startPolling() {
     if (this._poll) return;
     this._poll = setInterval(() => {
       if (document.visibilityState !== 'visible') return;
-      if (window.getState().tab !== 'progress') {
-        this.stopPolling();
-        return;
-      }
+      if (window.getState().tab !== 'progress') { this.stopPolling(); return; }
       this.load();
     }, PROGRESS_POLL_MS);
   },
-  stopPolling() {
-    if (this._poll) {
-      clearInterval(this._poll);
-      this._poll = null;
-    }
-  },
+  stopPolling() { if (this._poll) { clearInterval(this._poll); this._poll = null; } },
 };
 window.Progress = Progress;

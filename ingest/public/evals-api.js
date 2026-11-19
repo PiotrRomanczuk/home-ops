@@ -19,17 +19,13 @@ const Evals = {
 
   async loadAll() {
     if (this.loading) return;
-    this.loading = true;
-    this.err = null;
+    this.loading = true; this.err = null;
     try {
       const j = await window.api('GET', '/api/eval_tasks');
       this.items = j.tasks || [];
       this.loaded = true;
-    } catch (e) {
-      this.err = e.message;
-    } finally {
-      this.loading = false;
-    }
+    } catch (e) { this.err = e.message; }
+    finally { this.loading = false; }
     if (window.render) window.render();
   },
 
@@ -46,20 +42,17 @@ const Evals = {
 
   async setStage(item, stage) {
     const prev = item.stage;
-    item.stage = stage; // optimistic
+    item.stage = stage;            // optimistic
     item._pending = true;
     if (window.render) window.render();
     try {
       const j = await window.api('POST', `/api/eval_tasks/${item.id}/stage`, { stage });
       Object.assign(item, j.task, { _pending: false });
     } catch (e) {
-      item.stage = prev; // rollback
+      item.stage = prev;           // rollback
       item._pending = false;
       item._error = e.message || 'stage move failed';
-      setTimeout(() => {
-        delete item._error;
-        if (window.render) window.render();
-      }, 3500);
+      setTimeout(() => { delete item._error; if (window.render) window.render(); }, 3500);
     }
     if (window.render) window.render();
   },
@@ -76,11 +69,8 @@ const Evals = {
     try {
       const j = await window.api('GET', `/api/eval_tasks/${item.id}/scores`);
       item._scores = j.scores || [];
-    } catch {
-      item._scores = [];
-    } finally {
-      item._scoresLoading = false;
-    }
+    } catch { item._scores = []; }
+    finally { item._scoresLoading = false; }
     if (window.render) window.render();
   },
 
@@ -93,10 +83,7 @@ const Evals = {
   },
 
   stopPoll() {
-    if (this._poll) {
-      clearInterval(this._poll);
-      this._poll = null;
-    }
+    if (this._poll) { clearInterval(this._poll); this._poll = null; }
   },
 };
 

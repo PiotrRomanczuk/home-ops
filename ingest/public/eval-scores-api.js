@@ -23,8 +23,7 @@ const EvalScores = {
 
   async load() {
     if (this.loading) return;
-    this.loading = true;
-    this.err = null;
+    this.loading = true; this.err = null;
     try {
       const j = await window.api('GET', '/api/eval_scores');
       this.available = j.available !== false;
@@ -33,11 +32,8 @@ const EvalScores = {
       this.overall = j.overall || null;
       this.config = j.config || null;
       this.loaded = true;
-    } catch (e) {
-      this.err = e.message;
-    } finally {
-      this.loading = false;
-    }
+    } catch (e) { this.err = e.message; }
+    finally { this.loading = false; }
     if (window.render) window.render();
   },
 
@@ -50,10 +46,7 @@ const EvalScores = {
   },
 
   stopPoll() {
-    if (this._poll) {
-      clearInterval(this._poll);
-      this._poll = null;
-    }
+    if (this._poll) { clearInterval(this._poll); this._poll = null; }
   },
 };
 

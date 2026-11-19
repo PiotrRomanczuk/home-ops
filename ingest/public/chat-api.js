@@ -25,14 +25,12 @@ async function api(method, path, body) {
   }
   const r = await fetch(path, opts);
   // Keep the current tab: /login sends you back to this hash after the password.
-  if (r.status === 401) {
-    location.href = '/login?next=' + encodeURIComponent(location.hash);
-    throw new Error('unauthorized');
-  }
+  if (r.status === 401) { location.href = '/login?next=' + encodeURIComponent(location.hash); throw new Error('unauthorized'); }
   if (r.status === 204) return null;
   if (!r.ok) throw new Error('HTTP ' + r.status);
   return r.json();
 }
+
 
 const NON_TERMINAL = new Set(['queued', 'running', 'paused', 'cancelling']);
 
@@ -45,8 +43,7 @@ const Chat = {
 
   async loadAll() {
     if (this.loading) return;
-    this.loading = true;
-    this.err = null;
+    this.loading = true; this.err = null;
     try {
       const j = await api('GET', `/api/jobs?limit=${FETCH_LIMIT}`);
       const chatJobs = (j.jobs || []).filter((x) => x.kind === 'generate' || x.kind === 'summarise');
@@ -73,10 +70,7 @@ const Chat = {
 
   async _pollActive() {
     if (!this._hasActive()) {
-      if (this._pollHandle) {
-        clearInterval(this._pollHandle);
-        this._pollHandle = null;
-      }
+      if (this._pollHandle) { clearInterval(this._pollHandle); this._pollHandle = null; }
       return;
     }
     const ids = [];
@@ -90,9 +84,7 @@ const Chat = {
       try {
         const r = await api('GET', '/api/jobs/' + id);
         if (r && r.job && this._applyJobUpdate(r.job)) changed = true;
-      } catch {
-        /* swallow transient errors; next tick retries */
-      }
+      } catch { /* swallow transient errors; next tick retries */ }
     }
     if (changed && window.render) window.render();
   },
@@ -143,25 +135,15 @@ const Chat = {
     let conv = this.conversations.find((c) => c.id === conversation_id);
     const userTurn = { role: 'user', text: prompt };
     const assistantTurn = {
-      role: 'assistant',
-      status: 'queued',
-      model,
-      tokens: 0,
-      elapsed: 0,
-      text: '',
-      thinking: null,
-      _job_id: null,
-      _pending: true,
+      role: 'assistant', status: 'queued', model,
+      tokens: 0, elapsed: 0, text: '', thinking: null,
+      _job_id: null, _pending: true,
     };
     if (!conv) {
       conv = {
-        id: conversation_id,
-        title: payload.title,
-        model,
-        project: project || null,
-        updated: new Date().toISOString(),
-        status: 'queued',
-        turns: [userTurn, assistantTurn],
+        id: conversation_id, title: payload.title, model,
+        project: project || null, updated: new Date().toISOString(),
+        status: 'queued', turns: [userTurn, assistantTurn],
       };
       this.conversations.unshift(conv);
     } else {
@@ -202,11 +184,8 @@ const Chat = {
         }
       }
     }
-    try {
-      await api('POST', '/api/jobs/' + jobId + '/cancel');
-    } catch {
-      /* swallow; poller catches the truth */
-    }
+    try { await api('POST', '/api/jobs/' + jobId + '/cancel'); }
+    catch { /* swallow; poller catches the truth */ }
   },
 };
 
