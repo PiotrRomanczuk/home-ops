@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="pl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mac worker — limit sesji, przerwane przebiegi, wznawianie · raport testów ręcznych</title>
+<style>
+  :root { --ink:#1d2433; --muted:#5b6475; --line:#e3e6ec; --bg:#fafbfc; --ok:#1f7a4d; --warn:#9a5b00; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.55 -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 900px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 1.6rem; margin: 0 0 4px; } h2 { margin-top: 2rem; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+  .meta { color: var(--muted); font-size: .9rem; } code, pre { font-family: ui-monospace, Menlo, monospace; font-size: .86rem; }
+  pre { background:#fff; border:1px solid var(--line); border-radius:8px; padding:12px 14px; overflow-x:auto; white-space:pre-wrap; }
+  table { border-collapse: collapse; width: 100%; font-size: .92rem; } th, td { text-align:left; border-bottom:1px solid var(--line); padding:7px 6px; vertical-align: top; }
+  .ok { color: var(--ok); font-weight: 600; } .warn { color: var(--warn); font-weight: 600; }
+</style></head><body><main>
+<h1>Mac worker: limit sesji, przerwane przebiegi i wznawianie</h1>
+<p class="meta">2026-11-17 · branch <code>feat/claude-sprint</code> (PR #83, poprawki r1: punkty 1–5, 17, 20 z recenzji <code>review-home-ops-83-runner</code>) · <code>ops/mac/sprint/outcomes.py</code>, <code>runner.py</code>, <code>sprint_tasks.py</code>, <code>claude_run.py</code>, <code>budget.py</code></p>
+
+<h2>1. Co zostało zrobione</h2>
+<p>14–15.11 runner zapisał 1476 przebiegów z 429 „You've hit your session limit · resets 4:50am (Europe/Warsaw)” jako <code>retry</code>: każdy zabierał próbę i podnosił model (sonnet → opus → fable), aż zadanie trafiało do <code>failed/</code>. Head <code>e80a72d</code> uznawał limit tylko wtedy, gdy <code>/usage</code> potwierdził ≥ 99%. Teraz o wyniku przebiegu decyduje czysta funkcja <code>outcomes.classify(run, now, …)</code>:</p>
+<table>
+<tr><th>Wynik</th><th>Kiedy</th><th>Co dzieje się z zadaniem</th></tr>
+<tr><td><b>limit</b></td><td><code>res.api_error_status == 429</code> albo <code>api_error: usage_limit_reached</code>; sam tekst „limit” tylko razem z godziną resetu albo z potwierdzeniem z <code>/usage</code></td><td>wraca do <code>queue/</code>, ten sam model i <code>attempts</code>; <code>not_before</code> = godzina z komunikatu, inaczej reset z <code>/usage</code>, inaczej +15 min; <code>resume: &lt;session_id&gt;</code>. Pauza wszystkich agentów Claude tylko dla limitu sesji i tygodnia; limit modelu (Fable) zatrzymuje wyłącznie to zadanie</td></tr>
+<tr><td><b>interrupted</b></td><td>rc 143/137 (−15/−9) — stop joba; rc 124 — timeout modelu Claude</td><td>wraca do <code>queue/</code> za 10 min, bez eskalacji, licznik <code>interrupts</code>; trzecie przerwanie → <code>failed/</code></td></tr>
+<tr><td><b>done</b></td><td>rc 0, bez <code>is_error</code> <b>i</b> <code>results/&lt;id&gt;.md</code> zmieniony po starcie przebiegu</td><td><code>done/</code>, <code>not_before</code> i <code>resume</code> usunięte</td></tr>
+<tr><td><b>retry</b></td><td>wszystko inne (także rc 0 bez pliku wyniku i timeout modelu lokalnego)</td><td>druga próba; eskalacja modelu poza <code>kind</code> <code>pr-fix</code>/<code>ci</code>/<code>code</code> na modelu Claude — tam ten sam model i dopisek „Poprzednia próba …” z końcówką odpowiedzi</td></tr>
+</table>
+<p><code>eligible()</code> pomija zadania z <code>not_before</code> w przyszłości, więc housekeeping nie dokłada planisty tylko dlatego, że kolejka czeka na reset. Zadanie z <code>resume:</code> startuje przez <code>claude -p … --resume &lt;id&gt;</code> z poleceniem „Kontynuuj zadanie … sprawdź, co już zrobiłeś (worktree, branch, commity, PR, plik wyniku)”.</p>
+
+<h2>2. Testy automatyczne</h2>
+<pre>/usr/bin/python3 -m unittest discover -s ops/mac/sprint/tests -p 'test_*.py' -v   # 36 OK (python 3.9.6, jak w pliście)
+uvx --python 3.9 pytest ops/mac/sprint/tests ops/mac/gpu/tests -q            # 52 passed
+uvx --python 3.12 pytest ops/mac/sprint/tests ops/mac/gpu/tests -q           # 52 passed (wersja z CI)</pre>
+<p>Fixtury <code>tests/fixtures/runs-2026-11.jsonl</code> to prawdziwe wiersze <code>runs.jsonl</code> z 14–16.11 (limit 00:12 „resets 12:50am”, 4:50am, 11:50pm, rc 124 <code>local:qwen3.8:27b</code>, rc 143 fable, udany sonnet); <code>session_id</code> podmienione, treść odpowiedzi i id zadań usunięte, bez <code>usage</code>.</p>
+<p><b>Testy mutacyjne:</b> (a) przywrócenie eskalacji przy rc 124 (<code>if rc in SIGNALS:</code>) → <span class="warn">FAIL</span> <code>test_sigterm_and_claude_timeout_requeue_without_escalation</code> („'retry' != 'interrupted'”); (b) limit tylko po potwierdzeniu z <code>/usage</code> (stan z <code>e80a72d</code>) → <span class="warn">2 FAIL + 1 ERROR</span>. Po przywróceniu kodu: <span class="ok">36 OK</span>.</p>
+
+<h2>3. Scenariusz ręczny „limit sesji” (atrapa <code>CLAUDE_BIN</code>)</h2>
+<p>Sprawdzone 2026-11-17 00:15 na prawdziwym <code>runner.py</code> (python 3.9), w katalogu tymczasowym, bez sieci i bez subskrypcji. Atrapa <code>claude</code>: <code>/usage</code> zwraca sesję 40%, tydzień 30%, Fable 50% przy pierwszym odczycie i 100% przy kolejnych; zadanie <code>session-*</code> dostaje 429 „resets &lt;teraz + 2 h&gt; (Europe/Warsaw)”, <code>fable-*</code> 429 bez godziny, pozostałe kończą się sukcesem i zapisują plik wyniku. Atrapa <code>osascript</code> dopisuje powiadomienia do pliku.</p>
+<h3>Przygotowanie</h3>
+<pre>D=$(mktemp -d /tmp/sprint-limit.XXXX); mkdir -p $D/bin $D/vault/3-Zasoby/analysis
+# $D/bin/claude — treść niżej; $D/bin/osascript:
+printf '#!/bin/sh\necho "osascript $*" &gt;&gt; "$SPRINT_STATE/notify.log"\n' &gt; $D/bin/osascript; chmod +x $D/bin/*
+mk(){ mkdir -p $D/$1/queue; printf '{"claude":{"windows":["daily 00:00-23:59"],"workers":1}}' &gt; $D/$1/config.json
+      printf -- "---\nid: %s\nmodel: %s\nkind: %s\npriority: %s\nmax_minutes: 5\n---\nfake task\n" $2 $3 $4 $5 &gt; $D/$1/queue/$2.md; }
+mk s1 session-a sonnet code 10; mk s1 other-b sonnet vault 20
+mk s2 fable-x fable code 10;    mk s2 sonnet-y sonnet vault 20
+run(){ PATH=$D/bin:$PATH SPRINT_STATE=$D/$1 SPRINT_VAULT=$D/vault SPRINT_PLANNER=0 CLAUDE_BIN=$D/bin/claude \
+       /usr/bin/python3 ops/mac/sprint/runner.py & sleep 40; touch $D/$1/STOP; wait; }
+run s1; run s2</pre>
+<details><summary>Atrapa <code>$D/bin/claude</code></summary><pre>#!/usr/bin/env python3
+&quot;&quot;&quot;Fake claude for the session-limit scenario. /usage: Fable 50% on the first reading, 100% later.&quot;&quot;&quot;
+import json, os, sys
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
+args, state = sys.argv[1:], os.environ[&#x27;SPRINT_STATE&#x27;]
+log = open(f&#x27;{state}/fake-calls.log&#x27;, &#x27;a&#x27;); log.write(json.dumps(args[:1] + [a for a in args if a.startswith((&#x27;sprint:&#x27;, &#x27;--resume&#x27;))] ) + &#x27;\n&#x27;)
+now = datetime.now(timezone.utc)
+if &#x27;/usage&#x27; in args:
+    n = state + &#x27;/usage-calls&#x27;; k = int(open(n).read()) + 1 if os.path.exists(n) else 1; open(n, &#x27;w&#x27;).write(str(k))
+    reset = (now + timedelta(days=3)).isoformat()
+    lim = [{&#x27;kind&#x27;: &#x27;session&#x27;, &#x27;percent&#x27;: 40, &#x27;resets_at&#x27;: (now + timedelta(hours=3)).isoformat()},
+           {&#x27;kind&#x27;: &#x27;weekly_all&#x27;, &#x27;percent&#x27;: 30, &#x27;resets_at&#x27;: reset},
+           {&#x27;kind&#x27;: &#x27;weekly_scoped&#x27;, &#x27;percent&#x27;: 50 if k == 1 else 100, &#x27;resets_at&#x27;: reset, &#x27;scope&#x27;: {&#x27;model&#x27;: {&#x27;display_name&#x27;: &#x27;Fable&#x27;}}}]
+    print(json.dumps({&#x27;type&#x27;: &#x27;system&#x27;, &#x27;usage_report&#x27;: {&#x27;rate_limits&#x27;: {&#x27;limits&#x27;: lim}}})); sys.exit(0)
+tid = next(a for a in args if a.startswith(&#x27;sprint:&#x27;))[7:]
+sid = &#x27;11111111-0000-4000-8000-000000000001&#x27;
+if tid.startswith(&#x27;session-&#x27;):
+    r = (now + timedelta(hours=2)).astimezone(ZoneInfo(&#x27;Europe/Warsaw&#x27;))
+    msg = f&quot;You&#x27;ve hit your session limit · resets {r.hour % 12 or 12}:{r.minute:02d}{&#x27;pm&#x27; if r.hour &gt;= 12 else &#x27;am&#x27;} (Europe/Warsaw)&quot;
+    print(json.dumps({&#x27;type&#x27;: &#x27;result&#x27;, &#x27;subtype&#x27;: &#x27;success&#x27;, &#x27;is_error&#x27;: True, &#x27;api_error_status&#x27;: 429, &#x27;api_error&#x27;: &#x27;usage_limit_reached&#x27;, &#x27;result&#x27;: msg, &#x27;session_id&#x27;: sid})); sys.exit(1)
+if tid.startswith(&#x27;fable-&#x27;):
+    print(json.dumps({&#x27;type&#x27;: &#x27;result&#x27;, &#x27;subtype&#x27;: &#x27;success&#x27;, &#x27;is_error&#x27;: True, &#x27;api_error_status&#x27;: 429, &#x27;api_error&#x27;: &#x27;usage_limit_reached&#x27;, &#x27;result&#x27;: &quot;You&#x27;ve hit your limit&quot;, &#x27;session_id&#x27;: sid})); sys.exit(1)
+open(f&#x27;{state}/results/{tid}.md&#x27;, &#x27;w&#x27;).write(f&#x27;# {tid} — fake\n&#x27;)
+print(json.dumps({&#x27;type&#x27;: &#x27;result&#x27;, &#x27;subtype&#x27;: &#x27;success&#x27;, &#x27;is_error&#x27;: False, &#x27;result&#x27;: &#x27;ok&#x27;, &#x27;session_id&#x27;: sid}))
+</pre></details>
+
+<h3>A. Limit sesji (s1)</h3>
+<table><tr><th>Sprawdź</th><th>Oczekiwane</th><th>Wynik</th></tr>
+<tr><td><code>ls $D/s1/queue $D/s1/failed</code></td><td>oba zadania w <code>queue/</code>, <code>failed/</code> puste</td><td class="ok">OK</td></tr>
+<tr><td><code>cat $D/s1/queue/session-a.md</code></td><td><code>model: sonnet</code>, <code>attempts: 0</code>, <code>not_before: 2026-11-17T02:15:00+01:00</code> (godzina z komunikatu), <code>resume: 1111…0001</code></td><td class="ok">OK</td></tr>
+<tr><td><code>cat $D/s1/fake-calls.log</code></td><td>jedno wywołanie <code>sprint:session-a</code>; <code>other-b</code> nie startuje (pauza do 02:15)</td><td class="ok">OK</td></tr>
+<tr><td><code>cat $D/s1/notify.log</code></td><td>„Limit (session) wyczerpany. Agenci Claude czekają do 02:15.”</td><td class="ok">OK</td></tr>
+<tr><td><code>runs.jsonl</code></td><td><code>outcome: limit</code>, rc 1</td><td class="ok">OK</td></tr></table>
+
+<h3>B. Limit Fable nie pauzuje innych (s2)</h3>
+<table><tr><th>Sprawdź</th><th>Oczekiwane</th><th>Wynik</th></tr>
+<tr><td><code>cat $D/s2/queue/fable-x.md</code></td><td><code>model: fable</code>, <code>attempts: 0</code>, <code>not_before</code> = reset tygodnia Fable z <code>/usage</code> (+3 dni)</td><td class="ok">OK</td></tr>
+<tr><td><code>ls $D/s2/done</code></td><td><code>sonnet-y.md</code> — sonnet wystartował zaraz po limicie Fable</td><td class="ok">OK</td></tr>
+<tr><td><code>cat $D/s2/notify.log</code></td><td>brak powiadomienia o limicie (tylko o STOP)</td><td class="ok">OK</td></tr></table>
+
+<h3>C. Wznowienie po resecie (s3)</h3>
+<p>Zadanie <code>cont-c</code> z <code>resume: 1111…0001</code> i <code>not_before</code> w przeszłości: atrapa dostała <code>-p … --resume 1111…0001</code>, zadanie trafiło do <code>done/</code> bez pól <code>resume</code> i <code>not_before</code>. <span class="ok">OK</span></p>
+
+<h3>Przypadki brzegowe do obejrzenia na żywo</h3>
+<ul>
+<li>Pierwszy prawdziwy limit po włączeniu joba: w <code>runs.jsonl</code> wynik <code>limit</code>, w <code>queue/</code> pola <code>not_before</code>/<code>resume</code>, nic w <code>failed/</code>.</li>
+<li>Komunikat limitu tygodniowego może mieć datę („resets Nov 23, 5pm (Europe/Warsaw)”) — format zgadnięty; jeśli będzie inny, zadziała zapas z <code>/usage</code> albo +15 min.</li>
+<li>Sesja z <code>--resume</code>, której CLI nie znajdzie, skończy się zwykłym <code>retry</code> (pole <code>resume</code> jest wtedy usuwane, druga próba startuje od zera).</li>
+<li>Stop joba w trakcie zadania (rc 143) → zadanie w <code>queue/</code> z <code>interrupts: 1</code> i tym samym modelem.</li>
+</ul>
+</main></body></html>

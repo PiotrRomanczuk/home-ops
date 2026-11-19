@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<title>mac-worker GPU — instalacja i przejście między zadaniami (r5)</title>
+<style>
+  body { font: 15px/1.5 -apple-system, system-ui, sans-serif; max-width: 860px; margin: 2rem auto; padding: 0 1rem; color: #222; }
+  h1 { font-size: 1.5rem; } h2 { font-size: 1.15rem; margin-top: 2rem; border-bottom: 1px solid #ddd; padding-bottom: .2rem; }
+  code, pre { background: #f4f4f4; border-radius: 4px; } code { padding: 0 .25rem; } pre { padding: .7rem; overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; } td, th { border: 1px solid #ddd; padding: .35rem .5rem; text-align: left; }
+  .meta { color: #666; font-size: .9rem; }
+</style>
+</head>
+<body>
+<h1>mac-worker GPU — poprawki po recenzji 2026-11-17 (r5)</h1>
+<p class="meta">Data: 2026-11-19 · updated: 2026-11-19 · PR #83 (<code>feat/claude-sprint</code>, głowa przed poprawką <code>75590e5</code>) · bez przeglądarki, więc bez zrzutów ekranu</p>
+
+<h2>Co poprawiono</h2>
+<table>
+  <tr><th>Waga</th><th>Problem</th><th>Poprawka</th></tr>
+  <tr><td>🔴</td><td><code>install-gpu.sh</code> nie kopiował <code>gpu_pause.py</code> do <code>/usr/local/libexec/mac-worker/</code>, więc zainstalowany nadzorca padał na <code>import gpu_pause</code> i launchd restartował go w pętli.</td>
+      <td>Plik dopisany do listy <code>install</code>. Zaraz po kopiowaniu skrypt (z <code>set -e</code>) importuje <code>gpu_worker</code> z katalogu docelowego i przerywa, gdy brakuje modułu. Nowy test <code>test_install_list.py</code> sprawdza, że lista obejmuje każdy moduł z <code>ops/mac/gpu</code> importowany (też pośrednio) przez <code>gpu_worker.py</code>.</td></tr>
+  <tr><td>🟠</td><td>Gdy shard zadania A osiągał MAX_FAILS, a drugi shard A nadal działał, następny tick przechodził do zadania B, ale shard A zostawał w <code>shards</code> pod swoim numerem. Wyjście shardu A było liczone jako shard B (oznaczany jako zrobiony, kasowany pid-file B), a A nie dostawał <code>job-done</code> ani <code>unload_ollama</code>.</td>
+      <td><code>reap</code> przypisuje każdy shard do zadania z <code>sh['job']</code>. Zadanie porzucone (<code>job_finished</code> przy działających shardach) ma pozostałe shardy zatrzymane przez <code>stop_all</code> (<code>stop_shards(powód, zadanie)</code>), potem dostaje jednorazowo <code>job-done</code> i, jeśli trzeba, <code>unload_ollama</code>. <code>reap</code> działa przed <code>progress.current()</code>, więc B startuje dopiero, gdy shardy A zniknęły. Żeby <code>gpu_worker.py</code> zmieścił się w 150 liniach, <code>hold_reason</code> przeniesiono do <code>gpu_pause.py</code> (już na liście instalacji).</td></tr>
+  <tr><td>⚪</td><td><code>seed.py</code>: pusta lista aktywnych notatek → <code>notes[0]</code> rzucało IndexError.</td>
+      <td>Bez aktywnej notatki hot/warm pomijane są zadania vaulta, zostają recenzje PR-ów. Test <code>test_seed.py</code>.</td></tr>
+  <tr><td>⚪</td><td>Komentarz w <code>install-gpu.sh</code>, docstring <code>gpu_jobs.py</code> i plist obiecywały, że agent nie wpłynie na to, co wykona się na GPU.</td>
+      <td>Opis zgodny z rzeczywistością: root chroni kod nadzorcy i listę zadań, ale komendy z listy mogą uruchamiać kod z katalogów zapisywalnych przez użytkownika (worktree, <code>~/Documents</code>). Mechanizm bez zmian.</td></tr>
+</table>
+<p>Pominięte celowo: <code>journal.py:37</code> (wiersze w raporcie vaulta) — zmiana projektu, opisana w wyniku zadania jako propozycja.</p>
+
+<h2>Testy automatyczne</h2>
+<pre>python3 -m unittest discover -s ops/mac/gpu/tests    -p 'test_*.py'   # przed: 19, po: 24 — OK
+python3 -m unittest discover -s ops/mac/sprint/tests -p 'test_*.py'   # przed: 75, po: 77 — OK
+python3 -m py_compile &lt;zmienione .py&gt;;  sh -n ops/mac/gpu/install-gpu.sh</pre>
+<p>Nowe testy nie przechodziły na kodzie sprzed poprawki: <code>test_gpu_worker.py</code> — 3 z 3 FAIL (m.in. „B shard 2 marked done though it never ran”, „surviving shard of the abandoned job must be stopped”, pid-file <code>A.1.json</code> nie usunięty), <code>test_install_list.py</code> — FAIL po usunięciu <code>gpu_pause.py</code> z listy.</p>
+
+<h2>Jak sprawdzić instalację ręcznie (robi Piotr)</h2>
+<ol>
+  <li>W katalogu repo: <code>cd ops/mac/gpu &amp;&amp; sudo ./install-gpu.sh</code> (opcjonalnie z <code>gpu-jobs.json</code> jako argumentem).</li>
+  <li><b>Oczekiwane:</b> skrypt kończy się bez błędu i wypisuje <code>code: /usr/local/libexec/mac-worker</code>. Brak <code>ModuleNotFoundError</code>.</li>
+  <li><code>ls /usr/local/libexec/mac-worker</code> — jest 6 plików: <code>gpu_worker gpu_jobs gpu_report gpu_pause machine procs</code> (<code>.py</code>), właściciel root.</li>
+  <li>Po restarcie nadzorcy: <code>tail -n 5 ~/.local/state/home-ops/sprint/gpu/log.jsonl</code> — zdarzenie <code>start</code>, brak pętli restartów; <code>cat ~/.local/state/home-ops/sprint/gpu/status.json</code> odświeża się co ~30 s.</li>
+  <li><b>Przypadek brzegowy:</b> w kopii roboczej (nie w <code>/usr/local</code>) usuń <code>gpu_pause.py</code> i uruchom <code>/usr/bin/python3 -I -B -c 'import sys; sys.path.insert(0, sys.argv[1]); import gpu_worker' &lt;katalog&gt;</code> <b>uruchomione z katalogu innego niż <code>ops/mac/gpu</code></b> (np. <code>cd /tmp</code>) — oczekiwane <code>ModuleNotFoundError: gpu_pause</code>; to ten sam błąd, który skrypt instalacyjny teraz łapie przed restartem usługi.</li>
+  <li>Przejście między zadaniami: w <code>log.jsonl</code> przy porzuconym zadaniu kolejno <code>shard-failed</code> (fails=3), <code>stopped</code> (powód „zadanie porzucone”), <code>job-done</code>; kolejne <code>started</code> dotyczy już następnego zadania.</li>
+</ol>
+<h2>Poprawki r6 (2026-11-19)</h2>
+<ul>
+  <li><code>install-gpu.sh</code>: kontrole importu używają <code>python3 -I</code> (tryb izolowany, bez bieżącego katalogu w <code>sys.path</code>). Bez <code>-I</code> kontrola nie failowała po usunięciu <code>gpu_pause.py</code> z listy, gdy skrypt uruchomiono z <code>ops/mac/gpu</code> (a tak każe krok 1). Sprawdzone na kopii w <code>/tmp</code> (LIB/ETC w <code>/tmp</code>, bez roota, <code>launchctl</code> jako <code>echo</code>): po usunięciu modułu z listy kontrola failuje z <code>ModuleNotFoundError: gpu_pause</code> zarówno z katalogu skryptu, jak i z <code>/tmp</code>.</li>
+  <li>Test listy instalacji wymaga teraz <code>-I -B -c</code>; usunięcie <code>-I</code> ze skryptu = FAIL.</li>
+  <li>Testy nadzorcy: pid-file sprawdza <code>B.2</code>/<code>A.2</code>; nowy test, że zatrzymany shard porzuconego zadania z rc 0 nie oznacza shardu następnego zadania jako zrobionego; nowy test: dokładnie jeden <code>job-done</code> i jedno <code>unload_ollama</code>.</li>
+  <li>Test sprintu <code>stops_at_the_configs_cap</code> nie mierzy już czasu ściany (rc 124 pochodzi tylko od limitu).</li>
+</ul>
+</body>
+</html>

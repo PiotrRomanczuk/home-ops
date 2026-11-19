@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="pl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mac worker — agenci Claude w limicie, lokalne LLM, nadzorca GPU · raport testów ręcznych</title>
+<style>
+  :root { --ink:#1d2433; --muted:#5b6475; --line:#e3e6ec; --bg:#fafbfc; --ok:#1f7a4d; --warn:#9a5b00; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.55 -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 900px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 1.6rem; margin: 0 0 4px; } h2 { margin-top: 2rem; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+  .meta { color: var(--muted); font-size: .9rem; } code, pre { font-family: ui-monospace, Menlo, monospace; font-size: .86rem; }
+  pre { background:#fff; border:1px solid var(--line); border-radius:8px; padding:12px 14px; overflow-x:auto; white-space:pre-wrap; }
+  table { border-collapse: collapse; width: 100%; font-size: .92rem; } th, td { text-align:left; border-bottom:1px solid var(--line); padding:7px 6px; vertical-align: top; }
+  .ok { color: var(--ok); font-weight: 600; } .warn { color: var(--warn); font-weight: 600; }
+</style></head><body><main>
+<h1>Mac worker: agenci Claude w limicie, lokalne LLM i nadzorca GPU</h1>
+<p class="meta">2026-11-15 · branch <code>feat/claude-sprint</code> (PR #83) · <code>ops/mac/sprint/</code>, <code>ops/mac/gpu/</code> · plan: <code>~/.claude/plans/breezy-strolling-sprout.md</code></p>
+
+<h2>1. Co zostało zrobione</h2>
+<p>Jednorazowy „sprint 48 h” stał się stałą pracą w tle. Cel: MacBook Pro M5 Pro ma pracować w godzinach biura i w nocy, a Piotrowi ma zostać co najmniej 20% tygodniowego limitu Claude.</p>
+<ul>
+  <li><b>Okna</b> (<code>config.py</code>, <code>STATE/config.json</code>): agenci Claude startują tylko pn–pt 08:30–16:00 i co noc 00:00–07:00. Zadanie zaczyna się tylko wtedy, gdy jego <code>max_minutes</code> mieści się przed końcem okna.</li>
+  <li><b>Budżet</b> (<code>budget.py</code>): odczyt <code>claude -p /usage</code> (0 tokenów) co 5 min w oknie. Nowe zadanie startuje przy tygodniu poniżej 80% <i>i</i> poniżej linii tempa (80% × część tygodnia od resetu + 10) oraz sesji poniżej 90%; dla Fable dodatkowo tydzień Fable poniżej 80%.</li>
+  <li><b>Limit</b>: komunikat o limicie jest sprawdzany ponownym odczytem <code>/usage</code>. Pauza następuje tylko przy limicie zużytym w ≥ 99%, do jego resetu. W przeciwnym razie to zwykła ponowna próba, bez stałych 10 minut i bez zapętlenia jak 14–15.11.</li>
+  <li><b>Lokalne LLM</b> (<code>claude_run.py</code>): <code>model: local:&lt;model Ollamy&gt;</code> idzie tym samym Claude Code na Ollamę (<code>ANTHROPIC_BASE_URL</code>), poza budżetem i oknami. Startuje tylko pod nieobecność Piotra, jedno naraz, najwyżej 8 dziennie, po porażce przechodzi do sonnet. Na czas zadania plik <code>STATE/gpu/borrow</code> wstrzymuje nadzorcę GPU.</li>
+  <li><b>Nadzorca GPU</b> (<code>ops/mac/gpu/</code>, LaunchAgent <code>pl.pionat.mac-worker.gpu</code>): stała lista zadań <code>/usr/local/etc/mac-worker/gpu-jobs.json</code> (root, argv bez powłoki). Zadania idą po kolei, shardy jako grupy procesów:
+    <ul>
+      <li>Piotr przy Macu, wypożyczenie GPU, obce song2logic albo dark wake → SIGSTOP;</li>
+      <li>bateria, <code>thermalState</code> ≥ 2 albo presja pamięci ≥ 2 → TERM, a przebieg wznowi się później;</li>
+      <li>po awarii nadzorcy osierocone grupy są zatrzymywane przy starcie.</li>
+    </ul></li>
+  <li><b>Pomysły</b> (<code>idea.py</code>): jedna linia do sekcji „## Pomysły” w <code>2-Obszary/homelab/mac-praca-w-tle.md</code>, z WhatsAppa przez OpenClaw. Planista zamienia pomysły w zadania albo w propozycje GPU.</li>
+  <li><b>Pozostałe</b>:
+    <ul>
+      <li>planista co najwyżej co 3 h, z <code>lock: vault</code>;</li>
+      <li>dzienne podsumowanie o 05:30 (zdąży przed końcem nocnego okna o 07:00) z sekcją „Lokalne LLM vs Claude” i raport tygodniowy <code>&lt;start tygodnia&gt;-mac-worker-tydzien.md</code>;</li>
+      <li>etykieta <code>mac-worker</code>;</li>
+      <li>zadanie, którego <code>after</code> trafiło do <code>failed/</code>, też trafia do <code>failed/</code>;</li>
+      <li>plist bez <code>caffeinate</code> (na zasilaczu czuwanie zapewnia <code>pmset -c sleep 0</code>);</li>
+      <li>strona :8787 z budżetem, powodem pauzy i panelem GPU, jako stała usługa;</li>
+      <li><code>install.sh</code> i <code>install-gpu.sh</code> (sudo).</li>
+    </ul></li>
+</ul>
+
+<h2>2. Testy automatyczne</h2>
+<table><tr><th>Zestaw</th><th>Wynik</th></tr>
+<tr><td><code>/usr/bin/python3</code> (3.9) i 3.15: <code>unittest discover -s ops/mac/sprint/tests</code> — okna (też przez północ), budżet na prawdziwej próbce <code>usage_report</code>, tempo, potwierdzenie limitu, kolejka (accept, eskalacja local → sonnet, after → failed), pomysły, licznik lokalnych</td><td class="ok">22 OK</td></tr>
+<tr><td><code>unittest discover -s ops/mac/gpu/tests</code> — parsery ioreg/pmset/asercji/systemstate/ps, bramki, STOP/CONT/TERM na grupie z potomkami, sprzątanie sierot i rekordów z poprzedniego bootu, lista zadań i postęp</td><td class="ok">17 OK</td></tr>
+<tr><td><code>uvx ruff check --select F,E9</code>, <code>sh -n</code> na skryptach, <code>plutil -lint</code> na plistach</td><td class="ok">czysto</td></tr></table>
+
+<h2>3. Próby na prawdziwym Macu (zrobione 2026-11-15)</h2>
+<table><tr><th>Scenariusz</th><th>Wynik</th></tr>
+<tr><td>Nadzorca z listą testową (2 shardy <code>sh</code> z dwoma <code>sleep</code>), <code>GPU_IDLE_MIN=0 GPU_TICK_S=2</code></td><td class="ok">2 grupy procesów, status „pracuje”</td></tr>
+<tr><td>Plik <code>borrow</code> z żywym pid</td><td class="ok">wszystkie 6 procesów w stanie T, status „lokalny LLM używa GPU”; po usunięciu pliku stan S</td></tr>
+<tr><td>Koniec zadania 1</td><td class="ok"><code>progress.json</code>: tree [1,2], start zadania „second”</td></tr>
+<tr><td><code>kill -9</code> nadzorcy, restart</td><td class="ok">osierocony shard (PPID 1) zatrzymany (<code>orphans_stopped</code>), dokładnie jeden nowy</td></tr>
+<tr><td><code>kill -TERM</code> nadzorcy</td><td class="ok">shard zatrzymany, zdarzenia „stopped” i „exit”, brak procesów</td></tr>
+<tr><td>Runner ze stanem testowym: zadanie <code>haiku</code> i <code>local:gemma4:26b</code> („policz linie notes.txt”)</td><td class="ok">oba „lines=3”, haiku 11 s, gemma 26 s; <code>usage.json</code> zapisany (tydzień 37%, sesja 80%); wiersze w raporcie tygodniowym</td></tr>
+<tr><td>Strona statusu na danych testowych (<code>curl</code>)</td><td class="ok">kafle tydzień / linia tempa / sesja, „Agenci Claude: …”, panel GPU</td></tr>
+<tr><td>Test dymny Claude Code na <code>qwen3.8:27b</code> przez Ollamę, tryb <code>auto</code></td><td class="ok">plik zapisany, <code>git status</code> wykonany, 293 s, 6 tur</td></tr></table>
+
+<h2>4. Jak przetestować ręcznie</h2>
+<ol>
+  <li>Przygotowanie (Piotr, raz): <code>sudo pmset -c sleep 0</code>, potem <code>sudo ops/mac/gpu/install-gpu.sh &lt;gpu-jobs.json&gt;</code> i <code>ops/mac/sprint/install.sh</code>.</li>
+  <li><code>launchctl list | grep -E "sprint|mac-worker"</code> → trzy usługi (runner, strona statusu, nadzorca GPU).</li>
+  <li>Otwórz <a href="http://127.0.0.1:8787">http://127.0.0.1:8787</a>. Kafle limitu i powód („poza oknem” w weekend za dnia, „mogą startować” w oknie). W panelu GPU zadanie i stan shardów.</li>
+  <li>Poruszaj myszą, gdy nadzorca pracuje. W ciągu 30 s shardy przechodzą w „pauza” (<code>ps -o stat</code> → T), a po 10 min bezczynności wracają.</li>
+  <li>Wypnij zasilacz. W ciągu 30 s shardy dostają TERM, a w <code>~/.local/state/home-ops/sprint/gpu/log.jsonl</code> pojawia się „stopped … bateria”. Po podłączeniu i 10 min bezczynności wznawiają się od miejsca przerwania.</li>
+  <li><code>python3 ~/bin/home-ops/sprint/idea.py "test pomysłu"</code> dopisuje linię w notatce. Wiadomość „mac: test” w WhatsAppie robi to samo przez OpenClaw.</li>
+  <li>Budżet: w <code>STATE/config.json</code> ustaw <code>"claude": {"weekly_cap": 1}</code>. Strona pokazuje „tydzień … ≥ 1%”, a żadne zadanie Claude nie startuje. Potem przywróć wartość.</li>
+  <li>Po pierwszej nocy: <code>pmset -g log | grep -E " Sleep "</code> nie pokazuje snu na zasilaczu; przybywa wierszy w <code>~/.cache/song2logic/…study.jsonl</code>; w raporcie tygodniowym są przebiegi; <code>usage.json</code> pokazuje tydzień poniżej linii tempa.</li>
+</ol>
+
+<h2>5. Granice i ryzyka</h2>
+<ul>
+  <li class="warn">Kod zadań GPU (np. skrypty song2logic, llm-bench) i plisty w <code>~/Library/LaunchAgents</code> są nadal zapisywalne dla użytkownika. Root-owned jest lista poleceń i kod nadzorcy, co zamyka najprostszą drogę: dopisanie polecenia przez agenta.</li>
+  <li>Proces uruchomiony przez launchd może nie mieć dostępu do <code>~/Documents</code> (TCC), co dotyczy llm-bench. Trzeba to sprawdzić po pierwszym starcie zadania.</li>
+  <li>Lokalne zadanie w Claude Code ma kontekst 32k (domyślny Ollamy). Duże zadania mogą go przekroczyć. Wtedy po porażce zadanie przejmuje sonnet, a wynik trafia do porównania.</li>
+</ul>
+</main></body></html>
