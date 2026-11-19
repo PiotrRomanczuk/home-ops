@@ -13,7 +13,7 @@
 </head>
 <body>
 <h1>mac-worker GPU — poprawki po recenzji 2026-11-17 (r5)</h1>
-<p class="meta">Data: 2026-11-19 · PR #83 (<code>feat/claude-sprint</code>, głowa przed poprawką <code>75590e5</code>) · bez przeglądarki, więc bez zrzutów ekranu</p>
+<p class="meta">Data: 2026-11-19 · updated: 2026-11-19 · PR #83 (<code>feat/claude-sprint</code>, głowa przed poprawką <code>75590e5</code>) · bez przeglądarki, więc bez zrzutów ekranu</p>
 
 <h2>Co poprawiono</h2>
 <table>
@@ -41,8 +41,15 @@ python3 -m py_compile &lt;zmienione .py&gt;;  sh -n ops/mac/gpu/install-gpu.sh</
   <li><b>Oczekiwane:</b> skrypt kończy się bez błędu i wypisuje <code>code: /usr/local/libexec/mac-worker</code>. Brak <code>ModuleNotFoundError</code>.</li>
   <li><code>ls /usr/local/libexec/mac-worker</code> — jest 6 plików: <code>gpu_worker gpu_jobs gpu_report gpu_pause machine procs</code> (<code>.py</code>), właściciel root.</li>
   <li>Po restarcie nadzorcy: <code>tail -n 5 ~/.local/state/home-ops/sprint/gpu/log.jsonl</code> — zdarzenie <code>start</code>, brak pętli restartów; <code>cat ~/.local/state/home-ops/sprint/gpu/status.json</code> odświeża się co ~30 s.</li>
-  <li><b>Przypadek brzegowy:</b> w kopii roboczej (nie w <code>/usr/local</code>) usuń <code>gpu_pause.py</code> i uruchom <code>/usr/bin/python3 -B -c 'import sys; sys.path.insert(0, sys.argv[1]); import gpu_worker' &lt;katalog&gt;</code> — oczekiwane <code>ModuleNotFoundError: gpu_pause</code>; to ten sam błąd, który skrypt instalacyjny teraz łapie przed restartem usługi.</li>
+  <li><b>Przypadek brzegowy:</b> w kopii roboczej (nie w <code>/usr/local</code>) usuń <code>gpu_pause.py</code> i uruchom <code>/usr/bin/python3 -I -B -c 'import sys; sys.path.insert(0, sys.argv[1]); import gpu_worker' &lt;katalog&gt;</code> <b>uruchomione z katalogu innego niż <code>ops/mac/gpu</code></b> (np. <code>cd /tmp</code>) — oczekiwane <code>ModuleNotFoundError: gpu_pause</code>; to ten sam błąd, który skrypt instalacyjny teraz łapie przed restartem usługi.</li>
   <li>Przejście między zadaniami: w <code>log.jsonl</code> przy porzuconym zadaniu kolejno <code>shard-failed</code> (fails=3), <code>stopped</code> (powód „zadanie porzucone”), <code>job-done</code>; kolejne <code>started</code> dotyczy już następnego zadania.</li>
 </ol>
+<h2>Poprawki r6 (2026-11-19)</h2>
+<ul>
+  <li><code>install-gpu.sh</code>: kontrole importu używają <code>python3 -I</code> (tryb izolowany, bez bieżącego katalogu w <code>sys.path</code>). Bez <code>-I</code> kontrola nie failowała po usunięciu <code>gpu_pause.py</code> z listy, gdy skrypt uruchomiono z <code>ops/mac/gpu</code> (a tak każe krok 1). Sprawdzone na kopii w <code>/tmp</code> (LIB/ETC w <code>/tmp</code>, bez roota, <code>launchctl</code> jako <code>echo</code>): po usunięciu modułu z listy kontrola failuje z <code>ModuleNotFoundError: gpu_pause</code> zarówno z katalogu skryptu, jak i z <code>/tmp</code>.</li>
+  <li>Test listy instalacji wymaga teraz <code>-I -B -c</code>; usunięcie <code>-I</code> ze skryptu = FAIL.</li>
+  <li>Testy nadzorcy: pid-file sprawdza <code>B.2</code>/<code>A.2</code>; nowy test, że zatrzymany shard porzuconego zadania z rc 0 nie oznacza shardu następnego zadania jako zrobionego; nowy test: dokładnie jeden <code>job-done</code> i jedno <code>unload_ollama</code>.</li>
+  <li>Test sprintu <code>stops_at_the_configs_cap</code> nie mierzy już czasu ściany (rc 124 pochodzi tylko od limitu).</li>
+</ul>
 </body>
 </html>

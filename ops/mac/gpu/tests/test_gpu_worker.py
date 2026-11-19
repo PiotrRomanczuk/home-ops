@@ -5,6 +5,7 @@ Run:
 """
 from __future__ import annotations
 
+import json
 import sys
 import tempfile
 import unittest
@@ -101,11 +102,36 @@ class TickTest(unittest.TestCase):
 
     def test_a_shard_of_the_previous_job_never_removes_the_pid_file_of_the_current_one(self) -> None:
         gw.tick(self.jobs, self.progress)
-        (self.gpu / 'pids' / 'B.1.json').write_text('{}')
+        (self.gpu / 'pids' / 'B.2.json').write_text('{}')
         self.fail_shard('A', 1)
+        gw.tick(self.jobs, self.progress)  # A is given up, its shard 2 is stopped and collected
+        self.assertTrue((self.gpu / 'pids' / 'B.2.json').exists())
+        self.assertFalse((self.gpu / 'pids' / 'A.2.json').exists())
+
+    def test_a_stopped_shard_of_the_abandoned_job_does_not_mark_the_next_jobs_shard_done(self) -> None:
         gw.tick(self.jobs, self.progress)
-        self.assertTrue((self.gpu / 'pids' / 'B.1.json').exists())
-        self.assertFalse((self.gpu / 'pids' / 'A.1.json').exists())
+        self.fail_shard('A', 1)
+
+        def stop_with_rc0(pgids, procs=(), grace_s: float = 30) -> None:
+            self.stopped.extend(pgids)
+            for proc in procs:
+                proc.rc = 0
+
+        with mock.patch.object(gw.procs, 'stop_all', side_effect=stop_with_rc0):
+            gw.tick(self.jobs, self.progress)
+        self.assertFalse(self.progress.shard_done(self.jobs[1], 2))
+        self.assertEqual(self.progress.done.get('B', []), [])
+
+    def test_an_abandoned_job_that_unloads_ollama_ends_once_and_unloads_once(self) -> None:
+        self.jobs[0]['unload_ollama'] = True
+        gw.tick(self.jobs, self.progress)
+        self.fail_shard('A', 1)
+        with mock.patch.object(gw.gj, 'unload_ollama', return_value=['m']) as unload:
+            gw.tick(self.jobs, self.progress)
+            gw.tick(self.jobs, self.progress)
+        events = [json.loads(line)['event'] for line in (self.gpu / 'log.jsonl').read_text().splitlines()]
+        self.assertEqual(events.count('job-done'), 1)
+        self.assertEqual(unload.call_count, 1)
 
 
 if __name__ == '__main__':

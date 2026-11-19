@@ -43,7 +43,7 @@ class InstallListTest(unittest.TestCase):
 
     def test_install_checks_the_import_from_the_target_directory(self) -> None:
         script = (GPU / 'install-gpu.sh').read_text()
-        self.assertRegex(script, r"(?m)^/usr/bin/python3 (-B )?-c '[^']*import gpu_worker' \"\$LIB\"$")
+        self.assertRegex(script, r"(?m)^/usr/bin/python3 -I -B -c '[^']*import gpu_worker' \"\$LIB\"$")
         self.assertLess(script.index('import gpu_worker'), script.index('if [ "${1:-}" ]'))  # right after the copy
 
 
