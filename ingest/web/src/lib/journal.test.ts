@@ -62,23 +62,34 @@ describe('day arithmetic in Warsaw time', () => {
 
 describe('lanes', () => {
   it('one lane per project, busiest first, unknown project named, tiny sessions stay visible', () => {
-    const out = lanes([
-      session({ session_id: 'a', project_slug: 'home-ops', active_min: 20 }),
-      session({ session_id: 'b', project_slug: null, active_min: 5 }),
-      session({
-        session_id: 'c',
-        project_slug: 'home-ops',
-        active_min: 15,
-        first_ts: '2026-11-14T12:00:00Z',
-        last_ts: '2026-11-14T12:00:00Z',
-      }),
-    ]);
+    const out = lanes(
+      [
+        session({ session_id: 'a', project_slug: 'home-ops', active_min: 20 }),
+        session({ session_id: 'b', project_slug: null, active_min: 5 }),
+        session({
+          session_id: 'c',
+          project_slug: 'home-ops',
+          active_min: 15,
+          first_ts: '2026-11-14T12:00:00Z',
+          last_ts: '2026-11-14T12:00:00Z',
+        }),
+      ],
+      '2026-11-14',
+    );
     expect(out.map((l) => [l.project, l.activeMin, l.segments.length])).toEqual([
       ['home-ops', 35, 2],
       ['(bez projektu)', 5, 1],
     ]);
     const tiny = out[0]?.segments[1];
     expect(tiny && tiny.to - tiny.from).toBe(5);
+  });
+});
+
+describe('lanes across midnight', () => {
+  const overnight = session({ first_ts: '2026-11-14T21:00:00Z', last_ts: '2026-11-15T00:30:00Z' });
+  it('is clipped to the viewed day on both sides', () => {
+    expect(lanes([overnight], '2026-11-14')[0]?.segments[0]).toMatchObject({ from: 1320, to: 1440 });
+    expect(lanes([overnight], '2026-11-15')[0]?.segments[0]).toMatchObject({ from: 0, to: 90 });
   });
 });
 

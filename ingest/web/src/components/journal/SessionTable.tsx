@@ -4,7 +4,16 @@
 import { useQuery } from '@tanstack/react-query';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { clock, EVENT_LIMIT, eventsNotice, fetchEvents, fmtMin, type JournalSession, today } from '@/lib/journal';
+import {
+  clock,
+  clockOn,
+  EVENT_LIMIT,
+  eventsNotice,
+  fetchEvents,
+  fmtMin,
+  type JournalSession,
+  today,
+} from '@/lib/journal';
 import { cn } from '@/lib/utils';
 
 interface Props {
@@ -90,7 +99,7 @@ export function SessionTable({ sessions, day, selected, onSelect }: Props) {
               className={cn('cursor-pointer', open && 'bg-muted')}
             >
               <TableCell className="font-mono text-muted-foreground">
-                {clock(s.first_ts)}–{clock(s.last_ts)}
+                {clockOn(s.first_ts, day)}–{clockOn(s.last_ts, day)}
               </TableCell>
               <TableCell className="max-w-md truncate">
                 {s.live_status && <span className="mr-1.5 inline-block size-2 rounded-full bg-good" title="trwa" />}

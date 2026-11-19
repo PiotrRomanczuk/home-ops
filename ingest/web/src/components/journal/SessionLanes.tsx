@@ -4,11 +4,12 @@
 // identity; hovering a bar names the session, clicking selects it.
 
 import { useState } from 'react';
-import { clock, fmtMin, type JournalSession, type Lane } from '@/lib/journal';
+import { clockOn, fmtMin, type JournalSession, type Lane } from '@/lib/journal';
 import { cn } from '@/lib/utils';
 
 interface Props {
   lanes: Lane[];
+  day: string;
   selected: string | null;
   onSelect: (sessionId: string) => void;
 }
@@ -35,7 +36,7 @@ function Legend() {
   );
 }
 
-export function SessionLanes({ lanes, selected, onSelect }: Props) {
+export function SessionLanes({ lanes, day, selected, onSelect }: Props) {
   const [hover, setHover] = useState<JournalSession | null>(null);
   if (!lanes.length) return <p className="text-sm text-muted-foreground">Tego dnia nie było sesji Claude.</p>;
   const height = lanes.length * ROW + 16;
@@ -100,7 +101,7 @@ export function SessionLanes({ lanes, selected, onSelect }: Props) {
       </div>
       <p className="mt-1 h-4 truncate font-mono text-xs text-muted-foreground">
         {hover &&
-          `${clock(hover.first_ts)}–${clock(hover.last_ts)} · ${hover.title ?? hover.session_id.slice(0, 8)} · ${hover.host} · ${hover.prompts_day} promptów · ${fmtMin(hover.active_min)}`}
+          `${clockOn(hover.first_ts, day)}–${clockOn(hover.last_ts, day)} · ${hover.title ?? hover.session_id.slice(0, 8)} · ${hover.host} · ${hover.prompts_day} promptów · ${fmtMin(hover.active_min)}`}
       </p>
     </div>
   );

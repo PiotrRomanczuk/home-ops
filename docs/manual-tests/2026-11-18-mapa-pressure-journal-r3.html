@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="pl"><head><meta charset="utf-8"><title>#81 Dziennik — poprawki po recenzji (r3)</title>
+<style>body{font:15px/1.5 system-ui;max-width:760px;margin:2em auto;padding:0 1em}code{background:#eee;padding:1px 4px}</style></head>
+<body>
+<h1>#81 Dziennik Maca — poprawki r3</h1>
+<p><em>2026-11-19 · bez zrzutów ekranu (sprawdzone testami jednostkowymi i buildem)</em></p>
+<h2>Co zrobiono</h2>
+<ul>
+<li><code>lanes(sessions, day)</code>: sesja zaczęta przed wybranym dniem ma <code>from = 0</code>, kończąca się po nim <code>to = 1440</code> (strefa Europe/Warsaw, jak <code>minuteOfDay</code>/<code>clockOn</code>).</li>
+<li><code>SessionTable</code> i <code>SessionLanes</code>: <code>clockOn(ts, day)</code> zamiast <code>clock()</code>; <code>SessionLanes</code> dostał prop <code>day</code>.</li>
+</ul>
+<h2>Jak sprawdzić ręcznie</h2>
+<ol>
+<li>Otwórz „Dziennik” dla dnia z sesją przechodzącą przez północ (np. 22:00→01:30).</li>
+<li>Dzień pierwszy: pasek kończy się na prawej krawędzi (22:00–24:00), godziny w tabeli: <code>22:00–15.11 01:30</code>.</li>
+<li>Dzień drugi: pasek od lewej krawędzi do 01:30, godziny: <code>14.11 22:00–01:30</code>.</li>
+</ol>
+<h2>Testy</h2>
+<p><code>npm run check</code>, <code>npm test -- --run</code> (28 OK, w tym nowy test 1320–1440 / 0–90), <code>npm run build</code>.</p>
+</body></html>

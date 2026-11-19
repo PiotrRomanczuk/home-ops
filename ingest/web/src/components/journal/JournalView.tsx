@@ -53,7 +53,7 @@ export function JournalView() {
   const [selected, setSelected] = useState<string | null>(null);
   const q = useQuery({ queryKey: ['journal', day], queryFn: () => fetchJournal(day), refetchInterval: 60_000 });
   const j = q.data;
-  const dayLanes = useMemo(() => lanes(j?.claude.sessions ?? []), [j]);
+  const dayLanes = useMemo(() => lanes(j?.claude.sessions ?? [], day), [j, day]);
   const hourly = (key: 'cpu' | 'gpu') => j?.hours.map((h) => (h.samples ? (h[key] ?? 0) : null)) ?? [];
   const net = j?.hours.map((h) => (h.samples ? (h.rx_mb ?? 0) + (h.tx_mb ?? 0) : null)) ?? [];
   const isToday = day === today();
@@ -96,7 +96,7 @@ export function JournalView() {
             <Tile label="Mac nie spał" value={fmtMin(j.awake_min)} />
           </div>
           <Summary j={j} />
-          <SessionLanes lanes={dayLanes} selected={selected} onSelect={setSelected} />
+          <SessionLanes lanes={dayLanes} day={day} selected={selected} onSelect={setSelected} />
           <div className="rounded-lg border bg-card">
             <SessionTable sessions={j.claude.sessions} day={day} selected={selected} onSelect={setSelected} />
           </div>

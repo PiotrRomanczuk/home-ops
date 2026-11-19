@@ -55,14 +55,18 @@ export function fmtMin(min: number): string {
   return m >= 60 ? `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')} min` : `${m} min`;
 }
 
-/** Sessions grouped into one lane per project (busiest first), each a [from, to] span in minutes. */
-export function lanes(sessions: JournalSession[]): Lane[] {
+const dayOf = (iso: string) => WARSAW_DAY.format(new Date(iso));
+
+/** Sessions grouped into one lane per project (busiest first), each a [from, to] span in minutes
+ * of `day`, clipped to 0–1440 when the session started before or ended after it. */
+export function lanes(sessions: JournalSession[], day: string): Lane[] {
   const by = new Map<string, Lane>();
   for (const s of sessions) {
     const project = s.project_slug ?? '(bez projektu)';
     const lane = by.get(project) ?? { project, activeMin: 0, segments: [] };
-    const from = minuteOfDay(s.first_ts);
-    lane.segments.push({ session: s, from, to: Math.max(from + 5, minuteOfDay(s.last_ts)) });
+    const from = dayOf(s.first_ts) < day ? 0 : minuteOfDay(s.first_ts);
+    const to = dayOf(s.last_ts) > day ? 1440 : Math.max(from + 5, minuteOfDay(s.last_ts));
+    lane.segments.push({ session: s, from, to });
     lane.activeMin += s.active_min;
     by.set(project, lane);
   }
