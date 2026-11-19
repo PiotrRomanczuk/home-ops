@@ -69,6 +69,7 @@ jobs:
             ops/elitedesk/pr_review.py \
             ops/elitedesk/pr_review_gh.py \
             ops/elitedesk/pr_review_llm.py \
+            ops/elitedesk/pr_sections.py \
             ops/elitedesk/review_db.py \
             ops/elitedesk/seo_plan_db.py \
             ops/elitedesk/seo_drift.py \
@@ -192,7 +193,8 @@ jobs:
             -f postgres/migrations/021_decisions.sql \
             -f postgres/migrations/022_daily_briefs.sql \
             -f postgres/migrations/023_queue_state.sql \
-            -f postgres/migrations/028_pr_reviews.sql
+            -f postgres/migrations/028_pr_reviews.sql \
+            -f postgres/migrations/033_review_gate.sql
           # /api/today reads host_metrics (003); its trailing cron.schedule
           # needs pg_cron, so apply the file without that last statement.
           sed '/^SELECT cron.schedule(/,$d' postgres/migrations/003_host_metrics.sql \
@@ -218,7 +220,7 @@ jobs:
           LOGS_PASSWORD: ci-password
         # One file at a time: they share this database (activity + progress both
         # write unit_runs), so parallel files would race each other's cleanup.
-        run: npm test -- --run --no-file-parallelism src/routes/__tests__/jobs-state-machine.test.ts src/routes/__tests__/decisions.test.ts src/routes/__tests__/briefs-today.test.ts src/routes/__tests__/queue.test.ts src/routes/__tests__/activity.test.ts src/routes/__tests__/progress.test.ts
+        run: npm test -- --run --no-file-parallelism src/routes/__tests__/jobs-state-machine.test.ts src/routes/__tests__/decisions.test.ts src/routes/__tests__/briefs-today.test.ts src/routes/__tests__/queue.test.ts src/routes/__tests__/activity.test.ts src/routes/__tests__/progress.test.ts src/routes/__tests__/review.test.ts
 
   tests-seo-ingest:
     name: tests (seo ingest upsert contract vs real postgres)

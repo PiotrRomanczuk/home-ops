@@ -8,7 +8,7 @@ import { env } from './env.ts';
 
 export const DECISION_COLS = `id, routine, slug, question, detail, context_url, options, ref, parent_id,
   created_at, expires_at, answer, reason, answered_at, answered_via, consumed_at,
-  public.decision_state(decisions.*) AS state`;
+  requires_review, reviewed_at, public.decision_state(decisions.*) AS state`;
 
 export interface DecisionOption {
   key: string;
@@ -33,6 +33,8 @@ export interface DecisionRow {
   answered_at: string | null;
   answered_via: string | null;
   consumed_at: string | null;
+  requires_review: boolean;
+  reviewed_at: string | null;
   state: 'open' | 'answered' | 'expired';
 }
 
@@ -56,13 +58,20 @@ export function normalizeOptions(raw: unknown): DecisionOption[] {
   return out;
 }
 
+// A decision that requires review has no one-tap answer links: the email
+// points at its review page instead (reviewUrlFor).
 export function linksFor(d: DecisionRow): Record<string, string> {
+  if (d.requires_review) return {};
   const exp = Math.floor(new Date(d.expires_at).getTime() / 1000);
   const out: Record<string, string> = {};
   for (const o of normalizeOptions(d.options)) {
     out[o.key] = buildLink(env.DECISION_SECRET, env.PUBLIC_BASE_URL, { id: Number(d.id), option: o.key, exp });
   }
   return out;
+}
+
+export function reviewUrlFor(d: DecisionRow): string | null {
+  return d.requires_review ? `${env.PUBLIC_BASE_URL}/review/${d.id}` : null;
 }
 
 export async function getDecision(id: number): Promise<DecisionRow | null> {
@@ -72,19 +81,44 @@ export async function getDecision(id: number): Promise<DecisionRow | null> {
 
 export type AnswerResult =
   | { ok: true; decision: DecisionRow }
-  | { ok: false; code: 404 | 409 | 400; error: string; decision?: DecisionRow };
+  | { ok: false; code: 404 | 409 | 403 | 400; error: string; decision?: DecisionRow };
+
+export const REVIEW_REQUIRED_ERROR = 'open the review page to answer this decision';
+
+// An answer that rejects instead of accepting; it needs a reason on the review page.
+export const NO_RE = /^(no|reject|skip|decline)$/i;
+
+// Routines whose question merges code: always answered from the review page,
+// whatever flag the caller sent (an old pr_decide.py must not skip the gate).
+export const REVIEW_ROUTINES = new Set(['pr-decide']);
+
+// Options an ingest-token caller may give a review-required decision: it can
+// retire the question ('later', how pr-decide supersedes) or refuse it, never
+// accept. Accepting is a person's act on the review page.
+export const isNonMergingOption = (option: string): boolean => option === 'later' || NO_RE.test(option);
 
 // Records an answer exactly once. A second tap on an already-answered link
 // is a 409 with the existing row, so the confirmation page can say "already
 // answered: yes at 07:12" instead of silently overwriting.
+//
+// A decision that requires review is accepted by a person only from its
+// review page (via 'review', after the route checked the page's token). The
+// console buttons and email links are refused, and so is any ingest-token
+// caller ('api') answering with an option that merges (yes/force/fix): the
+// token is held by every agent, including the session that wrote the PR. It
+// may still say 'later' or refuse, which is how pr-decide retires a question.
 export async function answerDecision(
   id: number,
   option: string,
   reason: string | null,
-  via: 'link' | 'console' | 'api',
+  via: 'link' | 'console' | 'api' | 'review',
 ): Promise<AnswerResult> {
   const cur = await getDecision(id);
   if (!cur) return { ok: false, code: 404, error: 'not found' };
+  const mayNotAccept = via === 'console' || via === 'link' || (via === 'api' && !isNonMergingOption(option));
+  if (cur.requires_review && mayNotAccept) {
+    return { ok: false, code: 403, error: REVIEW_REQUIRED_ERROR, decision: cur };
+  }
   if (!normalizeOptions(cur.options).some((o) => o.key === option)) {
     return { ok: false, code: 400, error: 'option not offered', decision: cur };
   }

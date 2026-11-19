@@ -27,7 +27,9 @@ NO_RE = {'no', 'reject', 'skip', 'decline'}
 def sec_decisions(m: dict, now: datetime) -> str:
     rows = []
     for d in m.get('decisions', []):
-        btns = ''.join(button(d['links'].get(o['key'], '#'), o['label'], o['key'] in NO_RE) for o in d.get('options', []))
+        # A decision that merges code has no one-tap answers: it is answered on its review page.
+        btns = (button(d['review_url'], 'Przejrzyj i zdecyduj', False) if d.get('review_url') else
+                ''.join(button(d['links'].get(o['key'], '#'), o['label'], o['key'] in NO_RE) for o in d.get('options', [])))
         ctx = f" · {link(d['context_url'], 'context')}" if d.get('context_url') else ''
         sub = f"{e(d['routine'])} · expires {when(d['expires_at'], now)}{ctx}<br>{btns}"
         rows.append(row(INK2, e(d['question']), sub))

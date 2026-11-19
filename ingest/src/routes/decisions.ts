@@ -1,6 +1,7 @@
 import type { Hono } from 'hono';
 import { hasIngestToken, tokenOnly, viewerOrToken } from '../auth.ts';
 import { pool } from '../db.ts';
+import { parseDecisionBody, ROUTINE_RE } from '../decision-body.ts';
 import { verifyLink } from '../decision-links.ts';
 import { confirmPage, errorPage, resultPage } from '../decision-pages.ts';
 import {
@@ -10,6 +11,7 @@ import {
   getDecision,
   linksFor,
   normalizeOptions,
+  reviewUrlFor,
 } from '../decisions-store.ts';
 import { env } from '../env.ts';
 
@@ -18,13 +20,16 @@ import { env } from '../env.ts';
 // digest email (/d/...). Signed links are only handed out to token callers
 // (the digest), never to anonymous console viewers.
 
-const ROUTINE_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 const STATES = new Set(['open', 'answered', 'expired', 'all']);
-const MAX_QUESTION = 300;
 const MAX_REASON = 200;
 
 function withLinks(rows: DecisionRow[], include: boolean) {
-  return rows.map((d) => ({ ...d, options: normalizeOptions(d.options), links: include ? linksFor(d) : undefined }));
+  return rows.map((d) => ({
+    ...d,
+    options: normalizeOptions(d.options),
+    links: include ? linksFor(d) : undefined,
+    review_url: reviewUrlFor(d),
+  }));
 }
 
 export function registerDecisionsRoutes(app: Hono): void {
@@ -52,31 +57,26 @@ export function registerDecisionsRoutes(app: Hono): void {
 
   app.post('/api/decisions', async (c) => {
     const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
-    const routine = typeof b.routine === 'string' ? b.routine : '';
-    if (!ROUTINE_RE.test(routine)) return c.json({ error: 'routine required (slug-like)' }, 400);
-    const question = typeof b.question === 'string' ? b.question.trim() : '';
-    if (!question || question.length > MAX_QUESTION)
-      return c.json({ error: `question required (1..${MAX_QUESTION})` }, 400);
-    const options = normalizeOptions(b.options === undefined ? ['yes', 'no'] : b.options);
-    if (options.length < 2 || options.length > 4) return c.json({ error: 'options: 2..4 slug-like keys' }, 400);
-    const slug = b.slug == null ? null : String(b.slug);
-    if (slug !== null && !ROUTINE_RE.test(slug)) return c.json({ error: 'invalid slug' }, 400);
-    const contextUrl = b.context_url == null ? null : String(b.context_url);
-    if (contextUrl !== null && !/^https?:\/\//.test(contextUrl))
-      return c.json({ error: 'context_url must be http(s)' }, 400);
-    const detail = typeof b.detail === 'string' ? b.detail.slice(0, 4000) : null;
-    const ref = b.ref == null ? null : String(b.ref).slice(0, 120);
-    const parentId = b.parent_id == null ? null : Number(b.parent_id);
-    if (parentId !== null && !Number.isInteger(parentId)) return c.json({ error: 'invalid parent_id' }, 400);
-    const expiresHours = b.expires_hours === undefined ? 72 : Number(b.expires_hours);
-    if (!Number.isFinite(expiresHours) || expiresHours < 1 || expiresHours > 24 * 30) {
-      return c.json({ error: 'expires_hours must be 1..720' }, 400);
-    }
+    const parsed = parseDecisionBody(b);
+    if ('error' in parsed) return c.json({ error: parsed.error }, 400);
+    const d = parsed.value;
     const r = await pool.query(
-      `INSERT INTO public.decisions (routine, slug, question, detail, context_url, options, ref, parent_id, expires_at)
-       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, now() + make_interval(hours => $9::int))
+      `INSERT INTO public.decisions
+         (routine, slug, question, detail, context_url, options, ref, parent_id, expires_at, requires_review)
+       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, now() + make_interval(hours => $9::int), $10)
        RETURNING ${DECISION_COLS}`,
-      [routine, slug, question, detail, contextUrl, JSON.stringify(options), ref, parentId, expiresHours],
+      [
+        d.routine,
+        d.slug,
+        d.question,
+        d.detail,
+        d.contextUrl,
+        JSON.stringify(d.options),
+        d.ref,
+        d.parentId,
+        d.expiresHours,
+        d.requiresReview,
+      ],
     );
     return c.json({ decision: withLinks(r.rows as DecisionRow[], true)[0] }, 201);
   });

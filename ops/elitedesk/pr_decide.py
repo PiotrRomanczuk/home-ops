@@ -9,7 +9,9 @@ pr-review reviewed its current head commit, and the options follow that review (
      (`--match-head-commit`), fix → label `fix-requested` for pr-agent, no → close with
      the reason as a comment (branch kept), later → nothing, not asked again for 7 days
   2. ask about reviewed PRs with no question waiting, oldest first, at most MAX_OPEN
-     waiting at once; a question about an older commit is superseded by the new one
+     waiting at once; a question about an older commit is superseded by the new one.
+     The question is answered on its review page only (/review/:id, migration 033):
+     pr_sections files the PR's description, files, CI and test reports there first.
 
 Skipped: drafts, archived repos, `seo-auto` PRs (seo_decide.py owns those).
 Env: INGEST_URL + INGEST_TOKEN, PR_OWNER (default PiotrRomanczuk).
@@ -28,6 +30,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from agents.routine_report import Reporter  # noqa: E402
 
 import pr_gate  # noqa: E402
+import pr_sections  # noqa: E402
 
 ROUTINE = 'pr-decide'
 OWNER = os.environ.get('PR_OWNER', 'PiotrRomanczuk')
@@ -110,16 +113,25 @@ def ask(r: Reporter, run: Gh, prs: list[dict[str, Any]], log: Log, skip: set[str
         old = open_q.get(key)
         if review is None or (old and pr_gate.split_ref(old['ref'])[2] == st['sha']):
             continue  # not reviewed yet, or the question about this commit is already waiting
+        if not old and asked >= room:
+            break
+        # Answered on the review page only (migration 033): file its documentation first. A PR whose
+        # documentation cannot be filed gets no question (and keeps an older one waiting) this run;
+        # it must not stop the PRs after it.
+        try:
+            pr_sections.file(lambda path, body: r._call('POST', path, body), run, OWNER, repo, num, st['sha'])
+        except (RuntimeError, subprocess.CalledProcessError, ValueError) as e:
+            log(f'skipped {key} at {st["sha"][:7]}: review sections not filed ({e})')
+            continue
         if old:  # waiting question is about an older commit: retire it, ask about the reviewed one
             r._call('POST', f'/api/decisions/{old["id"]}/answer', {'option': 'later', 'reason': f'{SUPERSEDED} {st["sha"][:7]}'})
             r.consume(old['id'])
-        elif asked >= room:
-            break
         n = pr_gate.rounds(p.get('labels', []))
         age = (now - datetime.fromisoformat(p['createdAt'].replace('Z', '+00:00'))).days
         r.ask(f'{repo} #{num}: {p["title"][:200]}', options=pr_gate.options(review, st['ok'], n),
               ref=pr_gate.ref_of(repo, num, st['sha']), slug=repo, context_url=p['url'], expires_hours=24 * 7,
-              detail=pr_gate.detail(review, st, age, p.get('author', {}).get('login', ''), n))
+              detail=pr_gate.detail(review, st, age, p.get('author', {}).get('login', ''), n),
+              requires_review=True)
         log(f'asked about {key} at {st["sha"][:7]} ({review["verdict"]})')
         asked += 0 if old else 1
     return asked

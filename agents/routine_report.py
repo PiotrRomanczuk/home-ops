@@ -79,8 +79,11 @@ class Reporter:
 
     def ask(self, question: str, *, options: list[dict[str, str]] | None = None, ref: str | None = None,
             slug: str | None = None, context_url: str | None = None, detail: str | None = None,
-            expires_hours: int = 72, parent_id: int | None = None) -> dict[str, Any]:
+            expires_hours: int = 72, parent_id: int | None = None,
+            requires_review: bool = False) -> dict[str, Any]:
         body: dict[str, Any] = {'routine': self.routine, 'question': question[:300], 'expires_hours': expires_hours}
+        if requires_review:  # answered on /review/:id only (migration 033)
+            body['requires_review'] = True
         for k, v in (('options', options), ('ref', ref), ('slug', slug), ('context_url', context_url),
                      ('detail', detail), ('parent_id', parent_id)):
             if v is not None:

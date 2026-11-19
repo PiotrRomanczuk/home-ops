@@ -51,6 +51,15 @@ function decAnswerForm(d) {
   return h('div', { class: 'dec-answer' }, ...buttons, reason);
 }
 
+/* Decisions that merge code are answered on their review page only
+   (migration 033): the card links there instead of offering buttons. */
+function decReviewLink(d) {
+  const seen = d.reviewed_at ? ` · otwarte ${rel(d.reviewed_at)}` : '';
+  return h('div', { class: 'dec-answer' },
+    h('a', { class: 'dec-opt dec-review', href: d.review_url || `/review/${d.id}` }, 'Przejrzyj i zdecyduj →'),
+    h('span', { class: 'dec-hint' }, `scalenie tylko ze strony przeglądu${seen}`));
+}
+
 function decCard(d) {
   const isOpen = d.state === 'open';
   const when = isOpen ? `expires ${decUntil(d.expires_at)}` : d.answered_at ? `answered ${rel(d.answered_at)}` : `expired ${rel(d.expires_at)}`;
@@ -70,7 +79,7 @@ function decCard(d) {
     d.detail ? h('pre', { class: 'dec-detail' }, d.detail) : null,
     d.context_url ? h('a', { class: 'dec-ctx', href: d.context_url, target: '_blank', rel: 'noopener' }, 'open context →') : null,
     d._err ? h('div', { class: 'dec-err' }, d._err) : null,
-    isOpen ? decAnswerForm(d) : outcome,
+    isOpen ? (d.requires_review ? decReviewLink(d) : decAnswerForm(d)) : outcome,
   );
 }
 

@@ -160,6 +160,14 @@ The author of a change never accepts it. `pr-review.timer` (hourly 07–23) runs
 PRs per run. Result: one comment on the PR, label `review:ok` / `review:zmiany`,
 a row in `pr_reviews`, a `pr-review` card on "Dziś".
 
+**Review page (since 2026-11-15, migration 033).** A PR question is answered only on
+`/review/:id`: the card on "Dziś" and the digest email carry a "Przejrzyj i zdecyduj" link,
+not buttons. The page shows the pr-review verdict for the exact head commit plus every
+section filed for it (`pr_sections.py`: description, files, CI, manual test reports; other
+repos' CI can add more through `POST /api/reviews/sections`). The buttons unlock after every
+section was expanded, and the server accepts the answer only with the page's token (bound
+to the decision and the SHA, 12 h) and the full list of opened sections.
+
 `pr_decide.py` asks about a PR only once its current head is reviewed;
 options come from `pr_gate.py` (ok → Scal; findings → Popraw / Scal mimo to;
 after 2 fix rounds no Popraw). The question's ref carries the reviewed SHA and
@@ -169,6 +177,7 @@ unreviewed commits. "Popraw" labels the PR `fix-requested` for `pr-agent`
 
 ```bash
 psql … -f postgres/migrations/028_pr_reviews.sql        # once (idempotent)
+psql … -f postgres/migrations/033_review_gate.sql       # review page gate (idempotent)
 cp ops/elitedesk/pr-review.{service,timer} ~/.config/systemd/user/
 systemctl --user daemon-reload && systemctl --user enable --now pr-review.timer
 python3 ops/elitedesk/pr_review.py --dry-run --pr job-radar#7   # JSON + comment text to ~/.cache/pr-review/dry/, no DB, no GitHub writes
