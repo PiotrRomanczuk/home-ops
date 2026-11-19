@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { asList, buildMap, dependentsOf, linkTarget, type MapProjectRow } from '../map-model.ts';
+import { buildMap, dependentsOf, type MapProjectRow } from '../map-model.ts';
+import { asList, linkTarget } from '../vault-links.ts';
 
 const project = (slug: string, fm: Record<string, unknown>, status = 'hot'): MapProjectRow => ({
   slug,

@@ -88,7 +88,7 @@ graph TB
 
 | Component | Host | Role | Lifecycle |
 | --- | --- | --- | --- |
-| `ingest` | elitedesk | HTTP API in front of Postgres. Routes: `/api/{ingest,metrics,logs,jobs,projects,sources,health}`; `/api/map` (project graph: `depends_on` / `feeds` / `hosts` + blast radius, `map-model.ts`) and `/api/processes` for the Mapa tab. Auth: ingest-token for machines, cookie for browser. | Docker compose, healthcheck on `/api/health` |
+| `ingest` | elitedesk | HTTP API in front of Postgres. Routes: `/api/{ingest,metrics,logs,jobs,projects,sources,health}`; `/api/map` (project graph: `depends_on` / `feeds` / `hosts` + blast radius, `map-model.ts`), `/api/processes` and `/api/pressure` (attention ranking: vault tasks, pain points, blueprint gaps, GitHub issues, errors / CI / deploy down × blast radius, `pressure-model.ts`) for the Mapa tab. Auth: ingest-token for machines, cookie for browser. | Docker compose, healthcheck on `/api/health` |
 | `postgres` | elitedesk | Single Postgres. 4 tables, all jsonb-heavy. 30-day retention on logs+metrics, indefinite on failed/cancelled jobs. | Docker compose |
 | `elitedesk-watcher` | elitedesk | Tails journald units (cloudflared, docker, ssh) + named docker container logs. Also samples host_metrics every 30s. | systemd-user |
 | `activity-watcher` | elitedesk | Reads the `--user` journal every 30s and turns systemd lifecycle messages into one row per unit run (`unit_runs`, with its log tail; crash loops fold into `repeat_count`), adds GitHub Actions jobs from the self-hosted runners (via `gh`), and posts a "right now" snapshot (CPU per owning unit/container from cgroups, running units, next timers) to `activity_now`. Feeds the Serwer tab. | systemd-user |

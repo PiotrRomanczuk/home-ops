@@ -1,7 +1,8 @@
-/* Integration test for processes (029) + GET /api/map: sync replaces the full
- * set (absent slugs are deleted), the list omits the diagram, the detail has
- * it, and the map folds projects + processes into one graph. Skips when
- * DATABASE_URL is unset. Needs migrations 005, 029.
+/* Integration test for processes (029) + GET /api/map + GET /api/pressure:
+ * sync replaces the full set (absent slugs are deleted), the list omits the
+ * diagram, the detail has it, the map folds projects + processes into one
+ * graph, and pressure reads vault tasks, repo_meta and host_logs. Skips when
+ * DATABASE_URL is unset. Needs migrations 001, 005, 016, 029.
  */
 import type { Hono } from 'hono';
 import type pg from 'pg';
@@ -29,6 +30,7 @@ beforeAll(async () => {
   app = new HonoCls();
   (await import('../processes.ts')).registerProcessesRoutes(app);
   (await import('../map.ts')).registerMapRoutes(app);
+  (await import('../pressure.ts')).registerPressureRoutes(app);
 });
 
 afterAll(async () => {
@@ -37,7 +39,7 @@ afterAll(async () => {
 
 beforeEach(async () => {
   if (skip) return;
-  await pool.query('TRUNCATE public.processes, public.projects');
+  await pool.query('TRUNCATE public.processes, public.projects, public.host_logs');
   await pool.query(`INSERT INTO public.projects (slug, title, status, raw_frontmatter) VALUES
     ('job-radar', 'job-radar', 'hot', '{"depends_on":["home-ops"],"feeds":["vectordigital"],"hosts":["uwh"]}'),
     ('home-ops', 'home-ops', 'hot', '{"hosts":["uwh"]}')`);
@@ -95,5 +97,44 @@ describe.skipIf(skip)('processes + map', () => {
     expect(map.processes).toEqual([
       { slug: 'lead-pipeline', title: 'LEAD-PIPELINE', lanes: ['job-radar'], warnings: [] },
     ]);
+  });
+});
+
+describe.skipIf(skip)('pressure', () => {
+  const log = (source: string, level: string, message: string, minutesAgo: number) =>
+    pool.query(
+      `INSERT INTO public.host_logs (host, source, level, message, ts)
+       VALUES ('rpi', $1, $2, $3, now() - make_interval(mins => $4))`,
+      [source, level, message, minutesAgo],
+    );
+
+  it('ranks by vault tasks, repo_meta and runtime, with blast radius', async () => {
+    await pool.query(`UPDATE public.projects SET now_md = '- [ ] 🔴 S fix', repo_meta =
+      '{"issues":{"open":2,"bugs":1},"gaps":{"count":3,"ids":["HO-1"]},"ci":{"conclusion":"failure"}}'
+      WHERE slug = 'home-ops'`);
+    await log('app:home-ops', 'error', 'db timeout after 30s', 10);
+    await log('app:home-ops', 'error', 'db timeout after 31s', 5); // same pattern
+    await log('app:home-ops', 'error', 'gpu queue stalled for 9h', 5); // muted in the digest
+    await log('app:job-radar', 'error', 'deploy unreachable from rpi: https://x (503)', 30);
+    await log('app:job-radar', 'info', 'deploy reachable again from rpi: https://x (was down ~5m)', 20);
+    await log('app:home-ops', 'error', 'deploy unreachable from rpi: https://y (no response)', 1);
+    const body = await json(await req('GET', '/api/pressure'));
+    const [top, second] = body.projects;
+    expect(top.slug).toBe('home-ops');
+    expect(top.parts.runtime).toEqual({ errorPatterns: 1, ciFailed: true, down: true, points: 12 });
+    expect(top.parts.issues.points).toBe(4);
+    expect(top.dependents).toEqual(['job-radar']);
+    // tasks 4 + gaps 3 + issues 4 + runtime 12 = 23, × blast 1.25
+    expect(top.score).toBe(28.8);
+    expect(second).toMatchObject({ slug: 'job-radar', score: 0 });
+    expect(second.parts.runtime.down).toBe(false);
+    expect(body.weights.red).toBe(4);
+  });
+
+  it('puts the score on map nodes', async () => {
+    await pool.query(`UPDATE public.projects SET pain_md = '- slow' WHERE slug = 'job-radar'`);
+    const map = await json(await req('GET', '/api/map'));
+    expect(map.nodes.find((n: Json) => n.id === 'job-radar').pressure).toBe(2);
+    expect(map.nodes.find((n: Json) => n.id === 'host:uwh').pressure).toBeNull();
   });
 });
