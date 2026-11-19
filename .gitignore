@@ -40,3 +40,6 @@ ops/elitedesk/digest.d/
 
 # Playwright MCP session output
 .playwright-mcp/
+
+# Mapa SPA build output (ingest/web → ingest/public/mapa, built in the Docker image)
+ingest/public/mapa/
