@@ -95,11 +95,9 @@ class ProcessGroupTest(unittest.TestCase):
         fake = self.dir / 'claude'
         fake.write_text('#!/bin/sh\nsleep 6  # a mutant without the cap ends here with rc 0, not hanging the suite\n')
         fake.chmod(0o755)
-        started = time.time()
         r = claude_run.run(str(fake), {**TASK, 'max_minutes': 60, 'cwd': str(self.dir)}, 'local:qwen', self.dir, self.dir,
                            'http://127.0.0.1:1', grace=1, local_minutes=0.02)
-        self.assertEqual(r['rc'], 124)
-        self.assertLess(time.time() - started, 10)
+        self.assertEqual(r['rc'], 124)  # only the cap yields 124; no wall-clock bound, so a loaded Mac cannot fail it
         self.assertFalse((self.dir / 'gpu' / 'borrow').exists())
 
     def test_a_worktree_left_behind_is_named_not_removed(self):

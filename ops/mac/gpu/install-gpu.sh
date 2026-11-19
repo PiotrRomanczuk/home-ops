@@ -15,9 +15,9 @@ install -d -o root -g wheel -m 755 "$LIB" "$ETC"
 install -o root -g wheel -m 644 "$HERE/gpu_worker.py" "$HERE/gpu_jobs.py" "$HERE/gpu_report.py" \
   "$HERE/gpu_pause.py" "$HERE/machine.py" "$HERE/procs.py" "$LIB/"
 # a module missing from the list above would crash the supervisor in a launchd restart loop: fail here instead
-/usr/bin/python3 -B -c 'import sys; sys.path.insert(0, sys.argv[1]); import gpu_worker' "$LIB"
+/usr/bin/python3 -I -B -c 'import sys; sys.path.insert(0, sys.argv[1]); import gpu_worker' "$LIB"
 if [ "${1:-}" ]; then
-  /usr/bin/python3 -c 'import sys; sys.path.insert(0, sys.argv[2]); import gpu_jobs; gpu_jobs.load(__import__("pathlib").Path(sys.argv[1]))' "$1" "$LIB"
+  /usr/bin/python3 -I -c 'import sys; sys.path.insert(0, sys.argv[2]); import gpu_jobs; gpu_jobs.load(__import__("pathlib").Path(sys.argv[1]))' "$1" "$LIB"
   install -o root -g wheel -m 644 "$1" "$ETC/gpu-jobs.json"
   echo "job list: $ETC/gpu-jobs.json"
 fi
