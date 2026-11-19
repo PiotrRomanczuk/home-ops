@@ -1,0 +1,117 @@
+name: flow
+
+# dev → test → main (docs/adr/2026-11-14-three-branches.md).
+#   promote     dev is green            → merge that green dev commit (head_sha) into test
+#   tester-pr   a green PR into test that touches only test files → merge it,
+#               then bring the tests back to dev
+#   release-pr  test is green and differs from main → open (or refresh) the PR test → main
+#   back-to-dev test is red             → one issue labelled back-to-dev (fixed title, SHA + run in the body)
+#   sync        main moved              → merge main into dev
+# Token: secrets.FLOW_TOKEN when set (contents, pull-requests, issues, workflows: write) — its pushes
+# start `check` themselves and may change .github/workflows. Without it GITHUB_TOKEN is used: `check`
+# is dispatched after each push, and a push that changes .github/workflows is refused → one issue
+# with the manual push (docs/RUNBOOK.md, Branches). Steps: ops/ci/flow_cli.py, taken from the commit
+# that defined this run ($GITHUB_SHA), so a job on test runs the same code as this file.
+# Jobs that write branches share the concurrency group flow-write.
+
+on:
+  workflow_run:
+    workflows: [check]
+    types: [completed]
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  actions: write
+
+env:
+  GH_TOKEN: ${{ secrets.FLOW_TOKEN || github.token }}
+  GH_REPO: ${{ github.repository }}
+  HAS_FLOW_TOKEN: ${{ secrets.FLOW_TOKEN != '' }}
+  GIT_AUTHOR_NAME: home-ops flow
+  GIT_AUTHOR_EMAIL: flow@users.noreply.github.com
+  GIT_COMMITTER_NAME: home-ops flow
+  GIT_COMMITTER_EMAIL: flow@users.noreply.github.com
+
+jobs:
+  promote:
+    if: >-
+      github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'dev' && github.event.workflow_run.event != 'pull_request'
+    runs-on: ubuntu-latest
+    concurrency: { group: flow-write, cancel-in-progress: false }
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: test, fetch-depth: 0, token: "${{ secrets.FLOW_TOKEN || github.token }}" }
+      - name: merge the green dev commit into test
+        env:
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          git archive "$GITHUB_SHA" ops/ci | tar -x -C "$RUNNER_TEMP"
+          python3 "$RUNNER_TEMP/ops/ci/flow_cli.py" advance --source dev --target test --sha "$SHA"
+
+  tester-pr:
+    if: >-
+      github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      github.event.workflow_run.pull_requests[0].base.ref == 'test'
+    runs-on: ubuntu-latest
+    concurrency: { group: flow-write, cancel-in-progress: false }
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: dev, fetch-depth: 0, token: "${{ secrets.FLOW_TOKEN || github.token }}" }
+      - name: merge a tests-only PR into test, then tests back to dev
+        env:
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          git archive "$GITHUB_SHA" ops/ci | tar -x -C "$RUNNER_TEMP"
+          python3 "$RUNNER_TEMP/ops/ci/flow_cli.py" tester --sha "$SHA"
+
+  release-pr:
+    if: >-
+      github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'test' && github.event.workflow_run.event != 'pull_request'
+    runs-on: ubuntu-latest
+    concurrency: { group: flow-release, cancel-in-progress: false }
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: test, fetch-depth: 0, token: "${{ secrets.FLOW_TOKEN || github.token }}" }
+      - name: open (or refresh) the PR test → main
+        env:
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          git archive "$GITHUB_SHA" ops/ci | tar -x -C "$RUNNER_TEMP"
+          python3 "$RUNNER_TEMP/ops/ci/flow_cli.py" release --sha "$SHA"
+
+  back-to-dev:
+    if: >-
+      github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'failure' &&
+      github.event.workflow_run.head_branch == 'test' && github.event.workflow_run.event != 'pull_request'
+    runs-on: ubuntu-latest
+    concurrency: { group: flow-issues, cancel-in-progress: false }
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: file the failure for dev (one issue, refreshed)
+        env:
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+        run: |
+          git archive "$GITHUB_SHA" ops/ci | tar -x -C "$RUNNER_TEMP"
+          python3 "$RUNNER_TEMP/ops/ci/flow_cli.py" red --sha "$SHA" --run-url "$RUN_URL"
+
+  sync:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    concurrency: { group: flow-write, cancel-in-progress: false }
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: dev, fetch-depth: 0, token: "${{ secrets.FLOW_TOKEN || github.token }}" }
+      - name: merge main into dev
+        run: |
+          git archive "$GITHUB_SHA" ops/ci | tar -x -C "$RUNNER_TEMP"
+          python3 "$RUNNER_TEMP/ops/ci/flow_cli.py" advance --source main --target dev
