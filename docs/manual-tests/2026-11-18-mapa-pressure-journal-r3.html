@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="pl"><head><meta charset="utf-8"><title>#75 pressure — poprawki po recenzji (r3)</title>
+<style>body{font:15px/1.5 system-ui;max-width:760px;margin:2em auto;padding:0 1em}code{background:#eee;padding:1px 4px}</style></head>
+<body>
+<h1>#75 Mapa — kolejka presji: poprawki r3</h1>
+<p><em>2026-11-19 · bez zrzutów ekranu (zmiany w API i parserze, brak UI)</em></p>
+<h2>Co zrobiono</h2>
+<ul>
+<li><code>DOWN_SQL</code> bez okna 7 dni: <code>rpi-sentinel</code> zapisuje <code>down</code> tylko przy przejściu, więc długa awaria wypadała z rankingu. Zakres ogranicza retencja <code>host_logs</code> (<code>prune_host_logs(30)</code>, pg_cron).</li>
+<li><code>gaps_parse._gap_lines</code>: granica sekcji (h2) kończy notkę <code>_Shipped …_</code>.</li>
+<li><code>parts.issues.capped</code> w modelu presji i w odpowiedzi <code>/api/pressure</code>.</li>
+</ul>
+<h2>Jak sprawdzić ręcznie</h2>
+<ol>
+<li>Wstaw do <code>host_logs</code> wiersz <code>source='app:x'</code>, <code>message='deploy unreachable from rpi (HTTP 502)'</code>, <code>ts = now() - 10 days</code>. <code>GET /api/pressure</code> → projekt <code>x</code> ma <code>parts.runtime.down=true</code> (+5).</li>
+<li>Dodaj późniejszy wiersz <code>deploy reachable again from rpi</code> → <code>down=false</code>.</li>
+<li>Repo z ≥100 otwartymi issues → <code>parts.issues.capped=true</code>.</li>
+</ol>
+<h2>Testy</h2>
+<p><code>npm run check</code>, vitest (13 plików przeszło, 10 pominiętych bez bazy; <code>pressure.test.ts</code>, <code>processes-map.test.ts</code>, <code>pressure-model.test.ts</code> z prawdziwym postgres:17), <code>unittest</code> w <code>ops/elitedesk/tests</code> (106 OK).</p>
+</body></html>

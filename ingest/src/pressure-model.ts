@@ -60,7 +60,7 @@ export interface PressureRow {
     tasks: TaskCounts & { points: number };
     pain: { n: number; points: number };
     gaps: { n: number; ids: string[]; points: number; hasBlueprint: boolean | null; partial: boolean };
-    issues: { open: number; bugs: number; points: number };
+    issues: { open: number; bugs: number; capped: boolean; points: number };
     runtime: { errorPatterns: number; ciFailed: boolean; down: boolean; points: number };
   };
 }
@@ -102,7 +102,7 @@ export function projectPressure(p: PressureInput, dependents: string[], rt: Runt
       hasBlueprint: gapsError ? null : !!meta.gaps,
       partial: gaps.partial === true,
     },
-    issues: { open, bugs, points: W.bug * bugs + W.issue * Math.max(0, open - bugs) },
+    issues: { open, bugs, capped: issues.capped === true, points: W.bug * bugs + W.issue * Math.max(0, open - bugs) },
     runtime: { errorPatterns, ciFailed, down, points: runtimePts },
   };
   const base = Object.values(parts).reduce((s, x) => s + x.points, 0);

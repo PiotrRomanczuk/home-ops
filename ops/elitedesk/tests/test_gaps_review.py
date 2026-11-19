@@ -20,6 +20,11 @@ class TestReviewFixes(unittest.TestCase):
         text = '## Gaps\n- **LN-2 Done.**\n_Shipped 2026-10-09: LN-2._\n- **LN-7 Nowa luka.**\n'
         self.assertEqual(gp.parse_gaps({'BLUEPRINT.md': text})['ids'], ['LN-7'])
 
+    def test_shipped_note_ends_at_section_boundary(self):
+        text = ('## Gaps\n- **SK-1 Done.**\n_Shipped 2026-10-09: SK-1._\n'
+                '## More planned work\nSee SK-2 and SK-3 for context.\n- **SK-2 Open.**\n')
+        self.assertEqual(gp.parse_gaps({'BLUEPRINT.md': text})['ids'], ['SK-2'])
+
     def test_shipped_note_ignores_ids_in_parentheses(self):
         text = '## Gaps\n### SKL-1 · Open\n### PRA-1 · Done\n_Shipped 2026-07-19: PRA-1 (unblocks SKL-1 later)._\n'
         self.assertEqual(gp.parse_gaps({'BLUEPRINT.md': text})['ids'], ['SKL-1'])

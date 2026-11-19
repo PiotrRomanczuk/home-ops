@@ -104,6 +104,14 @@ describe('review fixes (#75)', () => {
     expect(row?.parts.gaps).toMatchObject({ n: 2, partial: true });
   });
 
+  it('a capped issues page is flagged', () => {
+    const capped = projectPressure(input({ repo_meta: { issues: { open: 100, bugs: 0, capped: true } } }), [], quiet);
+    expect(capped?.parts.issues).toMatchObject({ open: 100, capped: true });
+    expect(
+      projectPressure(input({ repo_meta: { issues: { open: 2, bugs: 0 } } }), [], quiet)?.parts.issues.capped,
+    ).toBe(false);
+  });
+
   it('archived dependents do not raise blast radius', () => {
     const projects = [
       input(),

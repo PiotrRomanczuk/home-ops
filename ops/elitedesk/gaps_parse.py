@@ -55,9 +55,9 @@ def _gap_lines(name: str, text: str) -> list[str]:
         h2 = _H2_RE.match(line)
         if h2:
             inside = bool(_GAP_SECTION_RE.search(h2.group(1)))
+            out.append('')  # section boundary: ends a pending `_Shipped …_` note
             continue
-        if inside:
-            out.append(line)
+        out.append(line if inside else '')
     return out
 
 

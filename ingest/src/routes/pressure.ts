@@ -19,10 +19,13 @@ const ERRORS_SQL = `
      AND message NOT LIKE 'deploy unreachable from rpi%'
    GROUP BY 1, 2`;
 
+// No time window on purpose: rpi-sentinel logs a transition only, so a long
+// outage must stay ranked. host_logs is already bounded by prune_host_logs(30)
+// (pg_cron, 002_pg_cron.sql), and idx_host_logs_source_ts covers the scan.
 const DOWN_SQL = `
   SELECT DISTINCT ON (source) lower(substr(source, 5)) AS slug, message LIKE 'deploy unreachable%' AS is_down
     FROM public.host_logs
-   WHERE source LIKE 'app:%' AND ts > now() - interval '7 days'
+   WHERE source LIKE 'app:%'
      AND (message LIKE 'deploy unreachable from rpi%' OR message LIKE 'deploy reachable again from rpi%')
    ORDER BY source, ts DESC`;
 
