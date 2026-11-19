@@ -65,7 +65,7 @@ class Flow:
         self.run(['git', 'merge', '--abort'])
         return False
 
-    def push(self, target: str, ref: str) -> bool:
+    def push(self, source: str, target: str, ref: str) -> bool:
         """Push HEAD to target; if target moved meanwhile, merge it in and try once more."""
         for attempt in range(2):
             res = self.run(['git', 'push', 'origin', f'HEAD:{target}'])
@@ -73,23 +73,22 @@ class Flow:
                 return True
             print(res.err, file=sys.stderr)
             if REFUSED.search(res.err):
-                self.refused(target, ref)
+                self.refused(source, target, ref)
                 return False
             if attempt or self.run(['git', 'fetch', 'origin', target]).rc or not self.merge(f'origin/{target}'):
                 return False
         return False
 
-    def refused(self, target: str, ref: str) -> None:
+    def refused(self, source: str, target: str, ref: str) -> None:
         why = ('FLOW_TOKEN nie ma uprawnienia workflows (write)' if self.has_token
                else 'sekret FLOW_TOKEN nie jest ustawiony, a GITHUB_TOKEN nie może zmieniać .github/workflows')
-        source = ref.removeprefix('origin/')
         self.issue(f'flow: {source} → {target} wymaga ręcznego pushu (zmiana w workflows)', (
             f'Push na `{target}` odrzucony: {why} ({self.run_url}).\n\n'
             f'Ręcznie (Mac, poza Actions):\n```bash\ngit fetch origin\n'
             f'git push origin {ref}:{target}   # gdy {target} jest przodkiem {ref}\n'
             f'# inaczej: git checkout {target} && git merge --ff-only origin/{target} && '
             f'git merge --no-edit {ref} && git push origin {target}\n```\n'
-            'Na stałe: sekret FLOW_TOKEN (docs/RUNBOOK.md, sekcja Branches). Zamknij issue po pushu.'))
+            'Na stałe: sekret FLOW_TOKEN (docs/RUNBOOK.md, sekcja Branches). Zamknij issue po pushu.'), refresh=True)
 
     def advance(self, source: str, target: str, sha: str = '') -> int:
         """Merge <sha> (default: origin/<source>) into the checked-out <target> and push.
@@ -109,7 +108,7 @@ class Flow:
         if self.head() == before:
             print(f'{target} already has {ref[:7]}')
             return 0
-        if not self.push(target, ref):
+        if not self.push(source, target, ref):
             return 1
         self.dispatch(target)
         return 0

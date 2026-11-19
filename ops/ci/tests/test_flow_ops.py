@@ -79,7 +79,20 @@ class AdvanceTest(unittest.TestCase):
     def test_refused_push_names_the_sha_in_the_manual_command(self):
         run = FakeRun({('git', 'rev-parse'): moved_head('a', 'b'), ('git', 'push'): REFUSED})
         self.assertEqual(flow(run).advance('dev', 'test', sha='green1'), 1)
-        self.assertIn('git push origin green1:test', run.ran('gh', 'issue', 'create')[0][6])
+        created = run.ran('gh', 'issue', 'create')[0]
+        self.assertEqual(created[4], 'flow: dev → test wymaga ręcznego pushu (zmiana w workflows)')
+        self.assertIn('git push origin green1:test', created[6])
+
+    def test_two_refused_pushes_with_different_shas_make_one_issue(self):
+        title = 'flow: dev → test wymaga ręcznego pushu (zmiana w workflows)'
+        run = FakeRun({('git', 'rev-parse'): moved_head('a', 'b', 'a', 'b'), ('git', 'push'): REFUSED,
+                       ('gh', 'issue', 'list'): [issues(), issues(title)]})
+        self.assertEqual(flow(run).advance('dev', 'test', sha='1' * 40), 1)
+        self.assertEqual(flow(run).advance('dev', 'test', sha='2' * 40), 1)
+        self.assertEqual(len(run.ran('gh', 'issue', 'create')), 1)
+        edited = run.ran('gh', 'issue', 'edit')
+        self.assertEqual(len(edited), 1)
+        self.assertIn('2' * 40, edited[0][-1])
 
 
 if __name__ == '__main__':
