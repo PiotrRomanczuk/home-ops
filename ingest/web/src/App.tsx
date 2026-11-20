@@ -1,10 +1,12 @@
 // Mapa — the planner vault's project map as views: ecosystem (UML-component
-// style), infrastructure (UML-deployment style) and the pressure queue.
+// style), infrastructure (UML-deployment style) and the pressure queue — plus
+// "Dziennik", the Mac's day (Claude sessions + processes, migration 032).
 // The vault is the source of truth; nothing here edits it.
 
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { GraphCanvas } from '@/components/GraphCanvas';
+import { JournalView } from '@/components/journal/JournalView';
 import { NodeSheet } from '@/components/NodeSheet';
 import { PressureTable } from '@/components/PressureTable';
 import { Switch } from '@/components/ui/switch';
@@ -16,6 +18,7 @@ const VIEWS = [
   { id: 'ekosystem', label: 'Ekosystem' },
   { id: 'infrastruktura', label: 'Infrastruktura' },
   { id: 'presja', label: 'Presja' },
+  { id: 'dziennik', label: 'Dziennik' },
 ] as const;
 type View = (typeof VIEWS)[number]['id'];
 
@@ -32,7 +35,7 @@ export function App() {
   useEffect(() => window.history.replaceState(null, '', `#${view}`), [view]);
 
   const spec = useMemo(() => {
-    if (!map || view === 'presja') return null;
+    if (!map || view === 'presja' || view === 'dziennik') return null;
     return view === 'infrastruktura' ? infraSpec(map, showQuiet) : ecosystemSpec(map, showQuiet);
   }, [map, view, showQuiet]);
   const highlight = useMemo(() => (map && selected ? impactOf(map, selected) : null), [map, selected]);
@@ -66,21 +69,33 @@ export function App() {
           </TabsList>
         </Tabs>
         <div className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
-          <Switch id="show-quiet" checked={showQuiet} onCheckedChange={setShowQuiet} />
-          <label htmlFor="show-quiet" className="cursor-pointer">
-            uśpione i archiwalne
-          </label>
+          {view !== 'dziennik' && (
+            <>
+              <Switch id="show-quiet" checked={showQuiet} onCheckedChange={setShowQuiet} />
+              <label htmlFor="show-quiet" className="cursor-pointer">
+                uśpione i archiwalne
+              </label>
+            </>
+          )}
         </div>
-        {counts && (
+        {counts && view !== 'dziennik' && (
           <span className="hidden font-mono text-xs text-muted-foreground md:inline">
             {counts.shown} węzłów · {counts.processes} procesów
           </span>
         )}
       </header>
       <main className="relative min-h-0 flex-1">
-        {error && <div className="p-6 text-sm text-bad">Nie udało się pobrać danych: {String(error)}</div>}
-        {!error && !map && <div className="p-6 text-sm text-muted-foreground">Ładuję mapę…</div>}
+        {/* Dziennik has its own data and states; the map's don't concern it. */}
+        {error && view !== 'dziennik' && (
+          <div className="p-6 text-sm text-bad">Nie udało się pobrać danych: {String(error)}</div>
+        )}
+        {!error && !map && view !== 'dziennik' && <div className="p-6 text-sm text-muted-foreground">Ładuję mapę…</div>}
         {spec && <GraphCanvas spec={spec} selected={selected} highlight={highlight} onSelect={setSelected} />}
+        {view === 'dziennik' && (
+          <div className="h-full overflow-auto">
+            <JournalView />
+          </div>
+        )}
         {view === 'presja' && (
           <div className="h-full overflow-auto px-4 py-3">
             <p className="mb-3 max-w-3xl text-xs text-muted-foreground">

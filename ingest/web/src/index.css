@@ -14,6 +14,10 @@
   --color-warn: #d29922;
   --color-bad: #f85149;
   --color-external: #6e7681;
+  /* Dziennik: Claude sessions by host — categorical slots 1–2 of the dataviz
+     reference palette, dark steps, validated on #161b22 (CVD ΔE 26.8). */
+  --color-host-mac: #3987e5;
+  --color-host-elitedesk: #d95926;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   --font-heading: var(--font-sans);
   --font-sans: "Geist Variable", sans-serif;
